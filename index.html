@@ -1,0 +1,571 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>BioInnova — Visitas Técnicas</title>
+<style>
+:root{
+  --green:#2f7d3b; --green-d:#255f2e; --green-lt:#e6f2e8;
+  --amber:#c8820a; --amber-lt:#fdf3e0; --red:#c53030; --red-lt:#fbeaea;
+  --blue:#2b6cb0; --gray-900:#1a202c; --gray-800:#2d3748; --gray-700:#4a5568;
+  --gray-600:#718096; --gray-500:#a0aec0; --gray-400:#cbd5e0; --gray-300:#e2e8f0;
+  --gray-200:#edf2f7; --gray-100:#f7fafc;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;background:var(--gray-100);color:var(--gray-900);font-size:15px;line-height:1.4}
+.app{max-width:520px;margin:0 auto;min-height:100vh;background:var(--gray-100);position:relative}
+@media(min-width:760px){ .app{max-width:900px} }
+/* Header */
+.hdr{position:sticky;top:0;z-index:50;background:linear-gradient(135deg,var(--green),var(--green-d));color:#fff;padding:14px 16px;display:flex;align-items:center;gap:12px;box-shadow:0 2px 8px rgba(0,0,0,.12)}
+.hdr .logo{width:38px;height:38px;border-radius:10px;background:rgba(255,255,255,.18);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0}
+.hdr .htxt{flex:1;min-width:0}
+.hdr .htitle{font-size:16px;font-weight:700;line-height:1.1}
+.hdr .hsub{font-size:11px;opacity:.85}
+.hdr .hback{background:rgba(255,255,255,.16);border:none;color:#fff;border-radius:8px;padding:7px 11px;font-size:13px;cursor:pointer;font-family:inherit}
+/* Screens */
+.screen{display:none;padding:14px 14px 90px}
+.screen.active{display:block}
+/* Cards */
+.card{background:#fff;border-radius:14px;box-shadow:0 1px 3px rgba(0,0,0,.06);margin-bottom:12px;overflow:hidden}
+.card-h{padding:11px 14px;font-size:13px;font-weight:700;color:var(--gray-800);border-bottom:1px solid var(--gray-200);display:flex;justify-content:space-between;align-items:center}
+.card-b{padding:12px 14px}
+/* Buttons */
+.btn{border:none;border-radius:10px;padding:12px 16px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;transition:filter .15s}
+.btn:active{filter:brightness(.94)}
+.btn-primary{background:var(--green);color:#fff}
+.btn-sec{background:var(--gray-200);color:var(--gray-700)}
+.btn-ghost{background:#fff;color:var(--green);border:1.5px solid var(--green)}
+.btn-block{width:100%;display:block}
+.btn-amber{background:var(--amber);color:#fff}
+/* Home tiles */
+.tiles{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.tile{background:#fff;border-radius:16px;padding:18px 14px;text-align:center;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,.06);border:1px solid var(--gray-200);transition:transform .12s,box-shadow .12s}
+.tile:active{transform:scale(.97)}
+.tile .ico{font-size:30px;margin-bottom:8px}
+.tile .tlab{font-size:14px;font-weight:700;color:var(--gray-800)}
+.tile .tsub{font-size:11px;color:var(--gray-500);margin-top:2px}
+.tile.wide{grid-column:1/-1}
+/* Fields */
+label.fl{display:block;font-size:12px;color:var(--gray-600);margin:9px 0 3px;font-weight:600}
+input,select,textarea{width:100%;box-sizing:border-box;padding:11px 12px;border:1.5px solid var(--gray-300);border-radius:10px;font-size:15px;font-family:inherit;background:#fff;outline:none;color:var(--gray-900)}
+input:focus,select:focus,textarea:focus{border-color:var(--green)}
+textarea{resize:vertical;min-height:66px}
+.row2{display:flex;gap:10px}
+.row2>div{flex:1;min-width:0}
+/* List items */
+.li{padding:12px 14px;border-bottom:1px solid var(--gray-200);cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:10px}
+.li:last-child{border-bottom:none}
+.li:active{background:var(--gray-100)}
+.li-t{font-size:14px;font-weight:600;color:var(--gray-800)}
+.li-s{font-size:12px;color:var(--gray-500);margin-top:1px}
+.li-chev{color:var(--gray-400);font-size:18px;flex-shrink:0}
+.empty{padding:26px 14px;text-align:center;color:var(--gray-500);font-size:13px}
+/* Chips / badges */
+.chip{display:inline-block;font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;text-transform:uppercase;letter-spacing:.02em}
+.chip-cria{background:#e9f0fb;color:#2b5fb0}
+.chip-recria{background:#fbf0e5;color:#b5720f}
+.chip-terminacion{background:#e8f3ea;color:#2f7d3b}
+.sem{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:700;padding:3px 9px;border-radius:8px;white-space:nowrap}
+.sem-green{background:var(--green-lt);color:var(--green-d)}
+.sem-amber{background:var(--amber-lt);color:var(--amber)}
+.sem-gray{background:var(--gray-200);color:var(--gray-600)}
+/* KPI rows */
+.kpi{padding:10px 0;border-bottom:1px solid var(--gray-200)}
+.kpi:last-child{border-bottom:none}
+.kpi-top{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.kpi-n{font-size:13px;font-weight:600;color:var(--gray-800)}
+.kpi-ref{font-size:11px;color:var(--gray-500);white-space:nowrap}
+.kpi-in{display:flex;gap:8px;align-items:center;margin-top:6px}
+.kpi-in input{width:110px}
+/* FAB */
+.fab{position:fixed;left:50%;transform:translateX(-50%);bottom:18px;z-index:60;width:min(492px,calc(100% - 28px))}
+@media(min-width:760px){ .fab{width:min(872px,calc(100% - 28px))} }
+/* Toast */
+#toast{position:fixed;left:50%;bottom:80px;transform:translateX(-50%);background:var(--gray-900);color:#fff;padding:11px 18px;border-radius:10px;font-size:13px;z-index:200;opacity:0;transition:opacity .2s;pointer-events:none;max-width:90%;text-align:center}
+#toast.show{opacity:.96}
+/* Modal */
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:flex-start;justify-content:center;z-index:150;padding:24px 14px;overflow:auto}
+.modal.show{display:flex}
+.modal-box{background:#fff;border-radius:16px;width:100%;max-width:440px;padding:16px;max-height:90vh;overflow:auto}
+.modal-box h3{margin:0 0 4px;font-size:16px}
+.stat-strip{display:flex;gap:10px;margin-bottom:12px}
+.stat{flex:1;background:#fff;border-radius:12px;padding:12px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+.stat .sv{font-size:22px;font-weight:800;color:var(--green)}
+.stat .sl{font-size:10px;color:var(--gray-500);text-transform:uppercase;letter-spacing:.03em;margin-top:2px}
+.sect-t{font-size:11px;font-weight:700;color:var(--gray-500);text-transform:uppercase;letter-spacing:.04em;margin:16px 2px 6px}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="hdr">
+    <div class="logo" id="hLogo">🐂</div>
+    <div class="htxt"><div class="htitle" id="hTitle">BioInnova</div><div class="hsub" id="hSub">Visitas técnicas a campo</div></div>
+    <button class="hback" id="hBack" style="display:none" onclick="goHome()">← Inicio</button>
+  </div>
+
+  <!-- HOME -->
+  <div class="screen active" id="sHome">
+    <div class="stat-strip">
+      <div class="stat"><div class="sv" id="stClientes">0</div><div class="sl">Clientes</div></div>
+      <div class="stat"><div class="sv" id="stVisitas">0</div><div class="sl">Visitas</div></div>
+      <div class="stat"><div class="sv" id="stMes">0</div><div class="sl">Este mes</div></div>
+    </div>
+    <div class="tiles">
+      <div class="tile wide" onclick="nuevaVisita()" style="background:linear-gradient(135deg,var(--green),var(--green-d));color:#fff;border:none">
+        <div class="ico">📋</div><div class="tlab" style="color:#fff">Nueva visita técnica</div><div class="tsub" style="color:rgba(255,255,255,.85)">Cargar KPIs y generar informe</div>
+      </div>
+      <div class="tile" onclick="openClientes()"><div class="ico">🏡</div><div class="tlab">Clientes</div><div class="tsub">y estancias</div></div>
+      <div class="tile" onclick="openHistorial()"><div class="ico">🗂️</div><div class="tlab">Historial</div><div class="tsub">de visitas</div></div>
+    </div>
+    <div class="sect-t">Últimas visitas</div>
+    <div class="card"><div id="homeUltimas"></div></div>
+  </div>
+
+  <!-- CLIENTES -->
+  <div class="screen" id="sClientes">
+    <div style="margin-bottom:10px"><input type="search" id="cliBuscar" placeholder="🔎 Buscar cliente…" oninput="renderClientes()"></div>
+    <div class="card"><div class="card-h"><span>Clientes</span><span id="cliCount" style="font-weight:500;color:var(--gray-400)"></span></div><div id="cliList"></div></div>
+    <button class="btn btn-primary btn-block" onclick="clienteModal()">＋ Nuevo cliente</button>
+  </div>
+
+  <!-- CLIENTE DETALLE -->
+  <div class="screen" id="sCliente">
+    <div class="card"><div class="card-b" id="cliInfo"></div></div>
+    <div class="card"><div class="card-h"><span>🏡 Estancias</span><span style="color:var(--green);cursor:pointer;font-weight:600" onclick="estanciaModal()">＋ Agregar</span></div><div id="estList"></div></div>
+    <button class="btn btn-primary btn-block" style="margin-bottom:10px" onclick="nuevaVisitaCliente()">📋 Nueva visita a este cliente</button>
+    <div class="card"><div class="card-h"><span>Visitas</span><span id="cliVisCount" style="font-weight:500;color:var(--gray-400)"></span></div><div id="cliVisList"></div></div>
+  </div>
+
+  <!-- VISITA -->
+  <div class="screen" id="sVisita">
+    <div class="card">
+      <div class="card-h">Datos de la visita</div>
+      <div class="card-b">
+        <label class="fl">Cliente</label>
+        <select id="vCliente" onchange="visitaClienteChange()"></select>
+        <label class="fl">Estancia</label>
+        <select id="vEstancia"></select>
+        <div class="row2">
+          <div><label class="fl">Fecha</label><input type="date" id="vFecha"></div>
+          <div><label class="fl">Técnico comercial</label><input type="text" id="vTecnico" placeholder="Nombre"></div>
+        </div>
+        <label class="fl">Categoría evaluada</label>
+        <select id="vCategoria" onchange="visitaCategoriaChange()"></select>
+        <div class="row2">
+          <div><label class="fl">Nº de animales</label><input type="number" id="vAnimales" inputmode="numeric" placeholder="0"></div>
+          <div><label class="fl">Días en el sistema</label><input type="number" id="vDias" inputmode="numeric" placeholder="0"></div>
+        </div>
+        <label class="fl">Producto Bioinnova en uso</label>
+        <select id="vProducto" onchange="visitaProductoChange()"></select>
+        <div class="row2">
+          <div><label class="fl">Presentación</label><input type="text" id="vPresentacion" placeholder="—"></div>
+          <div><label class="fl">Consumo observado</label><input type="text" id="vConsumo" placeholder="ej: 2,2 % PV / 100 g/día"></div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-h"><span id="vKpiTitulo">KPIs</span><span style="font-weight:500;color:var(--gray-400);font-size:11px">valor medido</span></div>
+      <div class="card-b" id="vKpis"></div>
+    </div>
+    <div class="card">
+      <div class="card-h">Diagnóstico y recomendación</div>
+      <div class="card-b">
+        <label class="fl">Diagnóstico técnico</label>
+        <textarea id="vDiag" placeholder="Estado general del lote, hallazgos…"></textarea>
+        <label class="fl">Recomendación (para el cliente)</label>
+        <textarea id="vReco" placeholder="Acciones sugeridas, ajustes de producto…"></textarea>
+        <label class="fl">Próxima visita (opcional)</label>
+        <input type="date" id="vProxima">
+      </div>
+    </div>
+    <div class="row2" style="margin-bottom:10px">
+      <button class="btn btn-sec" onclick="goHome()">Cancelar</button>
+      <button class="btn btn-primary" onclick="guardarVisita(false)">✓ Guardar</button>
+    </div>
+    <button class="btn btn-amber btn-block" onclick="guardarVisita(true)">✓ Guardar e imprimir informe</button>
+  </div>
+
+  <!-- HISTORIAL -->
+  <div class="screen" id="sHistorial">
+    <div style="display:flex;gap:8px;margin-bottom:10px">
+      <select id="hFiltroCat" onchange="renderHistorial()" style="flex:1"></select>
+      <input type="search" id="hBuscar" placeholder="🔎 Cliente…" oninput="renderHistorial()" style="flex:1">
+    </div>
+    <div class="card"><div class="card-h"><span>Visitas</span><span id="hCount" style="font-weight:500;color:var(--gray-400)"></span></div><div id="histList"></div></div>
+  </div>
+
+</div>
+
+<div id="toast"></div>
+
+<!-- Modal genérico -->
+<div class="modal" id="modal"><div class="modal-box" id="modalBox"></div></div>
+
+<script>
+// ══════════════════════════════════════════════════════════
+//  BioInnova — Visitas técnicas (v1)
+//  Datos: localStorage. Sync en la nube (Supabase) = próxima fase.
+// ══════════════════════════════════════════════════════════
+const gs=id=>document.getElementById(id);
+function showToast(m,t){const el=gs('toast');el.textContent=m;el.classList.add('show');clearTimeout(el._t);el._t=setTimeout(()=>el.classList.remove('show'),t||2200);}
+function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function hoy(){return new Date().toISOString().split('T')[0];}
+function fmtFecha(f){ if(!f)return''; const p=String(f).split('-'); return p.length===3?`${p[2]}/${p[1]}/${p[0]}`:f; }
+function num(v){ if(v==null||v==='')return null; const n=parseFloat(String(v).replace(',','.')); return isNaN(n)?null:n; }
+
+// ── Reference data (de las planillas guía) ──
+const CATEGORIAS=['Cría','Recría','Terminación'];
+const KPIS={
+ 'Cría':[
+   {k:'Condición corporal de la vaca',u:'escala 1–5',min:3,max:3.5},
+   {k:'Consumo del producto',u:'g/an/día',min:90,max:120},
+   {k:'GMD ternero pre-destete',u:'kg/día',min:0.7,max:1.0},
+   {k:'Peso al destete',u:'kg',min:180,max:240},
+   {k:'Tasa de preñez',u:'%',min:85,max:95},
+   {k:'Mortandad de terneros',u:'%',min:0,max:3},
+ ],
+ 'Recría':[
+   {k:'Peso de entrada',u:'kg',min:180,max:240},
+   {k:'GMD',u:'kg/día',min:0.4,max:0.8},
+   {k:'Consumo suplemento',u:'% PV',min:0.3,max:0.5},
+   {k:'Condición corporal',u:'escala 1–9',min:4,max:6},
+   {k:'Uniformidad del lote (CV)',u:'%',min:0,max:12},
+   {k:'Disponibilidad de pastura',u:'kg MS/ha',min:1500,max:3000},
+ ],
+ 'Terminación':[
+   {k:'Peso de entrada',u:'kg',min:300,max:380},
+   {k:'GMD',u:'kg/día',min:1.2,max:1.7},
+   {k:'Consumo de MS',u:'% PV',min:2.0,max:2.4},
+   {k:'Conversión alimenticia',u:'kg/kg',min:5,max:8},
+   {k:'Score de batea',u:'0–5',min:1,max:2},
+   {k:'Score de bosta',u:'1–5',min:3,max:3},
+   {k:'Costo por kg de ganancia',u:'Gs/kg',min:null,max:null},
+   {k:'Rendimiento de carcasa',u:'%',min:53,max:58},
+   {k:'Mortandad/morbilidad',u:'%',min:0,max:2},
+ ]
+};
+const PRODUCTOS={
+ 'Cría':[
+   {n:'PRO - Bioinnova Creep Feeding - 30kg',l:'Proteinados',p:'Bolsa 30 kg'},
+   {n:'SM - Bioinnova Cría 90 - 30kg',l:'Sales Minerales',p:'Bolsa 30 kg'},
+   {n:'PRO - Bioinnova Secas - 30kg',l:'Proteinados',p:'Bolsa 30 kg'},
+   {n:'PRO - Bioinnova Aguas - 30kg',l:'Proteinados',p:'Bolsa 30 kg'},
+   {n:'BAL - Desmamante Precoz 22% CL - 40kg',l:'Balanceados',p:'Bolsa 40 kg'},
+   {n:'BAL - Desmamante Campo 18% - 40kg',l:'Balanceados',p:'Bolsa 40 kg'},
+   {n:'BAL - Desmamante Campo 18% CL - 40kg',l:'Balanceados',p:'Bolsa 40 kg'},
+ ],
+ 'Recría':[
+   {n:'SM - Bioinnova Recría 0.5% - 30kg',l:'Sales Minerales',p:'Bolsa 30 kg'},
+   {n:'SM - Bioinnova Recría 65 - 30kg',l:'Sales Minerales',p:'Bolsa 30 kg'},
+   {n:'PRO - Bioinnova Proteica 3G - 30kg',l:'Proteinados',p:'Bolsa 30 kg'},
+   {n:'PJC - Bioinnova Enerpro 3g - 30kg',l:'PJC',p:'Bolsa 30 kg'},
+ ],
+ 'Terminación':[
+   {n:'BAL - Bioinnova Confi 10 - 40kg',l:'Balanceados',p:'Bolsa 40 kg'},
+   {n:'BAL - Bioinnova Confi 40 - 40kg',l:'Balanceados',p:'Bolsa 40 kg'},
+   {n:'BAL - BIO CONFI 40 NORTE - 40kg',l:'Balanceados',p:'Bolsa 40 kg'},
+   {n:'BAL - Bioinnova Alta Fibra 40% - 40kg',l:'Balanceados',p:'Bolsa 40 kg'},
+   {n:'BAL - Terminacion 4 - 40kg',l:'Balanceados',p:'Bolsa 40 kg'},
+   {n:'BAL - Terminacion OR - 40kg',l:'Balanceados',p:'Bolsa 40 kg'},
+   {n:'BAL - Bioinnova Terminacion 18% - 40kg',l:'Balanceados',p:'Bolsa 40 kg'},
+   {n:'PJC - Bioinnova Engorde 16% - 40kg',l:'PJC',p:'Bolsa 40 kg'},
+   {n:'PJC - Bioinnova Engorde 18% - 40kg',l:'PJC',p:'Bolsa 40 kg'},
+   {n:'PRO - Bioinnova Engorda 0.5% PE - 30kg',l:'Proteinados',p:'Bolsa 30 kg'},
+   {n:'SM - Bioinnova Engorda 40 - 30kg',l:'Sales Minerales',p:'Bolsa 30 kg'},
+   {n:'NPF - Bioinnova Confi 4 L',l:'Núcleos',p:'Bolsa 25 kg'},
+   {n:'NPF - Bioinnova Confi 4 AS',l:'Núcleos',p:'Bolsa 25 kg'},
+   {n:'NPF - Bioinnova Confi 4 CL',l:'Núcleos',p:'Bolsa 25 kg'},
+   {n:'NPF - Bioinnova Confi 4 SL',l:'Núcleos',p:'Bolsa 25 kg'},
+   {n:'NPF - Bioinnova Confi 4 U',l:'Núcleos',p:'Bolsa 25 kg'},
+ ]
+};
+function catClass(c){ return c==='Cría'?'chip-cria':c==='Recría'?'chip-recria':'chip-terminacion'; }
+
+// ── Estado del KPI (semáforo) ──
+function kpiEstado(valor,def){
+  const v=num(valor);
+  if(v==null || def.min==null || def.max==null) return {txt:'—',cls:'sem-gray',rep:'—'};
+  if(v<def.min) return {txt:'▼ Debajo',cls:'sem-amber',rep:'▼ Debajo'};
+  if(v>def.max) return {txt:'▲ Encima',cls:'sem-amber',rep:'▲ Encima'};
+  return {txt:'✔ En rango',cls:'sem-green',rep:'✔ En rango'};
+}
+function refTxt(def){ if(def.min==null||def.max==null) return def.u; return (def.min===def.max?def.min:def.min+'–'+def.max)+(def.u&&!/escala|0–|1–/.test(def.u)?' '+def.u:''); }
+
+// ── Storage ──
+function getArr(k){ try{ const v=localStorage.getItem(k); return v?JSON.parse(v):[]; }catch{ return []; } }
+function setArr(k,a){ try{ localStorage.setItem(k,JSON.stringify(a)); }catch{} }
+const getClientes =()=>getArr('bio:clientes');
+const getEstancias=()=>getArr('bio:estancias');
+const getVisitas  =()=>getArr('bio:visitas');
+const saveClientes =a=>setArr('bio:clientes',a);
+const saveEstancias=a=>setArr('bio:estancias',a);
+const saveVisitas  =a=>setArr('bio:visitas',a);
+const clienteById =id=>getClientes().find(c=>c.id===id);
+const estanciaById=id=>getEstancias().find(e=>e.id===id);
+const estanciasDe =cid=>getEstancias().filter(e=>e.cliente_id===cid);
+const visitasDe   =cid=>getVisitas().filter(v=>v.cliente_id===cid);
+
+// ── Navegación ──
+let curCliente=null, editVisitaId=null;
+function showScreen(id,titulo,sub,back){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  gs(id).classList.add('active');
+  gs('hTitle').textContent=titulo||'BioInnova';
+  gs('hSub').textContent=sub||'Visitas técnicas a campo';
+  gs('hBack').style.display=back?'block':'none';
+  window.scrollTo(0,0);
+}
+function goHome(){ curCliente=null; editVisitaId=null; showScreen('sHome','BioInnova','Visitas técnicas a campo',false); renderHome(); }
+function openClientes(){ showScreen('sClientes','Clientes','Fichas y estancias',true); renderClientes(); }
+function openHistorial(){ showScreen('sHistorial','Historial','Todas las visitas',true); const sel=gs('hFiltroCat'); sel.innerHTML='<option value="">Todas las categorías</option>'+CATEGORIAS.map(c=>`<option>${c}</option>`).join(''); renderHistorial(); }
+
+// ── HOME ──
+function renderHome(){
+  const cl=getClientes(), vi=getVisitas();
+  gs('stClientes').textContent=cl.length;
+  gs('stVisitas').textContent=vi.length;
+  const mes=hoy().slice(0,7);
+  gs('stMes').textContent=vi.filter(v=>String(v.fecha||'').startsWith(mes)).length;
+  const cont=gs('homeUltimas');
+  const ult=vi.slice().sort((a,b)=>String(b.ts||'').localeCompare(String(a.ts||''))).slice(0,5);
+  cont.innerHTML = ult.length? ult.map(v=>visitaLi(v)).join('') : '<div class="empty">Todavía no hay visitas cargadas.<br>Tocá <b>Nueva visita técnica</b> para empezar.</div>';
+}
+function visitaLi(v){
+  const c=clienteById(v.cliente_id), e=estanciaById(v.estancia_id);
+  return `<div class="li" onclick="verVisita('${v.id}')">
+    <div style="min-width:0"><div class="li-t">${esc(c?c.nombre:'—')} <span class="chip ${catClass(v.categoria)}">${esc(v.categoria)}</span></div>
+    <div class="li-s">${esc(e?e.nombre:'')}${e?' · ':''}${fmtFecha(v.fecha)} · ${v.n_animales||0} an.</div></div>
+    <div class="li-chev">›</div></div>`;
+}
+
+// ── CLIENTES ──
+function renderClientes(){
+  const q=(gs('cliBuscar').value||'').trim().toLowerCase();
+  let cl=getClientes().slice().sort((a,b)=>String(a.nombre||'').localeCompare(String(b.nombre||'')));
+  if(q) cl=cl.filter(c=>[c.nombre,c.contacto,c.ubicacion].some(x=>String(x||'').toLowerCase().includes(q)));
+  gs('cliCount').textContent=cl.length?cl.length+' clientes':'';
+  gs('cliList').innerHTML = cl.length? cl.map(c=>{
+    const ne=estanciasDe(c.id).length, nv=visitasDe(c.id).length;
+    return `<div class="li" onclick="abrirCliente('${c.id}')"><div style="min-width:0"><div class="li-t">${esc(c.nombre)}</div><div class="li-s">${ne} estancia${ne!==1?'s':''} · ${nv} visita${nv!==1?'s':''}${c.ubicacion?' · '+esc(c.ubicacion):''}</div></div><div class="li-chev">›</div></div>`;
+  }).join('') : '<div class="empty">Sin clientes. Agregá el primero abajo.</div>';
+}
+function clienteModal(id){
+  const c=id?clienteById(id):null;
+  gs('modalBox').innerHTML=`<h3>${c?'Editar':'Nuevo'} cliente</h3>
+    <label class="fl">Nombre / Razón social</label><input id="mNombre" value="${esc(c&&c.nombre)}" placeholder="Ej: Estancia La Rosita S.A.">
+    <label class="fl">Contacto</label><input id="mContacto" value="${esc(c&&c.contacto)}" placeholder="Nombre de la persona">
+    <div class="row2"><div><label class="fl">Teléfono</label><input id="mTel" value="${esc(c&&c.tel)}"></div><div><label class="fl">Email</label><input id="mEmail" value="${esc(c&&c.email)}"></div></div>
+    <label class="fl">Zona / Ubicación</label><input id="mUbic" value="${esc(c&&c.ubicacion)}" placeholder="Ej: Chaco, Concepción…">
+    <label class="fl">Observaciones</label><textarea id="mObs">${esc(c&&c.obs)}</textarea>
+    <div class="row2" style="margin-top:12px">${c?`<button class="btn btn-sec" onclick="borrarCliente('${c.id}')" style="color:var(--red)">Borrar</button>`:'<button class="btn btn-sec" onclick="cerrarModal()">Cancelar</button>'}<button class="btn btn-primary" onclick="guardarCliente('${c?c.id:''}')">Guardar</button></div>`;
+  gs('modal').classList.add('show');
+}
+function cerrarModal(){ gs('modal').classList.remove('show'); }
+function guardarCliente(id){
+  const nombre=gs('mNombre').value.trim(); if(!nombre){ showToast('Ingresá el nombre'); return; }
+  let cl=getClientes(); let c=id?cl.find(x=>x.id===id):null;
+  const data={nombre,contacto:gs('mContacto').value.trim(),tel:gs('mTel').value.trim(),email:gs('mEmail').value.trim(),ubicacion:gs('mUbic').value.trim(),obs:gs('mObs').value.trim()};
+  if(c){ Object.assign(c,data); c.ts=new Date().toISOString(); } else { cl.push({id:'CL-'+Date.now(),...data,ts:new Date().toISOString()}); }
+  saveClientes(cl); cerrarModal(); showToast('✓ Cliente guardado');
+  if(gs('sCliente').classList.contains('active')&&curCliente) abrirCliente(curCliente); else renderClientes();
+  renderHome();
+}
+function borrarCliente(id){
+  if(estanciasDe(id).length||visitasDe(id).length){ showToast('Tiene estancias o visitas; no se puede borrar'); return; }
+  if(!confirm('¿Borrar este cliente?')) return;
+  saveClientes(getClientes().filter(c=>c.id!==id)); cerrarModal(); openClientes(); renderHome();
+}
+
+// ── CLIENTE DETALLE ──
+function abrirCliente(id){
+  curCliente=id; const c=clienteById(id); if(!c){ openClientes(); return; }
+  showScreen('sCliente',c.nombre,'Ficha del cliente',true);
+  gs('cliInfo').innerHTML=`<div style="display:flex;justify-content:space-between;align-items:start"><div><div style="font-size:16px;font-weight:700">${esc(c.nombre)}</div>
+    <div style="font-size:12px;color:var(--gray-600);margin-top:3px">${c.contacto?'👤 '+esc(c.contacto)+'<br>':''}${c.tel?'📞 '+esc(c.tel)+'  ':''}${c.email?'✉ '+esc(c.email):''}${c.ubicacion?'<br>📍 '+esc(c.ubicacion):''}</div>
+    ${c.obs?'<div style="font-size:12px;color:var(--gray-500);margin-top:5px">'+esc(c.obs)+'</div>':''}</div>
+    <span style="color:var(--green);cursor:pointer;font-size:13px;font-weight:600" onclick="clienteModal('${c.id}')">✎ Editar</span></div>`;
+  const ests=estanciasDe(id);
+  gs('estList').innerHTML=ests.length? ests.map(e=>{
+    const hato=(e.hato||[]).filter(h=>h.cabezas).map(h=>`${h.categoria} ${h.cabezas}`).join(' · ');
+    return `<div class="li" onclick="estanciaModal('${e.id}')"><div style="min-width:0"><div class="li-t">${esc(e.nombre)}</div><div class="li-s">${e.zona?esc(e.zona)+' · ':''}${hato||'sin hato cargado'}</div></div><div class="li-chev">✎</div></div>`;
+  }).join('') : '<div class="empty">Sin estancias. Agregá una con ＋.</div>';
+  const vis=visitasDe(id).slice().sort((a,b)=>String(b.fecha||'').localeCompare(String(a.fecha||'')));
+  gs('cliVisCount').textContent=vis.length?vis.length:'';
+  gs('cliVisList').innerHTML=vis.length? vis.map(v=>visitaLi(v)).join('') : '<div class="empty">Sin visitas todavía.</div>';
+}
+function estanciaModal(id){
+  if(!curCliente){ return; }
+  const e=id?estanciaById(id):null;
+  const hato=(e&&e.hato)||CATEGORIAS.map(c=>({categoria:c,cabezas:''}));
+  gs('modalBox').innerHTML=`<h3>${e?'Editar':'Nueva'} estancia</h3>
+    <label class="fl">Nombre de la estancia</label><input id="mEsNombre" value="${esc(e&&e.nombre)}" placeholder="Ej: La Rosita">
+    <label class="fl">Zona</label><input id="mEsZona" value="${esc(e&&e.zona)}" placeholder="Ej: Chaco">
+    <div class="sect-t" style="margin-top:14px">Hato (cabezas por categoría)</div>
+    ${CATEGORIAS.map((c,i)=>{ const h=hato.find(x=>x.categoria===c)||{}; return `<div style="display:flex;align-items:center;gap:10px;margin:6px 0"><span class="chip ${catClass(c)}" style="width:96px">${c}</span><input type="number" id="mHato${i}" value="${h.cabezas!=null?h.cabezas:''}" placeholder="0" inputmode="numeric"></div>`; }).join('')}
+    <label class="fl">Observaciones</label><textarea id="mEsObs">${esc(e&&e.obs)}</textarea>
+    <div class="row2" style="margin-top:12px">${e?`<button class="btn btn-sec" onclick="borrarEstancia('${e.id}')" style="color:var(--red)">Borrar</button>`:'<button class="btn btn-sec" onclick="cerrarModal()">Cancelar</button>'}<button class="btn btn-primary" onclick="guardarEstancia('${e?e.id:''}')">Guardar</button></div>`;
+  gs('modal').classList.add('show');
+}
+function guardarEstancia(id){
+  const nombre=gs('mEsNombre').value.trim(); if(!nombre){ showToast('Ingresá el nombre'); return; }
+  const hato=CATEGORIAS.map((c,i)=>({categoria:c,cabezas:num(gs('mHato'+i).value)}));
+  let es=getEstancias(); let e=id?es.find(x=>x.id===id):null;
+  const data={cliente_id:curCliente,nombre,zona:gs('mEsZona').value.trim(),hato,obs:gs('mEsObs').value.trim()};
+  if(e){ Object.assign(e,data); e.ts=new Date().toISOString(); } else { es.push({id:'ES-'+Date.now(),...data,ts:new Date().toISOString()}); }
+  saveEstancias(es); cerrarModal(); showToast('✓ Estancia guardada'); abrirCliente(curCliente);
+}
+function borrarEstancia(id){
+  if(!confirm('¿Borrar esta estancia?')) return;
+  saveEstancias(getEstancias().filter(e=>e.id!==id)); cerrarModal(); abrirCliente(curCliente);
+}
+
+// ── VISITA ──
+function nuevaVisita(){ editVisitaId=null; abrirFormVisita(null); }
+function nuevaVisitaCliente(){ editVisitaId=null; abrirFormVisita(curCliente); }
+function abrirFormVisita(clienteId){
+  const cl=getClientes();
+  if(!cl.length){ showToast('Primero cargá un cliente'); openClientes(); return; }
+  showScreen('sVisita','Nueva visita','Cargá los datos y KPIs',true);
+  gs('vCliente').innerHTML='<option value="">— Elegir —</option>'+cl.slice().sort((a,b)=>a.nombre.localeCompare(b.nombre)).map(c=>`<option value="${c.id}">${esc(c.nombre)}</option>`).join('');
+  gs('vCategoria').innerHTML=CATEGORIAS.map(c=>`<option>${c}</option>`).join('');
+  gs('vFecha').value=hoy(); gs('vTecnico').value=localStorage.getItem('bio:tecnico')||'';
+  gs('vAnimales').value=''; gs('vDias').value=''; gs('vConsumo').value=''; gs('vPresentacion').value='';
+  gs('vDiag').value=''; gs('vReco').value=''; gs('vProxima').value='';
+  gs('vCliente').value=clienteId||'';
+  visitaClienteChange(); visitaCategoriaChange();
+}
+function visitaClienteChange(){
+  const cid=gs('vCliente').value; const ests=estanciasDe(cid);
+  gs('vEstancia').innerHTML = ests.length? ests.map(e=>`<option value="${e.id}">${esc(e.nombre)}</option>`).join('') : '<option value="">(sin estancias — cargalas en el cliente)</option>';
+}
+function visitaCategoriaChange(){
+  const cat=gs('vCategoria').value;
+  // productos
+  gs('vProducto').innerHTML='<option value="">— Elegir —</option>'+(PRODUCTOS[cat]||[]).map(p=>`<option value="${esc(p.n)}" data-p="${esc(p.p)}">${esc(p.n)}</option>`).join('')+'<option value="__otro">➕ Otro…</option>';
+  gs('vPresentacion').value='';
+  // KPIs
+  gs('vKpiTitulo').textContent='KPIs — '+cat;
+  gs('vKpis').innerHTML=(KPIS[cat]||[]).map((d,i)=>`<div class="kpi"><div class="kpi-top"><span class="kpi-n">${esc(d.k)}</span><span class="kpi-ref">🟢 ${esc(refTxt(d))}</span></div>
+    <div class="kpi-in"><input type="text" inputmode="decimal" id="kv${i}" placeholder="valor" oninput="kpiLive(${i})"><span id="ks${i}" class="sem sem-gray">—</span></div></div>`).join('');
+}
+function kpiLive(i){
+  const cat=gs('vCategoria').value; const d=KPIS[cat][i]; const st=kpiEstado(gs('kv'+i).value,d);
+  const el=gs('ks'+i); el.className='sem '+st.cls; el.textContent=st.txt;
+}
+function visitaProductoChange(){
+  const sel=gs('vProducto'); const val=sel.value;
+  if(val==='__otro'){ gs('vPresentacion').value=''; sel.selectedIndex=0; const nom=prompt('Nombre del producto:'); if(nom){ const o=document.createElement('option'); o.value=nom; o.textContent=nom; o.selected=true; sel.insertBefore(o,sel.options[sel.options.length-1]); } return; }
+  const opt=sel.options[sel.selectedIndex]; if(opt&&opt.dataset.p) gs('vPresentacion').value=opt.dataset.p;
+}
+function guardarVisita(imprimir){
+  const cid=gs('vCliente').value; if(!cid){ showToast('Elegí el cliente'); return; }
+  const cat=gs('vCategoria').value;
+  const kpis=(KPIS[cat]||[]).map((d,i)=>{ const val=gs('kv'+i).value.trim(); return {k:d.k,u:d.u,min:d.min,max:d.max,valor:val,estado:kpiEstado(val,d).rep}; });
+  const v={
+    id: editVisitaId||('VI-'+Date.now()),
+    cliente_id:cid, estancia_id:gs('vEstancia').value||'',
+    fecha:gs('vFecha').value||hoy(), tecnico:gs('vTecnico').value.trim(),
+    categoria:cat, n_animales:num(gs('vAnimales').value), dias_sistema:num(gs('vDias').value),
+    producto:gs('vProducto').value, presentacion:gs('vPresentacion').value.trim(), consumo:gs('vConsumo').value.trim(),
+    kpis, diagnostico:gs('vDiag').value.trim(), recomendacion:gs('vReco').value.trim(),
+    proxima:gs('vProxima').value||'', ts:new Date().toISOString()
+  };
+  if(gs('vTecnico').value.trim()) localStorage.setItem('bio:tecnico',gs('vTecnico').value.trim());
+  let vs=getVisitas(); if(editVisitaId){ vs=vs.map(x=>x.id===editVisitaId?v:x); } else { vs.unshift(v); }
+  saveVisitas(vs); editVisitaId=null;
+  showToast('✓ Visita guardada');
+  if(imprimir) informePDF(v.id);
+  if(curCliente) abrirCliente(curCliente); else goHome();
+}
+function verVisita(id){
+  const v=getVisitas().find(x=>x.id===id); if(!v) return;
+  const c=clienteById(v.cliente_id), e=estanciaById(v.estancia_id);
+  const filas=(v.kpis||[]).map(k=>`<tr><td>${esc(k.k)}</td><td style="text-align:center">${k.valor||'—'} ${esc(unidadCorta(k.u))}</td><td style="text-align:center">${semHtmlMini(k.estado)}</td></tr>`).join('');
+  gs('modalBox').innerHTML=`<h3>Visita — ${esc(c?c.nombre:'')}</h3>
+    <div style="font-size:12px;color:var(--gray-600);margin-bottom:8px">${esc(e?e.nombre:'')} · ${fmtFecha(v.fecha)} · <span class="chip ${catClass(v.categoria)}">${esc(v.categoria)}</span></div>
+    <div style="font-size:12px;color:var(--gray-700);margin-bottom:8px">${v.n_animales||0} animales · ${esc(v.producto||'—')}${v.consumo?' · '+esc(v.consumo):''}</div>
+    <table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="color:var(--gray-500)"><th style="text-align:left">KPI</th><th>Medido</th><th>Estado</th></tr></thead><tbody>${filas}</tbody></table>
+    ${v.diagnostico?'<div class="sect-t">Diagnóstico</div><div style="font-size:12px">'+esc(v.diagnostico)+'</div>':''}
+    ${v.recomendacion?'<div class="sect-t">Recomendación</div><div style="font-size:12px">'+esc(v.recomendacion)+'</div>':''}
+    <div class="row2" style="margin-top:14px"><button class="btn btn-sec" onclick="editarVisita('${v.id}')">✎ Editar</button><button class="btn btn-amber" onclick="informePDF('${v.id}')">🖨️ Informe</button></div>
+    <button class="btn btn-sec btn-block" style="margin-top:8px;color:var(--red)" onclick="borrarVisita('${v.id}')">Borrar visita</button>
+    <button class="btn btn-ghost btn-block" style="margin-top:8px" onclick="cerrarModal()">Cerrar</button>`;
+  gs('modal').classList.add('show');
+}
+function unidadCorta(u){ return /escala|0–|1–/.test(u||'')?'':(u||''); }
+function semHtmlMini(rep){ const cls= rep&&rep.includes('rango')?'sem-green':(rep&&rep!=='—'?'sem-amber':'sem-gray'); return `<span class="sem ${cls}">${esc(rep||'—')}</span>`; }
+function editarVisita(id){ const v=getVisitas().find(x=>x.id===id); if(!v)return; cerrarModal(); editVisitaId=id; abrirFormVisita(v.cliente_id);
+  gs('vCliente').value=v.cliente_id; visitaClienteChange(); gs('vEstancia').value=v.estancia_id||'';
+  gs('vCategoria').value=v.categoria; visitaCategoriaChange();
+  gs('vFecha').value=v.fecha; gs('vTecnico').value=v.tecnico||''; gs('vAnimales').value=v.n_animales!=null?v.n_animales:''; gs('vDias').value=v.dias_sistema!=null?v.dias_sistema:'';
+  // producto
+  if(v.producto && !Array.from(gs('vProducto').options).some(o=>o.value===v.producto)){ const o=document.createElement('option'); o.value=v.producto; o.textContent=v.producto; gs('vProducto').insertBefore(o,gs('vProducto').options[gs('vProducto').options.length-1]); }
+  gs('vProducto').value=v.producto||''; gs('vPresentacion').value=v.presentacion||''; gs('vConsumo').value=v.consumo||'';
+  (v.kpis||[]).forEach((k,i)=>{ if(gs('kv'+i)){ gs('kv'+i).value=k.valor||''; kpiLive(i); } });
+  gs('vDiag').value=v.diagnostico||''; gs('vReco').value=v.recomendacion||''; gs('vProxima').value=v.proxima||'';
+  showScreen('sVisita','Editar visita','',true);
+}
+function borrarVisita(id){ if(!confirm('¿Borrar esta visita?'))return; saveVisitas(getVisitas().filter(v=>v.id!==id)); cerrarModal(); renderHome(); if(curCliente&&gs('sCliente').classList.contains('active'))abrirCliente(curCliente); else if(gs('sHistorial').classList.contains('active'))renderHistorial(); else goHome(); }
+
+// ── HISTORIAL ──
+function renderHistorial(){
+  const cat=gs('hFiltroCat').value, q=(gs('hBuscar').value||'').trim().toLowerCase();
+  let vs=getVisitas().slice().sort((a,b)=>String(b.fecha||'').localeCompare(String(a.fecha||'')));
+  if(cat) vs=vs.filter(v=>v.categoria===cat);
+  if(q) vs=vs.filter(v=>{ const c=clienteById(v.cliente_id); return String(c&&c.nombre||'').toLowerCase().includes(q); });
+  gs('hCount').textContent=vs.length?vs.length+' visitas':'';
+  gs('histList').innerHTML = vs.length? vs.map(v=>visitaLi(v)).join('') : '<div class="empty">Sin visitas.</div>';
+}
+
+// ── INFORME PDF (molde del .docx) ──
+function informePDF(id){
+  const v=getVisitas().find(x=>x.id===id); if(!v){ showToast('Visita no encontrada'); return; }
+  const c=clienteById(v.cliente_id)||{}, e=estanciaById(v.estancia_id)||{};
+  const filas=(v.kpis||[]).map(k=>{
+    const cls=k.estado&&k.estado.includes('rango')?'ok':(k.estado&&k.estado!=='—'?'warn':'na');
+    return `<tr><td>${esc(k.k)}</td><td class="c">${esc(k.u||'')}</td><td class="c">${k.min!=null?k.min:'—'}</td><td class="c">${k.max!=null?k.max:'—'}</td><td class="c b">${k.valor||'—'}</td><td class="c ${cls}">${esc(k.estado||'—')}</td></tr>`;
+  }).join('');
+  const w=window.open('','_blank');
+  w.document.write(`<html><head><meta charset="utf-8"><title>Informe técnico — ${esc(c.nombre||'')}</title><style>
+    *{box-sizing:border-box} body{font-family:Arial,Helvetica,sans-serif;color:#1a202c;margin:0;font-size:12.5px}
+    .wrap{max-width:780px;margin:0 auto;padding:26px}
+    .top{background:linear-gradient(135deg,#2f7d3b,#255f2e);color:#fff;padding:18px 22px;border-radius:12px;margin-bottom:16px}
+    .top h1{margin:0;font-size:19px;letter-spacing:.02em} .top p{margin:3px 0 0;font-size:12px;opacity:.9}
+    h2{font-size:13px;color:#2f7d3b;border-bottom:2px solid #2f7d3b;padding-bottom:3px;margin:20px 0 8px}
+    table{width:100%;border-collapse:collapse} td,th{border:1px solid #cbd5e0;padding:6px 8px}
+    .datos td{border:none;padding:4px 6px} .datos .k{color:#718096;font-size:11px;width:120px}
+    .datos .v{font-weight:600}
+    th{background:#eef5ef;font-size:11px;text-align:left} .c{text-align:center} .b{font-weight:700}
+    .ok{background:#e6f2e8;color:#255f2e;font-weight:700} .warn{background:#fdf3e0;color:#c8820a;font-weight:700} .na{color:#a0aec0}
+    .diag{background:#f7fafc;border-left:3px solid #2f7d3b;padding:10px 12px;border-radius:6px;margin-top:6px;white-space:pre-wrap}
+    .foot{margin-top:26px;border-top:1px solid #cbd5e0;padding-top:10px;color:#718096;font-size:10.5px;text-align:center}
+    .firma{display:flex;justify-content:space-between;margin-top:30px;font-size:12px}
+    @media print{.wrap{padding:12mm} .noprint{display:none}}
+  </style></head><body><div class="wrap">
+    <div class="top"><h1>BIOINNOVA — INFORME TÉCNICO A CAMPO</h1><p>Evaluación de desempeño y recomendación nutricional para el cliente</p></div>
+    <h2>1. Datos de la visita</h2>
+    <table class="datos"><tr><td class="k">Cliente</td><td class="v">${esc(c.nombre||'—')}</td><td class="k">Estancia</td><td class="v">${esc(e.nombre||'—')}</td></tr>
+      <tr><td class="k">Fecha de visita</td><td class="v">${fmtFecha(v.fecha)}</td><td class="k">Técnico comercial</td><td class="v">${esc(v.tecnico||'—')}</td></tr>
+      <tr><td class="k">Categoría evaluada</td><td class="v">${esc(v.categoria)}</td><td class="k">Nº de animales</td><td class="v">${v.n_animales!=null?v.n_animales:'—'}</td></tr>
+      <tr><td class="k">Producto Bioinnova</td><td class="v">${esc(v.producto||'—')}</td><td class="k">Presentación</td><td class="v">${esc(v.presentacion||'—')}</td></tr>
+      <tr><td class="k">Consumo observado</td><td class="v">${esc(v.consumo||'—')}</td><td class="k">Días en el sistema</td><td class="v">${v.dias_sistema!=null?v.dias_sistema:'—'}</td></tr></table>
+    <h2>2. Indicadores evaluados a campo (KPIs)</h2>
+    <table><thead><tr><th>KPI</th><th class="c">Unidad</th><th class="c">Obj. Mín</th><th class="c">Obj. Máx</th><th class="c">Medido</th><th class="c">Estado</th></tr></thead><tbody>${filas}</tbody></table>
+    <h2>3. Diagnóstico y recomendación técnica</h2>
+    ${v.diagnostico?`<div class="diag">${esc(v.diagnostico)}</div>`:'<div class="na">—</div>'}
+    ${v.recomendacion?`<div class="diag" style="border-color:#c8820a;margin-top:8px"><b>Recomendación:</b> ${esc(v.recomendacion)}</div>`:''}
+    <h2>4. Cierre</h2>
+    <div class="firma"><div>Próxima visita: <b>${v.proxima?fmtFecha(v.proxima):'____ / ____ / ______'}</b></div><div>Firma del técnico: __________________</div></div>
+    <div class="foot">Bioinnova S.A.  ·  Nutrición de bovinos de corte  ·  Informe generado el ${fmtFecha(hoy())}</div>
+    <div class="noprint" style="text-align:center;margin-top:18px"><button onclick="window.print()" style="background:#2f7d3b;color:#fff;border:none;padding:10px 22px;border-radius:8px;font-size:14px;cursor:pointer">🖨️ Imprimir / Guardar PDF</button></div>
+  </div></body></html>`);
+  w.document.close();
+}
+
+// ── Init ──
+goHome();
+</script>
+</body>
+</html>
