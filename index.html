@@ -154,13 +154,15 @@ textarea{resize:vertical;min-height:66px}
         <label class="fl">Cliente</label>
         <select id="vCliente" onchange="visitaClienteChange()"></select>
         <label class="fl">Estancia</label>
-        <select id="vEstancia"></select>
+        <select id="vEstancia" onchange="populateLotes()"></select>
         <div class="row2">
           <div><label class="fl">Fecha</label><input type="date" id="vFecha"></div>
           <div><label class="fl">Técnico comercial</label><input type="text" id="vTecnico" placeholder="Nombre"></div>
         </div>
         <label class="fl">Categoría evaluada</label>
         <select id="vCategoria" onchange="visitaCategoriaChange()"></select>
+        <label class="fl">Lote <span style="color:var(--gray-400);font-weight:400">(opcional — cabecera, media, cola…)</span></label>
+        <select id="vLote" onchange="visitaLoteChange()"></select>
         <div class="row2">
           <div><label class="fl">Nº de animales</label><input type="number" id="vAnimales" inputmode="numeric" placeholder="0"></div>
           <div><label class="fl">Días en el sistema</label><input type="number" id="vDias" inputmode="numeric" placeholder="0"></div>
@@ -316,7 +318,7 @@ const estanciasDe =cid=>getEstancias().filter(e=>e.cliente_id===cid);
 const visitasDe   =cid=>getVisitas().filter(v=>v.cliente_id===cid);
 
 // ── Navegación ──
-let curCliente=null, editVisitaId=null, curSub='Visitas técnicas a campo';
+let curCliente=null, editVisitaId=null, curSub='Visitas técnicas a campo', _lotesEdit=[];
 function showScreen(id,titulo,sub,back){
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
   gs(id).classList.add('active');
@@ -345,7 +347,7 @@ function visitaLi(v){
   const c=clienteById(v.cliente_id), e=estanciaById(v.estancia_id);
   return `<div class="li" onclick="verVisita('${v.id}')">
     <div style="min-width:0"><div class="li-t">${esc(c?c.nombre:'—')} <span class="chip ${catClass(v.categoria)}">${esc(v.categoria)}</span></div>
-    <div class="li-s">${esc(e?e.nombre:'')}${e?' · ':''}${fmtFecha(v.fecha)} · ${v.n_animales||0} an.</div></div>
+    <div class="li-s">${esc(e?e.nombre:'')}${v.lote?' · '+esc(v.lote):''}${(e||v.lote)?' · ':''}${fmtFecha(v.fecha)} · ${v.n_animales||0} an.</div></div>
     <div class="li-chev">›</div></div>`;
 }
 
@@ -399,7 +401,8 @@ function abrirCliente(id){
   const ests=estanciasDe(id);
   gs('estList').innerHTML=ests.length? ests.map(e=>{
     const hato=(e.hato||[]).filter(h=>h.cabezas).map(h=>`${h.categoria} ${h.cabezas}`).join(' · ');
-    return `<div class="li" onclick="estanciaModal('${e.id}')"><div style="min-width:0"><div class="li-t">${esc(e.nombre)}</div><div class="li-s">${e.zona?esc(e.zona)+' · ':''}${hato||'sin hato cargado'}</div></div><div class="li-chev">✎</div></div>`;
+    const nl=(e.lotes||[]).length;
+    return `<div class="li" onclick="estanciaModal('${e.id}')"><div style="min-width:0"><div class="li-t">${esc(e.nombre)}</div><div class="li-s">${e.zona?esc(e.zona)+' · ':''}${hato||'sin hato cargado'}${nl?' · '+nl+' lote'+(nl!==1?'s':''):''}</div></div><div class="li-chev">✎</div></div>`;
   }).join('') : '<div class="empty"><b>Paso 2:</b> cargá la primera estancia y su hato.<br>Tocá <span style="color:var(--green);font-weight:700">＋ Agregar</span> arriba a la derecha.</div>';
   const vis=visitasDe(id).slice().sort((a,b)=>String(b.fecha||'').localeCompare(String(a.fecha||'')));
   gs('cliVisCount').textContent=vis.length?vis.length:'';
@@ -414,15 +417,35 @@ function estanciaModal(id){
     <label class="fl">Zona</label><input id="mEsZona" value="${esc(e&&e.zona)}" placeholder="Ej: Chaco">
     <div class="sect-t" style="margin-top:14px">Hato (cabezas por categoría)</div>
     ${CATEGORIAS.map((c,i)=>{ const h=hato.find(x=>x.categoria===c)||{}; return `<div style="display:flex;align-items:center;gap:10px;margin:6px 0"><span class="chip ${catClass(c)}" style="width:96px">${c}</span><input type="number" id="mHato${i}" value="${h.cabezas!=null?h.cabezas:''}" placeholder="0" inputmode="numeric"></div>`; }).join('')}
+    <div class="sect-t" style="margin-top:14px">Lotes (opcional)</div>
+    <div style="font-size:11px;color:var(--gray-500);margin-bottom:2px">Subgrupos dentro de una categoría: cabecera, media, cola, o el nombre que usen en la estancia.</div>
+    <datalist id="loteNombres"><option>Cabecera</option><option>Media</option><option>Cola</option></datalist>
+    <div id="mLotesList"></div>
+    <button class="btn btn-sec" style="width:100%;margin-top:6px;font-size:13px;padding:8px" onclick="addLoteRow()">＋ Agregar lote</button>
     <label class="fl">Observaciones</label><textarea id="mEsObs">${esc(e&&e.obs)}</textarea>
     <div class="row2" style="margin-top:12px">${e?`<button class="btn btn-sec" onclick="borrarEstancia('${e.id}')" style="color:var(--red)">Borrar</button>`:'<button class="btn btn-sec" onclick="cerrarModal()">Cancelar</button>'}<button class="btn btn-primary" onclick="guardarEstancia('${e?e.id:''}')">Guardar</button></div>`;
+  _lotesEdit = (e&&e.lotes)? JSON.parse(JSON.stringify(e.lotes)) : [];
+  renderLotesEdit();
   gs('modal').classList.add('show');
 }
+function renderLotesEdit(){
+  const cont=gs('mLotesList'); if(!cont) return;
+  cont.innerHTML = _lotesEdit.length? _lotesEdit.map((lo,i)=>`<div style="display:flex;gap:6px;align-items:center;margin:5px 0">
+    <select id="mLoCat${i}" style="flex:0 0 92px;padding:8px;font-size:12px">${CATEGORIAS.map(c=>`<option ${lo.categoria===c?'selected':''}>${c}</option>`).join('')}</select>
+    <input id="mLoNom${i}" list="loteNombres" value="${esc(lo.nombre)}" placeholder="Nombre del lote" style="flex:1;padding:8px;min-width:0">
+    <input id="mLoCab${i}" type="number" value="${lo.cabezas!=null?lo.cabezas:''}" placeholder="cab." inputmode="numeric" style="flex:0 0 62px;padding:8px">
+    <span onclick="removeLoteRow(${i})" title="Quitar" style="cursor:pointer;color:var(--red);font-size:20px;padding:0 2px">×</span></div>`).join('') : '<div style="font-size:11px;color:var(--gray-400);padding:2px 0">Sin lotes cargados.</div>';
+}
+function syncLotesEdit(){ _lotesEdit=_lotesEdit.map((lo,i)=>({ id:lo.id, categoria:gs('mLoCat'+i)?gs('mLoCat'+i).value:lo.categoria, nombre:gs('mLoNom'+i)?gs('mLoNom'+i).value:lo.nombre, cabezas:gs('mLoCab'+i)?gs('mLoCab'+i).value:lo.cabezas })); }
+function addLoteRow(){ syncLotesEdit(); _lotesEdit.push({categoria:CATEGORIAS[0],nombre:'',cabezas:''}); renderLotesEdit(); }
+function removeLoteRow(i){ syncLotesEdit(); _lotesEdit.splice(i,1); renderLotesEdit(); }
 function guardarEstancia(id){
   const nombre=gs('mEsNombre').value.trim(); if(!nombre){ showToast('Ingresá el nombre'); return; }
   const hato=CATEGORIAS.map((c,i)=>({categoria:c,cabezas:num(gs('mHato'+i).value)}));
+  syncLotesEdit();
+  const lotes=_lotesEdit.filter(l=>String(l.nombre||'').trim()).map((l,i)=>({id:l.id||('LT-'+Date.now()+'-'+i),categoria:l.categoria,nombre:String(l.nombre).trim(),cabezas:num(l.cabezas)}));
   let es=getEstancias(); let e=id?es.find(x=>x.id===id):null;
-  const data={cliente_id:curCliente,nombre,zona:gs('mEsZona').value.trim(),hato,obs:gs('mEsObs').value.trim()};
+  const data={cliente_id:curCliente,nombre,zona:gs('mEsZona').value.trim(),hato,lotes,obs:gs('mEsObs').value.trim()};
   if(e){ Object.assign(e,data); e.ts=new Date().toISOString(); } else { es.push({id:'ES-'+Date.now(),...data,ts:new Date().toISOString()}); }
   saveEstancias(es); cerrarModal(); showToast('✓ Estancia guardada'); abrirCliente(curCliente);
 }
@@ -449,6 +472,18 @@ function abrirFormVisita(clienteId){
 function visitaClienteChange(){
   const cid=gs('vCliente').value; const ests=estanciasDe(cid);
   gs('vEstancia').innerHTML = ests.length? ests.map(e=>`<option value="${e.id}">${esc(e.nombre)}</option>`).join('') : '<option value="">(sin estancias — cargalas en el cliente)</option>';
+  populateLotes();
+}
+function populateLotes(){
+  const sel=gs('vLote'); if(!sel) return;
+  const est=estanciaById(gs('vEstancia').value); const cat=gs('vCategoria').value;
+  const lotes=((est&&est.lotes)||[]).filter(l=>l.categoria===cat);
+  sel.innerHTML='<option value="">Toda la categoría</option>'+lotes.map(l=>`<option value="${esc(l.nombre)}" data-cab="${l.cabezas!=null?l.cabezas:''}">${esc(l.nombre)}${l.cabezas!=null?' ('+l.cabezas+' cab.)':''}</option>`).join('')+'<option value="__otro">➕ Otro lote…</option>';
+}
+function visitaLoteChange(){
+  const sel=gs('vLote'); const val=sel.value;
+  if(val==='__otro'){ sel.selectedIndex=0; const nom=prompt('Nombre del lote:'); if(nom&&nom.trim()){ const o=document.createElement('option'); o.value=nom.trim(); o.textContent=nom.trim(); sel.insertBefore(o,sel.options[sel.options.length-1]); o.selected=true; } return; }
+  const opt=sel.options[sel.selectedIndex]; if(opt&&opt.dataset.cab){ gs('vAnimales').value=opt.dataset.cab; }
 }
 function visitaCategoriaChange(){
   const cat=gs('vCategoria').value;
@@ -459,6 +494,7 @@ function visitaCategoriaChange(){
   gs('vKpiTitulo').textContent='KPIs — '+cat;
   gs('vKpis').innerHTML=(KPIS[cat]||[]).map((d,i)=>`<div class="kpi"><div class="kpi-top"><span class="kpi-n">${esc(d.k)}</span><span class="kpi-ref">🟢 ${esc(refTxt(d))}</span></div>
     <div class="kpi-in"><input type="text" inputmode="decimal" id="kv${i}" placeholder="valor" oninput="kpiLive(${i})"><span id="ks${i}" class="sem sem-gray">—</span></div></div>`).join('');
+  populateLotes();
 }
 function kpiLive(i){
   const cat=gs('vCategoria').value; const d=KPIS[cat][i]; const st=kpiEstado(gs('kv'+i).value,d);
@@ -477,12 +513,14 @@ function guardarVisita(imprimir){
     id: editVisitaId||('VI-'+Date.now()),
     cliente_id:cid, estancia_id:gs('vEstancia').value||'',
     fecha:gs('vFecha').value||hoy(), tecnico:gs('vTecnico').value.trim(),
-    categoria:cat, n_animales:num(gs('vAnimales').value), dias_sistema:num(gs('vDias').value),
+    categoria:cat, lote:(gs('vLote')?gs('vLote').value:''), n_animales:num(gs('vAnimales').value), dias_sistema:num(gs('vDias').value),
     producto:gs('vProducto').value, presentacion:gs('vPresentacion').value.trim(), consumo:gs('vConsumo').value.trim(),
     kpis, diagnostico:gs('vDiag').value.trim(), recomendacion:gs('vReco').value.trim(),
     proxima:gs('vProxima').value||'', ts:new Date().toISOString()
   };
   if(gs('vTecnico').value.trim()) localStorage.setItem('bio:tecnico',gs('vTecnico').value.trim());
+  // si el lote es nuevo para la estancia, lo recordamos para próximas visitas
+  if(v.lote && v.estancia_id){ const es=getEstancias(); const e=es.find(x=>x.id===v.estancia_id); if(e){ e.lotes=e.lotes||[]; if(!e.lotes.some(l=>l.categoria===v.categoria && String(l.nombre).toLowerCase()===v.lote.toLowerCase())){ e.lotes.push({id:'LT-'+Date.now(),categoria:v.categoria,nombre:v.lote,cabezas:v.n_animales}); saveEstancias(es); } } }
   let vs=getVisitas(); if(editVisitaId){ vs=vs.map(x=>x.id===editVisitaId?v:x); } else { vs.unshift(v); }
   saveVisitas(vs); editVisitaId=null;
   showToast('✓ Visita guardada');
@@ -495,7 +533,7 @@ function verVisita(id){
   const filas=(v.kpis||[]).map(k=>`<tr><td>${esc(k.k)}</td><td style="text-align:center">${k.valor||'—'} ${esc(unidadCorta(k.u))}</td><td style="text-align:center">${semHtmlMini(k.estado)}</td></tr>`).join('');
   gs('modalBox').innerHTML=`<h3>Visita — ${esc(c?c.nombre:'')}</h3>
     <div style="font-size:12px;color:var(--gray-600);margin-bottom:8px">${esc(e?e.nombre:'')} · ${fmtFecha(v.fecha)} · <span class="chip ${catClass(v.categoria)}">${esc(v.categoria)}</span></div>
-    <div style="font-size:12px;color:var(--gray-700);margin-bottom:8px">${v.n_animales||0} animales · ${esc(v.producto||'—')}${v.consumo?' · '+esc(v.consumo):''}</div>
+    <div style="font-size:12px;color:var(--gray-700);margin-bottom:8px">${v.lote?'<b>Lote '+esc(v.lote)+'</b> · ':''}${v.n_animales||0} animales · ${esc(v.producto||'—')}${v.consumo?' · '+esc(v.consumo):''}</div>
     <table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="color:var(--gray-500)"><th style="text-align:left">KPI</th><th>Medido</th><th>Estado</th></tr></thead><tbody>${filas}</tbody></table>
     ${v.diagnostico?'<div class="sect-t">Diagnóstico</div><div style="font-size:12px">'+esc(v.diagnostico)+'</div>':''}
     ${v.recomendacion?'<div class="sect-t">Recomendación</div><div style="font-size:12px">'+esc(v.recomendacion)+'</div>':''}
@@ -509,6 +547,8 @@ function semHtmlMini(rep){ const cls= rep&&rep.includes('rango')?'sem-green':(re
 function editarVisita(id){ const v=getVisitas().find(x=>x.id===id); if(!v)return; cerrarModal(); editVisitaId=id; abrirFormVisita(v.cliente_id);
   gs('vCliente').value=v.cliente_id; visitaClienteChange(); gs('vEstancia').value=v.estancia_id||'';
   gs('vCategoria').value=v.categoria; visitaCategoriaChange();
+  if(v.lote && !Array.from(gs('vLote').options).some(o=>o.value===v.lote)){ const o=document.createElement('option'); o.value=v.lote; o.textContent=v.lote; gs('vLote').insertBefore(o,gs('vLote').options[gs('vLote').options.length-1]); }
+  gs('vLote').value=v.lote||'';
   gs('vFecha').value=v.fecha; gs('vTecnico').value=v.tecnico||''; gs('vAnimales').value=v.n_animales!=null?v.n_animales:''; gs('vDias').value=v.dias_sistema!=null?v.dias_sistema:'';
   // producto
   if(v.producto && !Array.from(gs('vProducto').options).some(o=>o.value===v.producto)){ const o=document.createElement('option'); o.value=v.producto; o.textContent=v.producto; gs('vProducto').insertBefore(o,gs('vProducto').options[gs('vProducto').options.length-1]); }
@@ -558,7 +598,7 @@ function informePDF(id){
     <h2>1. Datos de la visita</h2>
     <table class="datos"><tr><td class="k">Cliente</td><td class="v">${esc(c.nombre||'—')}</td><td class="k">Estancia</td><td class="v">${esc(e.nombre||'—')}</td></tr>
       <tr><td class="k">Fecha de visita</td><td class="v">${fmtFecha(v.fecha)}</td><td class="k">Técnico comercial</td><td class="v">${esc(v.tecnico||'—')}</td></tr>
-      <tr><td class="k">Categoría evaluada</td><td class="v">${esc(v.categoria)}</td><td class="k">Nº de animales</td><td class="v">${v.n_animales!=null?v.n_animales:'—'}</td></tr>
+      <tr><td class="k">Categoría evaluada</td><td class="v">${esc(v.categoria)}${v.lote?' · Lote: '+esc(v.lote):''}</td><td class="k">Nº de animales</td><td class="v">${v.n_animales!=null?v.n_animales:'—'}</td></tr>
       <tr><td class="k">Producto Bioinnova</td><td class="v">${esc(v.producto||'—')}</td><td class="k">Presentación</td><td class="v">${esc(v.presentacion||'—')}</td></tr>
       <tr><td class="k">Consumo observado</td><td class="v">${esc(v.consumo||'—')}</td><td class="k">Días en el sistema</td><td class="v">${v.dias_sistema!=null?v.dias_sistema:'—'}</td></tr></table>
     <h2>2. Indicadores evaluados a campo (KPIs)</h2>
