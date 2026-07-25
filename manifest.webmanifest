@@ -1,0 +1,15 @@
+{
+  "name": "BioInnova — Visitas Técnicas",
+  "short_name": "BioInnova",
+  "description": "Visitas técnicas a campo, KPIs e informes para clientes de BioInnova",
+  "lang": "es",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#2f7d3b",
+  "theme_color": "#2f7d3b",
+  "icons": [
+    { "src": "./icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

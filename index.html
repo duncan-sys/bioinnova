@@ -4,6 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>BioInnova — Visitas Técnicas</title>
+<meta name="theme-color" content="#2f7d3b">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="BioInnova">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon.svg">
+<link rel="icon" href="icon.svg">
 <style>
 :root{
   --green:#2f7d3b; --green-d:#255f2e; --green-lt:#e6f2e8;
@@ -308,13 +316,14 @@ const estanciasDe =cid=>getEstancias().filter(e=>e.cliente_id===cid);
 const visitasDe   =cid=>getVisitas().filter(v=>v.cliente_id===cid);
 
 // ── Navegación ──
-let curCliente=null, editVisitaId=null;
+let curCliente=null, editVisitaId=null, curSub='Visitas técnicas a campo';
 function showScreen(id,titulo,sub,back){
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
   gs(id).classList.add('active');
   gs('hTitle').textContent=titulo||'BioInnova';
-  gs('hSub').textContent=sub||'Visitas técnicas a campo';
+  curSub = sub||'Visitas técnicas a campo';
   gs('hBack').style.display=back?'block':'none';
+  pintarConexion();
   window.scrollTo(0,0);
 }
 function goHome(){ curCliente=null; editVisitaId=null; showScreen('sHome','BioInnova','Visitas técnicas a campo',false); renderHome(); }
@@ -368,9 +377,10 @@ function guardarCliente(id){
   let cl=getClientes(); let c=id?cl.find(x=>x.id===id):null;
   const data={nombre,contacto:gs('mContacto').value.trim(),tel:gs('mTel').value.trim(),email:gs('mEmail').value.trim(),ubicacion:gs('mUbic').value.trim(),obs:gs('mObs').value.trim()};
   if(c){ Object.assign(c,data); c.ts=new Date().toISOString(); } else { cl.push({id:'CL-'+Date.now(),...data,ts:new Date().toISOString()}); }
-  saveClientes(cl); cerrarModal(); showToast('✓ Cliente guardado');
-  if(gs('sCliente').classList.contains('active')&&curCliente) abrirCliente(curCliente); else renderClientes();
-  renderHome();
+  let openId=id;
+  if(!c){ openId=cl[cl.length-1].id; }
+  saveClientes(cl); cerrarModal(); showToast('✓ Cliente guardado'); renderHome();
+  abrirCliente(openId);   // lleva al detalle del cliente: próximo paso = cargar estancia
 }
 function borrarCliente(id){
   if(estanciasDe(id).length||visitasDe(id).length){ showToast('Tiene estancias o visitas; no se puede borrar'); return; }
@@ -390,10 +400,10 @@ function abrirCliente(id){
   gs('estList').innerHTML=ests.length? ests.map(e=>{
     const hato=(e.hato||[]).filter(h=>h.cabezas).map(h=>`${h.categoria} ${h.cabezas}`).join(' · ');
     return `<div class="li" onclick="estanciaModal('${e.id}')"><div style="min-width:0"><div class="li-t">${esc(e.nombre)}</div><div class="li-s">${e.zona?esc(e.zona)+' · ':''}${hato||'sin hato cargado'}</div></div><div class="li-chev">✎</div></div>`;
-  }).join('') : '<div class="empty">Sin estancias. Agregá una con ＋.</div>';
+  }).join('') : '<div class="empty"><b>Paso 2:</b> cargá la primera estancia y su hato.<br>Tocá <span style="color:var(--green);font-weight:700">＋ Agregar</span> arriba a la derecha.</div>';
   const vis=visitasDe(id).slice().sort((a,b)=>String(b.fecha||'').localeCompare(String(a.fecha||'')));
   gs('cliVisCount').textContent=vis.length?vis.length:'';
-  gs('cliVisList').innerHTML=vis.length? vis.map(v=>visitaLi(v)).join('') : '<div class="empty">Sin visitas todavía.</div>';
+  gs('cliVisList').innerHTML=vis.length? vis.map(v=>visitaLi(v)).join('') : '<div class="empty"><b>Paso 3:</b> cuando visites la estancia, tocá 📋 <b>Nueva visita</b> para cargar los KPIs y generar el informe.</div>';
 }
 function estanciaModal(id){
   if(!curCliente){ return; }
@@ -564,8 +574,15 @@ function informePDF(id){
   w.document.close();
 }
 
+// ── Offline / PWA ──
+if('serviceWorker' in navigator){ window.addEventListener('load',()=>{ navigator.serviceWorker.register('sw.js').catch(()=>{}); }); }
+function pintarConexion(){ const el=gs('hSub'); if(!el) return; el.textContent = navigator.onLine ? curSub : '📴 Sin conexión — se guarda en el equipo'; }
+window.addEventListener('online',()=>{ pintarConexion(); showToast('✓ Conexión restablecida'); });
+window.addEventListener('offline',()=>{ pintarConexion(); showToast('📴 Sin conexión — podés seguir cargando'); });
+
 // ── Init ──
 goHome();
+if(!navigator.onLine) pintarConexion();
 </script>
 </body>
 </html>
