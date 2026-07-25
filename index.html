@@ -364,13 +364,16 @@ const visitasDe   =cid=>getVisitas().filter(v=>v.cliente_id===cid);
 //  Pegá la URL y la anon key del proyecto Supabase de BioInnova.
 //  Mientras estén vacías, la app funciona SIN login (modo local).
 // ══════════════════════════════════════════════════════════
-const SUPABASE_URL = '';
-const SUPABASE_KEY = '';
+const SUPABASE_URL = 'https://mnuldrgynighabwtulkf.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_uAH-nT2MczSB8m9F4THmdw_T6u77exI';
 const AUTH_ON = !!(SUPABASE_URL && SUPABASE_KEY);
+let authToken = null;   // token JWT del usuario logueado (se usa en el header Authorization del REST)
+function sbHeaders(extra){ return Object.assign({ apikey:SUPABASE_KEY, Authorization:'Bearer '+(authToken||SUPABASE_KEY) }, extra||{}); }
 const sb = {
-  async query(table, filters={}){ let url=`${SUPABASE_URL}/rest/v1/${table}?select=*`; for(const [k,v] of Object.entries(filters)) url+=`&${k}=eq.${v}`; const r=await fetch(url,{headers:{apikey:SUPABASE_KEY,Authorization:`Bearer ${SUPABASE_KEY}`}}); return r.json(); },
-  async insert(table,data){ const r=await fetch(`${SUPABASE_URL}/rest/v1/${table}`,{method:'POST',headers:{apikey:SUPABASE_KEY,Authorization:`Bearer ${SUPABASE_KEY}`,'Content-Type':'application/json',Prefer:'return=representation'},body:JSON.stringify(data)}); return r.json(); },
-  async update(table,match,data){ let url=`${SUPABASE_URL}/rest/v1/${table}?`; for(const [k,v] of Object.entries(match)) url+=`${k}=eq.${v}&`; const r=await fetch(url,{method:'PATCH',headers:{apikey:SUPABASE_KEY,Authorization:`Bearer ${SUPABASE_KEY}`,'Content-Type':'application/json',Prefer:'return=representation'},body:JSON.stringify(data)}); return r.json(); }
+  async query(table, filters={}){ let url=`${SUPABASE_URL}/rest/v1/${table}?select=*`; for(const [k,v] of Object.entries(filters)) url+=`&${k}=eq.${v}`; const r=await fetch(url,{headers:sbHeaders()}); return r.json(); },
+  async insert(table,data){ const r=await fetch(`${SUPABASE_URL}/rest/v1/${table}`,{method:'POST',headers:sbHeaders({'Content-Type':'application/json',Prefer:'return=representation'}),body:JSON.stringify(data)}); return r.json(); },
+  async update(table,match,data){ let url=`${SUPABASE_URL}/rest/v1/${table}?`; for(const [k,v] of Object.entries(match)) url+=`${k}=eq.${v}&`; const r=await fetch(url,{method:'PATCH',headers:sbHeaders({'Content-Type':'application/json',Prefer:'return=representation'}),body:JSON.stringify(data)}); return r.json(); },
+  async del(table,match){ let url=`${SUPABASE_URL}/rest/v1/${table}?`; for(const [k,v] of Object.entries(match)) url+=`${k}=eq.${v}&`; return fetch(url,{method:'DELETE',headers:sbHeaders()}); }
 };
 const ROLES = { gerente:{label:'Gerente',editar:true}, tecnico:{label:'Técnico comercial',editar:true}, lectura:{label:'Solo lectura',editar:false} };
 let currentUser=null, currentRol=null;
@@ -388,6 +391,7 @@ async function doLogin(){
     const r=await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`,{method:'POST',headers:{apikey:SUPABASE_KEY,'Content-Type':'application/json'},body:JSON.stringify({email,password:pass})});
     const data=await r.json();
     if(!r.ok||!data.access_token) throw new Error(data.error_description||data.msg||'Email o contraseña incorrectos');
+    authToken=data.access_token;
     const perfil=await fetchPerfil(data.user.id,email);
     if(perfil.blocked) throw new Error('Tu usuario está desactivado — contactá al gerente');
     setSession({token:data.access_token,refresh:data.refresh_token,user:{id:data.user.id,email},rol:perfil.rol,nombre:perfil.nombre});
@@ -403,7 +407,7 @@ function applyAuth(){
   if(!AUTH_ON){ const ov=gs('loginOverlay'); if(ov) ov.style.display='none'; goHome(); return; }
   const s=getSession();
   if(!s||!s.token){ gs('loginOverlay').style.display='flex'; return; }
-  currentUser=s.user; currentRol=s.rol||'lectura';
+  currentUser=s.user; currentRol=s.rol||'lectura'; authToken=s.token;
   gs('loginOverlay').style.display='none';
   const chip=gs('userChip'); if(chip){ chip.textContent='👤 '+(s.nombre||s.user.email)+' · '+rolLabel(currentRol); chip.style.display=''; }
   const lo=gs('logoutBtn'); if(lo) lo.style.display='';
@@ -723,7 +727,7 @@ async function crearUsuario(){
 async function cambiarRol(id,rol){ try{ await sb.update('perfiles',{id},{rol}); showToast('Rol → '+rolLabel(rol)); }catch(e){ showToast('No se pudo cambiar el rol'); } }
 async function editarNombreUsuario(id,actual){ const n=prompt('Nombre del usuario:',actual); if(n===null)return; const nn=n.trim(); if(!nn){ showToast('No puede quedar vacío'); return; } try{ await sb.update('perfiles',{id},{nombre:nn}); showToast('✓ Nombre actualizado'); renderUsuarios(); }catch(e){ showToast('No se pudo actualizar'); } }
 async function toggleActivoUsuario(id,activar){ const on=(activar===true||activar==='true'); if(!on&&!confirm('¿Desactivar este usuario? No podrá iniciar sesión (es reversible).'))return; try{ await sb.update('perfiles',{id},{activo:on}); showToast(on?'✓ Activado':'✓ Desactivado'); renderUsuarios(); }catch(e){ showToast('No se pudo (¿falta la columna activo?)'); } }
-async function eliminarUsuario(id,nombre){ if(!confirm('¿Eliminar a "'+nombre+'" de la lista?\nBorra el perfil; la cuenta de acceso sigue en Supabase. Para bloquear el acceso, usá Desactivar.'))return; try{ const r=await fetch(`${SUPABASE_URL}/rest/v1/perfiles?id=eq.${id}`,{method:'DELETE',headers:{apikey:SUPABASE_KEY,Authorization:`Bearer ${SUPABASE_KEY}`}}); if(!r.ok)throw new Error(); showToast('✓ Perfil eliminado'); renderUsuarios(); }catch(e){ showToast('No se pudo eliminar'); } }
+async function eliminarUsuario(id,nombre){ if(!confirm('¿Eliminar a "'+nombre+'" de la lista?\nBorra el perfil; la cuenta de acceso sigue en Supabase. Para bloquear el acceso, usá Desactivar.'))return; try{ const r=await sb.del('perfiles',{id}); if(!r.ok)throw new Error(); showToast('✓ Perfil eliminado'); renderUsuarios(); }catch(e){ showToast('No se pudo eliminar'); } }
 
 // ── INFORME PDF (molde del .docx) ──
 function informePDF(id){
