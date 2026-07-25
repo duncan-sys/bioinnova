@@ -106,12 +106,35 @@ textarea{resize:vertical;min-height:66px}
 </style>
 </head>
 <body>
+
+<!-- ══════ LOGIN ══════ -->
+<div id="loginOverlay" style="position:fixed;inset:0;z-index:9999;background:linear-gradient(160deg,#255f2e,#173f1d);display:none;align-items:center;justify-content:center;padding:20px">
+  <div style="width:100%;max-width:350px;background:#fff;border-radius:18px;padding:26px 22px;box-shadow:0 12px 44px rgba(0,0,0,.4)">
+    <div style="text-align:center;margin-bottom:20px">
+      <div style="width:56px;height:56px;border-radius:14px;background:var(--green);display:inline-flex;align-items:center;justify-content:center;font-size:28px">🐂</div>
+      <div style="font-size:18px;font-weight:800;color:var(--green-d);margin-top:8px">BioInnova</div>
+      <div style="font-size:12px;color:var(--gray-500);margin-top:2px">Ingresá con tu cuenta</div>
+    </div>
+    <label class="fl">Email</label>
+    <input type="email" id="loginEmail" placeholder="tu@bioinnova.com" autocomplete="username">
+    <label class="fl">Contraseña</label>
+    <input type="password" id="loginPass" placeholder="Contraseña" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()">
+    <div id="loginError" style="display:none;font-size:12px;color:var(--red);background:var(--red-lt);border-radius:8px;padding:8px 10px;margin-top:12px;text-align:center"></div>
+    <button class="btn btn-primary btn-block" style="margin-top:16px" onclick="doLogin()">Ingresar</button>
+    <div id="loginLoading" style="display:none;text-align:center;font-size:12px;color:var(--gray-500);margin-top:12px">Verificando…</div>
+  </div>
+</div>
+
 <div class="app">
   <div class="hdr">
     <div class="logo" id="hLogo">🐂</div>
     <div class="htxt"><div class="htitle" id="hTitle">BioInnova</div><div class="hsub" id="hSub">Visitas técnicas a campo</div></div>
-    <button class="hback" id="hBack" style="display:none" onclick="goHome()">← Inicio</button>
+    <div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px">
+      <button class="hback" id="hBack" style="display:none" onclick="goHome()">← Inicio</button>
+      <button id="logoutBtn" onclick="doLogout()" style="display:none;background:rgba(255,255,255,.16);border:none;color:#fff;border-radius:8px;padding:5px 9px;font-size:11px;cursor:pointer;font-family:inherit">⏻ Salir</button>
+    </div>
   </div>
+  <div id="userChip" style="display:none;font-size:11px;color:var(--gray-500);padding:6px 16px 0;text-align:right"></div>
 
   <!-- HOME -->
   <div class="screen active" id="sHome">
@@ -121,11 +144,12 @@ textarea{resize:vertical;min-height:66px}
       <div class="stat"><div class="sv" id="stMes">0</div><div class="sl">Este mes</div></div>
     </div>
     <div class="tiles">
-      <div class="tile wide" onclick="nuevaVisita()" style="background:linear-gradient(135deg,var(--green),var(--green-d));color:#fff;border:none">
+      <div class="tile wide" id="tileVisita" onclick="nuevaVisita()" style="background:linear-gradient(135deg,var(--green),var(--green-d));color:#fff;border:none">
         <div class="ico">📋</div><div class="tlab" style="color:#fff">Nueva visita técnica</div><div class="tsub" style="color:rgba(255,255,255,.85)">Cargar KPIs y generar informe</div>
       </div>
       <div class="tile" onclick="openClientes()"><div class="ico">🏡</div><div class="tlab">Clientes</div><div class="tsub">y estancias</div></div>
       <div class="tile" onclick="openHistorial()"><div class="ico">🗂️</div><div class="tlab">Historial</div><div class="tsub">de visitas</div></div>
+      <div class="tile" id="tileUsuarios" onclick="openUsuarios()" style="display:none"><div class="ico">👥</div><div class="tlab">Usuarios</div><div class="tsub">accesos y roles</div></div>
     </div>
     <div class="sect-t">Últimas visitas</div>
     <div class="card"><div id="homeUltimas"></div></div>
@@ -135,14 +159,31 @@ textarea{resize:vertical;min-height:66px}
   <div class="screen" id="sClientes">
     <div style="margin-bottom:10px"><input type="search" id="cliBuscar" placeholder="🔎 Buscar cliente…" oninput="renderClientes()"></div>
     <div class="card"><div class="card-h"><span>Clientes</span><span id="cliCount" style="font-weight:500;color:var(--gray-400)"></span></div><div id="cliList"></div></div>
-    <button class="btn btn-primary btn-block" onclick="clienteModal()">＋ Nuevo cliente</button>
+    <button class="btn btn-primary btn-block" id="btnNuevoCliente" onclick="clienteModal()">＋ Nuevo cliente</button>
+  </div>
+
+  <!-- USUARIOS -->
+  <div class="screen" id="sUsuarios">
+    <div class="card">
+      <div class="card-h">Nuevo usuario</div>
+      <div class="card-b">
+        <label class="fl">Nombre</label><input type="text" id="usrNombre" placeholder="Nombre y apellido">
+        <label class="fl">Email</label><input type="email" id="usrEmail" placeholder="tu@bioinnova.com" autocomplete="off">
+        <label class="fl">Contraseña (mín. 6)</label><input type="text" id="usrPass" placeholder="clave inicial" autocomplete="off">
+        <label class="fl">Rol</label>
+        <select id="usrRol"><option value="tecnico">Técnico comercial</option><option value="gerente">Gerente</option><option value="lectura">Solo lectura</option></select>
+        <div id="usrMsg" style="display:none;font-size:12px;margin-top:10px;text-align:center"></div>
+        <button class="btn btn-primary btn-block" style="margin-top:12px" onclick="crearUsuario()">Crear usuario</button>
+      </div>
+    </div>
+    <div class="card"><div class="card-h"><span>Usuarios</span><span id="usrCount" style="font-weight:500;color:var(--gray-400)"></span></div><div id="usrList"></div></div>
   </div>
 
   <!-- CLIENTE DETALLE -->
   <div class="screen" id="sCliente">
     <div class="card"><div class="card-b" id="cliInfo"></div></div>
-    <div class="card"><div class="card-h"><span>🏡 Estancias</span><span style="color:var(--green);cursor:pointer;font-weight:600" onclick="estanciaModal()">＋ Agregar</span></div><div id="estList"></div></div>
-    <button class="btn btn-primary btn-block" style="margin-bottom:10px" onclick="nuevaVisitaCliente()">📋 Nueva visita a este cliente</button>
+    <div class="card"><div class="card-h"><span>🏡 Estancias</span><span id="estBtnAgregar" style="color:var(--green);cursor:pointer;font-weight:600" onclick="estanciaModal()">＋ Agregar</span></div><div id="estList"></div></div>
+    <button class="btn btn-primary btn-block" id="btnVisitaCliente" style="margin-bottom:10px" onclick="nuevaVisitaCliente()">📋 Nueva visita a este cliente</button>
     <div class="card"><div class="card-h"><span>Visitas</span><span id="cliVisCount" style="font-weight:500;color:var(--gray-400)"></span></div><div id="cliVisList"></div></div>
   </div>
 
@@ -318,6 +359,64 @@ const estanciasDe =cid=>getEstancias().filter(e=>e.cliente_id===cid);
 const visitasDe   =cid=>getVisitas().filter(v=>v.cliente_id===cid);
 
 // ── Navegación ──
+// ══════════════════════════════════════════════════════════
+//  AUTENTICACIÓN Y ROLES (Supabase)
+//  Pegá la URL y la anon key del proyecto Supabase de BioInnova.
+//  Mientras estén vacías, la app funciona SIN login (modo local).
+// ══════════════════════════════════════════════════════════
+const SUPABASE_URL = '';
+const SUPABASE_KEY = '';
+const AUTH_ON = !!(SUPABASE_URL && SUPABASE_KEY);
+const sb = {
+  async query(table, filters={}){ let url=`${SUPABASE_URL}/rest/v1/${table}?select=*`; for(const [k,v] of Object.entries(filters)) url+=`&${k}=eq.${v}`; const r=await fetch(url,{headers:{apikey:SUPABASE_KEY,Authorization:`Bearer ${SUPABASE_KEY}`}}); return r.json(); },
+  async insert(table,data){ const r=await fetch(`${SUPABASE_URL}/rest/v1/${table}`,{method:'POST',headers:{apikey:SUPABASE_KEY,Authorization:`Bearer ${SUPABASE_KEY}`,'Content-Type':'application/json',Prefer:'return=representation'},body:JSON.stringify(data)}); return r.json(); },
+  async update(table,match,data){ let url=`${SUPABASE_URL}/rest/v1/${table}?`; for(const [k,v] of Object.entries(match)) url+=`${k}=eq.${v}&`; const r=await fetch(url,{method:'PATCH',headers:{apikey:SUPABASE_KEY,Authorization:`Bearer ${SUPABASE_KEY}`,'Content-Type':'application/json',Prefer:'return=representation'},body:JSON.stringify(data)}); return r.json(); }
+};
+const ROLES = { gerente:{label:'Gerente',editar:true}, tecnico:{label:'Técnico comercial',editar:true}, lectura:{label:'Solo lectura',editar:false} };
+let currentUser=null, currentRol=null;
+function rolLabel(r){ return (ROLES[r]&&ROLES[r].label)||r; }
+function canEdit(){ if(!currentRol) return true; return !!(ROLES[currentRol]&&ROLES[currentRol].editar); }   // sin login (modo local) = acceso total
+function esGerente(){ return !currentRol || currentRol==='gerente'; }
+function getSession(){ try{ return JSON.parse(localStorage.getItem('bio:session')); }catch{ return null; } }
+function setSession(s){ try{ localStorage.setItem('bio:session',JSON.stringify(s)); }catch{} }
+function clearSession(){ try{ localStorage.removeItem('bio:session'); }catch{} }
+async function doLogin(){
+  const email=gs('loginEmail').value.trim(), pass=gs('loginPass').value; const err=gs('loginError'); err.style.display='none';
+  if(!email||!pass){ err.textContent='Ingresá email y contraseña'; err.style.display='block'; return; }
+  gs('loginLoading').style.display='block';
+  try{
+    const r=await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`,{method:'POST',headers:{apikey:SUPABASE_KEY,'Content-Type':'application/json'},body:JSON.stringify({email,password:pass})});
+    const data=await r.json();
+    if(!r.ok||!data.access_token) throw new Error(data.error_description||data.msg||'Email o contraseña incorrectos');
+    const perfil=await fetchPerfil(data.user.id,email);
+    if(perfil.blocked) throw new Error('Tu usuario está desactivado — contactá al gerente');
+    setSession({token:data.access_token,refresh:data.refresh_token,user:{id:data.user.id,email},rol:perfil.rol,nombre:perfil.nombre});
+    gs('loginLoading').style.display='none'; gs('loginPass').value=''; applyAuth();
+  }catch(e){ gs('loginLoading').style.display='none'; err.textContent=e.message||'No se pudo iniciar sesión'; err.style.display='block'; }
+}
+async function fetchPerfil(id,email){
+  try{ const rows=await sb.query('perfiles',{id}); if(rows&&rows.length){ if(rows[0].activo===false) return {blocked:true}; return {rol:rows[0].rol||'lectura',nombre:rows[0].nombre||email}; }
+    try{ await sb.insert('perfiles',{id,email,nombre:email,rol:'lectura'}); }catch(e){} }catch(e){}
+  return {rol:'lectura',nombre:email};
+}
+function applyAuth(){
+  if(!AUTH_ON){ const ov=gs('loginOverlay'); if(ov) ov.style.display='none'; goHome(); return; }
+  const s=getSession();
+  if(!s||!s.token){ gs('loginOverlay').style.display='flex'; return; }
+  currentUser=s.user; currentRol=s.rol||'lectura';
+  gs('loginOverlay').style.display='none';
+  const chip=gs('userChip'); if(chip){ chip.textContent='👤 '+(s.nombre||s.user.email)+' · '+rolLabel(currentRol); chip.style.display=''; }
+  const lo=gs('logoutBtn'); if(lo) lo.style.display='';
+  goHome();
+}
+function doLogout(){ clearSession(); location.reload(); }
+function applyRoleUI(){
+  const showEl=(id,show)=>{ const el=gs(id); if(el) el.style.display=show?'':'none'; };
+  showEl('tileVisita', canEdit());
+  showEl('btnNuevoCliente', canEdit());
+  showEl('tileUsuarios', currentRol==='gerente');
+}
+
 let curCliente=null, editVisitaId=null, curSub='Visitas técnicas a campo', _lotesEdit=[];
 function showScreen(id,titulo,sub,back){
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
@@ -328,7 +427,7 @@ function showScreen(id,titulo,sub,back){
   pintarConexion();
   window.scrollTo(0,0);
 }
-function goHome(){ curCliente=null; editVisitaId=null; showScreen('sHome','BioInnova','Visitas técnicas a campo',false); renderHome(); }
+function goHome(){ curCliente=null; editVisitaId=null; showScreen('sHome','BioInnova','Visitas técnicas a campo',false); renderHome(); applyRoleUI(); }
 function openClientes(){ showScreen('sClientes','Clientes','Fichas y estancias',true); renderClientes(); }
 function openHistorial(){ showScreen('sHistorial','Historial','Todas las visitas',true); const sel=gs('hFiltroCat'); sel.innerHTML='<option value="">Todas las categorías</option>'+CATEGORIAS.map(c=>`<option>${c}</option>`).join(''); renderHistorial(); }
 
@@ -363,6 +462,7 @@ function renderClientes(){
   }).join('') : '<div class="empty">Sin clientes. Agregá el primero abajo.</div>';
 }
 function clienteModal(id){
+  if(!canEdit()){ showToast('Tu rol es de solo lectura'); return; }
   const c=id?clienteById(id):null;
   gs('modalBox').innerHTML=`<h3>${c?'Editar':'Nuevo'} cliente</h3>
     <label class="fl">Nombre / Razón social</label><input id="mNombre" value="${esc(c&&c.nombre)}" placeholder="Ej: Estancia La Rosita S.A.">
@@ -375,6 +475,7 @@ function clienteModal(id){
 }
 function cerrarModal(){ gs('modal').classList.remove('show'); }
 function guardarCliente(id){
+  if(!canEdit()){ showToast('Sin permiso'); return; }
   const nombre=gs('mNombre').value.trim(); if(!nombre){ showToast('Ingresá el nombre'); return; }
   let cl=getClientes(); let c=id?cl.find(x=>x.id===id):null;
   const data={nombre,contacto:gs('mContacto').value.trim(),tel:gs('mTel').value.trim(),email:gs('mEmail').value.trim(),ubicacion:gs('mUbic').value.trim(),obs:gs('mObs').value.trim()};
@@ -394,10 +495,13 @@ function borrarCliente(id){
 function abrirCliente(id){
   curCliente=id; const c=clienteById(id); if(!c){ openClientes(); return; }
   showScreen('sCliente',c.nombre,'Ficha del cliente',true);
+  const ed=canEdit();
+  gs('estBtnAgregar').style.display=ed?'':'none';
+  gs('btnVisitaCliente').style.display=ed?'':'none';
   gs('cliInfo').innerHTML=`<div style="display:flex;justify-content:space-between;align-items:start"><div><div style="font-size:16px;font-weight:700">${esc(c.nombre)}</div>
     <div style="font-size:12px;color:var(--gray-600);margin-top:3px">${c.contacto?'👤 '+esc(c.contacto)+'<br>':''}${c.tel?'📞 '+esc(c.tel)+'  ':''}${c.email?'✉ '+esc(c.email):''}${c.ubicacion?'<br>📍 '+esc(c.ubicacion):''}</div>
     ${c.obs?'<div style="font-size:12px;color:var(--gray-500);margin-top:5px">'+esc(c.obs)+'</div>':''}</div>
-    <span style="color:var(--green);cursor:pointer;font-size:13px;font-weight:600" onclick="clienteModal('${c.id}')">✎ Editar</span></div>`;
+    ${ed?`<span style="color:var(--green);cursor:pointer;font-size:13px;font-weight:600" onclick="clienteModal('${c.id}')">✎ Editar</span>`:''}</div>`;
   const ests=estanciasDe(id);
   gs('estList').innerHTML=ests.length? ests.map(e=>{
     const hato=(e.hato||[]).filter(h=>h.cabezas).map(h=>`${h.categoria} ${h.cabezas}`).join(' · ');
@@ -410,6 +514,7 @@ function abrirCliente(id){
 }
 function estanciaModal(id){
   if(!curCliente){ return; }
+  if(!canEdit()){ showToast('Tu rol es de solo lectura'); return; }
   const e=id?estanciaById(id):null;
   const hato=(e&&e.hato)||CATEGORIAS.map(c=>({categoria:c,cabezas:''}));
   gs('modalBox').innerHTML=`<h3>${e?'Editar':'Nueva'} estancia</h3>
@@ -440,6 +545,7 @@ function syncLotesEdit(){ _lotesEdit=_lotesEdit.map((lo,i)=>({ id:lo.id, categor
 function addLoteRow(){ syncLotesEdit(); _lotesEdit.push({categoria:CATEGORIAS[0],nombre:'',cabezas:''}); renderLotesEdit(); }
 function removeLoteRow(i){ syncLotesEdit(); _lotesEdit.splice(i,1); renderLotesEdit(); }
 function guardarEstancia(id){
+  if(!canEdit()){ showToast('Sin permiso'); return; }
   const nombre=gs('mEsNombre').value.trim(); if(!nombre){ showToast('Ingresá el nombre'); return; }
   const hato=CATEGORIAS.map((c,i)=>({categoria:c,cabezas:num(gs('mHato'+i).value)}));
   syncLotesEdit();
@@ -455,15 +561,15 @@ function borrarEstancia(id){
 }
 
 // ── VISITA ──
-function nuevaVisita(){ editVisitaId=null; abrirFormVisita(null); }
-function nuevaVisitaCliente(){ editVisitaId=null; abrirFormVisita(curCliente); }
+function nuevaVisita(){ if(!canEdit()){ showToast('Tu rol es de solo lectura'); return; } editVisitaId=null; abrirFormVisita(null); }
+function nuevaVisitaCliente(){ if(!canEdit()){ showToast('Tu rol es de solo lectura'); return; } editVisitaId=null; abrirFormVisita(curCliente); }
 function abrirFormVisita(clienteId){
   const cl=getClientes();
   if(!cl.length){ showToast('Primero cargá un cliente'); openClientes(); return; }
   showScreen('sVisita','Nueva visita','Cargá los datos y KPIs',true);
   gs('vCliente').innerHTML='<option value="">— Elegir —</option>'+cl.slice().sort((a,b)=>a.nombre.localeCompare(b.nombre)).map(c=>`<option value="${c.id}">${esc(c.nombre)}</option>`).join('');
   gs('vCategoria').innerHTML=CATEGORIAS.map(c=>`<option>${c}</option>`).join('');
-  gs('vFecha').value=hoy(); gs('vTecnico').value=localStorage.getItem('bio:tecnico')||'';
+  gs('vFecha').value=hoy(); gs('vTecnico').value=(getSession()&&getSession().nombre)||localStorage.getItem('bio:tecnico')||'';
   gs('vAnimales').value=''; gs('vDias').value=''; gs('vConsumo').value=''; gs('vPresentacion').value='';
   gs('vDiag').value=''; gs('vReco').value=''; gs('vProxima').value='';
   gs('vCliente').value=clienteId||'';
@@ -506,6 +612,7 @@ function visitaProductoChange(){
   const opt=sel.options[sel.selectedIndex]; if(opt&&opt.dataset.p) gs('vPresentacion').value=opt.dataset.p;
 }
 function guardarVisita(imprimir){
+  if(!canEdit()){ showToast('Sin permiso'); return; }
   const cid=gs('vCliente').value; if(!cid){ showToast('Elegí el cliente'); return; }
   const cat=gs('vCategoria').value;
   const kpis=(KPIS[cat]||[]).map((d,i)=>{ const val=gs('kv'+i).value.trim(); return {k:d.k,u:d.u,min:d.min,max:d.max,valor:val,estado:kpiEstado(val,d).rep}; });
@@ -537,14 +644,14 @@ function verVisita(id){
     <table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="color:var(--gray-500)"><th style="text-align:left">KPI</th><th>Medido</th><th>Estado</th></tr></thead><tbody>${filas}</tbody></table>
     ${v.diagnostico?'<div class="sect-t">Diagnóstico</div><div style="font-size:12px">'+esc(v.diagnostico)+'</div>':''}
     ${v.recomendacion?'<div class="sect-t">Recomendación</div><div style="font-size:12px">'+esc(v.recomendacion)+'</div>':''}
-    <div class="row2" style="margin-top:14px"><button class="btn btn-sec" onclick="editarVisita('${v.id}')">✎ Editar</button><button class="btn btn-amber" onclick="informePDF('${v.id}')">🖨️ Informe</button></div>
-    <button class="btn btn-sec btn-block" style="margin-top:8px;color:var(--red)" onclick="borrarVisita('${v.id}')">Borrar visita</button>
+    <div class="row2" style="margin-top:14px">${canEdit()?`<button class="btn btn-sec" onclick="editarVisita('${v.id}')">✎ Editar</button>`:''}<button class="btn btn-amber" onclick="informePDF('${v.id}')" style="${canEdit()?'':'flex:1'}">🖨️ Informe</button></div>
+    ${canEdit()?`<button class="btn btn-sec btn-block" style="margin-top:8px;color:var(--red)" onclick="borrarVisita('${v.id}')">Borrar visita</button>`:''}
     <button class="btn btn-ghost btn-block" style="margin-top:8px" onclick="cerrarModal()">Cerrar</button>`;
   gs('modal').classList.add('show');
 }
 function unidadCorta(u){ return /escala|0–|1–/.test(u||'')?'':(u||''); }
 function semHtmlMini(rep){ const cls= rep&&rep.includes('rango')?'sem-green':(rep&&rep!=='—'?'sem-amber':'sem-gray'); return `<span class="sem ${cls}">${esc(rep||'—')}</span>`; }
-function editarVisita(id){ const v=getVisitas().find(x=>x.id===id); if(!v)return; cerrarModal(); editVisitaId=id; abrirFormVisita(v.cliente_id);
+function editarVisita(id){ if(!canEdit()){ showToast('Sin permiso'); return; } const v=getVisitas().find(x=>x.id===id); if(!v)return; cerrarModal(); editVisitaId=id; abrirFormVisita(v.cliente_id);
   gs('vCliente').value=v.cliente_id; visitaClienteChange(); gs('vEstancia').value=v.estancia_id||'';
   gs('vCategoria').value=v.categoria; visitaCategoriaChange();
   if(v.lote && !Array.from(gs('vLote').options).some(o=>o.value===v.lote)){ const o=document.createElement('option'); o.value=v.lote; o.textContent=v.lote; gs('vLote').insertBefore(o,gs('vLote').options[gs('vLote').options.length-1]); }
@@ -557,7 +664,7 @@ function editarVisita(id){ const v=getVisitas().find(x=>x.id===id); if(!v)return
   gs('vDiag').value=v.diagnostico||''; gs('vReco').value=v.recomendacion||''; gs('vProxima').value=v.proxima||'';
   showScreen('sVisita','Editar visita','',true);
 }
-function borrarVisita(id){ if(!confirm('¿Borrar esta visita?'))return; saveVisitas(getVisitas().filter(v=>v.id!==id)); cerrarModal(); renderHome(); if(curCliente&&gs('sCliente').classList.contains('active'))abrirCliente(curCliente); else if(gs('sHistorial').classList.contains('active'))renderHistorial(); else goHome(); }
+function borrarVisita(id){ if(!canEdit()){ showToast('Sin permiso'); return; } if(!confirm('¿Borrar esta visita?'))return; saveVisitas(getVisitas().filter(v=>v.id!==id)); cerrarModal(); renderHome(); if(curCliente&&gs('sCliente').classList.contains('active'))abrirCliente(curCliente); else if(gs('sHistorial').classList.contains('active'))renderHistorial(); else goHome(); }
 
 // ── HISTORIAL ──
 function renderHistorial(){
@@ -568,6 +675,55 @@ function renderHistorial(){
   gs('hCount').textContent=vs.length?vs.length+' visitas':'';
   gs('histList').innerHTML = vs.length? vs.map(v=>visitaLi(v)).join('') : '<div class="empty">Sin visitas.</div>';
 }
+
+// ── USUARIOS (gerente) ──
+function openUsuarios(){
+  if(!AUTH_ON){ showToast('Disponible al conectar Supabase'); return; }
+  if(currentRol!=='gerente'){ showToast('Solo el gerente gestiona usuarios'); return; }
+  showScreen('sUsuarios','Usuarios','Accesos y roles',true); renderUsuarios();
+}
+async function renderUsuarios(){
+  const list=gs('usrList');
+  try{
+    const rows=await sb.query('perfiles');
+    if(!Array.isArray(rows)){ list.innerHTML='<div class="empty" style="color:var(--red)">No se pudo leer (¿falta la tabla perfiles?)</div>'; return; }
+    gs('usrCount').textContent=rows.length+' usuarios';
+    if(!rows.length){ list.innerHTML='<div class="empty">Sin usuarios aún</div>'; return; }
+    list.innerHTML=rows.slice().sort((a,b)=>String(a.nombre||'').localeCompare(String(b.nombre||''))).map(u=>{
+      const activo=u.activo!==false; const nom=String(u.nombre||'').replace(/'/g,"\\'");
+      return `<div style="padding:10px 14px;border-bottom:1px solid var(--gray-200);${activo?'':'opacity:.55'}">
+        <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start">
+          <div style="min-width:0"><div class="li-t">${esc(u.nombre||'(sin nombre)')} ${activo?'':'<span style="font-size:9px;color:var(--red);font-weight:700">● INACTIVO</span>'}</div><div class="li-s">${esc(u.email||'')}</div></div>
+          <select onchange="cambiarRol('${u.id}',this.value)" style="font-size:12px;width:auto;padding:6px 8px">${['tecnico','gerente','lectura'].map(r=>`<option value="${r}" ${u.rol===r?'selected':''}>${rolLabel(r)}</option>`).join('')}</select>
+        </div>
+        <div style="display:flex;gap:6px;margin-top:8px">
+          <button class="btn btn-sec" style="flex:1;font-size:11px;padding:6px" onclick="editarNombreUsuario('${u.id}','${nom}')">✏ Nombre</button>
+          <button class="btn" style="flex:1;font-size:11px;padding:6px;background:${activo?'var(--amber-lt)':'var(--green-lt)'};color:${activo?'var(--amber)':'var(--green)'}" onclick="toggleActivoUsuario('${u.id}',${activo?'false':'true'})">${activo?'⏸ Desactivar':'▶ Activar'}</button>
+          <button class="btn" style="font-size:11px;padding:6px 10px;background:var(--red-lt);color:var(--red)" onclick="eliminarUsuario('${u.id}','${nom}')">🗑</button>
+        </div></div>`;
+    }).join('');
+  }catch(e){ list.innerHTML='<div class="empty" style="color:var(--red)">Error al cargar usuarios</div>'; }
+}
+async function crearUsuario(){
+  const nombre=gs('usrNombre').value.trim(), email=gs('usrEmail').value.trim(), pass=gs('usrPass').value, rol=gs('usrRol').value;
+  const msg=gs('usrMsg'); const show=(t,c)=>{ msg.textContent=t; msg.style.color=c; msg.style.display='block'; };
+  if(!nombre||!email||!pass){ show('Completá nombre, email y clave','var(--red)'); return; }
+  if(pass.length<6){ show('La clave debe tener al menos 6 caracteres','var(--red)'); return; }
+  show('Creando usuario…','var(--gray-600)');
+  try{
+    const r=await fetch(`${SUPABASE_URL}/auth/v1/signup`,{method:'POST',headers:{apikey:SUPABASE_KEY,'Content-Type':'application/json'},body:JSON.stringify({email,password:pass})});
+    const data=await r.json(); const uid=data&&(data.id||(data.user&&data.user.id));
+    if(!r.ok||!uid) throw new Error(data.msg||data.error_description||data.error||'No se pudo crear (¿el email ya existe?)');
+    await sb.insert('perfiles',{id:uid,email,nombre,rol});
+    show('✓ Usuario creado: '+nombre,'var(--green)');
+    gs('usrNombre').value=''; gs('usrEmail').value=''; gs('usrPass').value=''; gs('usrRol').value='tecnico';
+    renderUsuarios();
+  }catch(e){ show(e.message||'Error al crear usuario','var(--red)'); }
+}
+async function cambiarRol(id,rol){ try{ await sb.update('perfiles',{id},{rol}); showToast('Rol → '+rolLabel(rol)); }catch(e){ showToast('No se pudo cambiar el rol'); } }
+async function editarNombreUsuario(id,actual){ const n=prompt('Nombre del usuario:',actual); if(n===null)return; const nn=n.trim(); if(!nn){ showToast('No puede quedar vacío'); return; } try{ await sb.update('perfiles',{id},{nombre:nn}); showToast('✓ Nombre actualizado'); renderUsuarios(); }catch(e){ showToast('No se pudo actualizar'); } }
+async function toggleActivoUsuario(id,activar){ const on=(activar===true||activar==='true'); if(!on&&!confirm('¿Desactivar este usuario? No podrá iniciar sesión (es reversible).'))return; try{ await sb.update('perfiles',{id},{activo:on}); showToast(on?'✓ Activado':'✓ Desactivado'); renderUsuarios(); }catch(e){ showToast('No se pudo (¿falta la columna activo?)'); } }
+async function eliminarUsuario(id,nombre){ if(!confirm('¿Eliminar a "'+nombre+'" de la lista?\nBorra el perfil; la cuenta de acceso sigue en Supabase. Para bloquear el acceso, usá Desactivar.'))return; try{ const r=await fetch(`${SUPABASE_URL}/rest/v1/perfiles?id=eq.${id}`,{method:'DELETE',headers:{apikey:SUPABASE_KEY,Authorization:`Bearer ${SUPABASE_KEY}`}}); if(!r.ok)throw new Error(); showToast('✓ Perfil eliminado'); renderUsuarios(); }catch(e){ showToast('No se pudo eliminar'); } }
 
 // ── INFORME PDF (molde del .docx) ──
 function informePDF(id){
@@ -621,7 +777,7 @@ window.addEventListener('online',()=>{ pintarConexion(); showToast('✓ Conexió
 window.addEventListener('offline',()=>{ pintarConexion(); showToast('📴 Sin conexión — podés seguir cargando'); });
 
 // ── Init ──
-goHome();
+applyAuth();
 if(!navigator.onLine) pintarConexion();
 </script>
 </body>

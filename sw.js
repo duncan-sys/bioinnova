@@ -1,7 +1,7 @@
 // Service Worker — BioInnova PWA (offline-first del "app shell")
 // Estrategia: stale-while-revalidate. La app abre sin señal; cuando hay red,
 // actualiza el caché en segundo plano. Los datos de visitas viven en localStorage.
-const CACHE = 'bioinnova-v3';
+const CACHE = 'bioinnova-v4';
 const ASSETS = ['./', './index.html', './manifest.webmanifest', './icon.svg'];
 
 self.addEventListener('install', e => {
