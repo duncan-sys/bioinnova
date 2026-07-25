@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 430 100" role="img" aria-label="BioInnova">
+  <style>
+    .w{ font-family:'Segoe UI','Trebuchet MS',Arial,sans-serif; font-weight:900; font-style:italic; font-size:82px; }
+  </style>
+  <text x="4" y="76" class="w" fill="#6fbf44" letter-spacing="-1">Bio<tspan fill="#a9db83">in</tspan>nova</text>
+</svg>
