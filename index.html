@@ -898,7 +898,12 @@ function informePDF(id){
 }
 
 // ── Offline / PWA ──
-if('serviceWorker' in navigator){ window.addEventListener('load',()=>{ navigator.serviceWorker.register('sw.js').catch(()=>{}); }); }
+if('serviceWorker' in navigator){
+  const _hadCtrl = !!navigator.serviceWorker.controller;   // ya había una versión controlando (=es una actualización)
+  let _swReloaded=false;
+  navigator.serviceWorker.addEventListener('controllerchange',()=>{ if(_swReloaded||!_hadCtrl) return; _swReloaded=true; location.reload(); });
+  window.addEventListener('load',()=>{ navigator.serviceWorker.register('sw.js').catch(()=>{}); });
+}
 function pintarConexion(){ const el=gs('hSub'); if(!el) return; el.textContent = navigator.onLine ? curSub : '📴 Sin conexión — se guarda en el equipo'; }
 window.addEventListener('online',()=>{ pintarConexion(); showToast('✓ Conexión restablecida'); cloudPullAll(); });
 window.addEventListener('offline',()=>{ pintarConexion(); showToast('📴 Sin conexión — podés seguir cargando'); });
