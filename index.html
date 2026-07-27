@@ -451,7 +451,7 @@ function refreshVista(){ const act=document.querySelector('.screen.active'); if(
   else if(act.id==='sCliente'&&curCliente) abrirCliente(curCliente); else if(act.id==='sHistorial') renderHistorial(); }
 function startSync(){ if(!AUTH_ON) return; cloudPullAll(); if(syncTimer) clearInterval(syncTimer); syncTimer=setInterval(cloudPullAll, 30000); }
 
-let curCliente=null, editVisitaId=null, curSub='Visitas técnicas a campo', _lotesEdit=[], _evals=[];
+let curCliente=null, editVisitaId=null, curSub='Visitas técnicas a campo', _lotesEdit=[], _evals=[], _estEdit=[];
 function showScreen(id,titulo,sub,back){
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
   gs(id).classList.add('active');
@@ -507,9 +507,26 @@ function clienteModal(id){
     <div class="row2"><div><label class="fl">Teléfono</label><input id="mTel" value="${esc(c&&c.tel)}"></div><div><label class="fl">Email</label><input id="mEmail" value="${esc(c&&c.email)}"></div></div>
     <label class="fl">Zona / Ubicación</label><input id="mUbic" value="${esc(c&&c.ubicacion)}" placeholder="Ej: Chaco, Concepción…">
     <label class="fl">Observaciones</label><textarea id="mObs">${esc(c&&c.obs)}</textarea>
+    <div class="sect-t" style="margin-top:14px">🏡 Estancias</div>
+    <div style="font-size:11px;color:var(--gray-500);margin-bottom:4px">Cargá las estancias del cliente. El hato y los lotes de cada una se cargan después, tocando la estancia.</div>
+    <div id="mEstList"></div>
+    <button class="btn btn-sec" style="width:100%;margin-top:6px;font-size:13px;padding:8px" onclick="addEstRow()">＋ Agregar estancia</button>
     <div class="row2" style="margin-top:12px">${c?`<button class="btn btn-sec" onclick="borrarCliente('${c.id}')" style="color:var(--red)">Borrar</button>`:'<button class="btn btn-sec" onclick="cerrarModal()">Cancelar</button>'}<button class="btn btn-primary" onclick="guardarCliente('${c?c.id:''}')">Guardar</button></div>`;
+  _estEdit = id ? estanciasDe(id).map(e=>({id:e.id,nombre:e.nombre,zona:e.zona||''})) : [];
+  renderEstEdit();
   gs('modal').classList.add('show');
 }
+function renderEstEdit(){
+  const cont=gs('mEstList'); if(!cont) return;
+  cont.innerHTML = _estEdit.length ? _estEdit.map((es,i)=>`<div style="display:flex;gap:6px;align-items:center;margin:5px 0">
+    <input id="mEsN${i}" value="${esc(es.nombre)}" placeholder="Nombre de la estancia" style="flex:1;padding:8px;min-width:0">
+    <input id="mEsZ${i}" value="${esc(es.zona)}" placeholder="Zona" style="flex:0 0 90px;padding:8px">
+    <span onclick="removeEstRow(${i})" title="Quitar" style="cursor:pointer;color:var(--red);font-size:20px;padding:0 2px">×</span></div>`).join('')
+    : '<div style="font-size:11px;color:var(--gray-400);padding:2px 0">Sin estancias. Agregá con ＋.</div>';
+}
+function syncEstEdit(){ _estEdit=_estEdit.map((es,i)=>({ id:es.id, nombre:gs('mEsN'+i)?gs('mEsN'+i).value:es.nombre, zona:gs('mEsZ'+i)?gs('mEsZ'+i).value:es.zona })); }
+function addEstRow(){ syncEstEdit(); _estEdit.push({id:null,nombre:'',zona:''}); renderEstEdit(); const el=gs('mEsN'+(_estEdit.length-1)); if(el) el.focus(); }
+function removeEstRow(i){ syncEstEdit(); const es=_estEdit[i]; if(es && es.id && visitasDe(curCliente||'').some(v=>v.estancia_id===es.id)){ /* tiene visitas: se saca de la lista pero no se borra */ } _estEdit.splice(i,1); renderEstEdit(); }
 function cerrarModal(){ gs('modal').classList.remove('show'); }
 function guardarCliente(id){
   if(!canEdit()){ showToast('Sin permiso'); return; }
@@ -520,8 +537,23 @@ function guardarCliente(id){
   let openId=id;
   if(!c){ openId=cl[cl.length-1].id; }
   saveClientes(cl); cloudPush('clientes', cl.find(x=>x.id===openId));
+  // ── estancias cargadas en el mismo formulario ──
+  syncEstEdit();
+  let es=getEstancias();
+  const origIds=es.filter(x=>x.cliente_id===openId).map(x=>x.id);
+  const keptIds=[], toPush=[], ts=new Date().toISOString();
+  _estEdit.forEach((row,i)=>{
+    const nom=String(row.nombre||'').trim(); if(!nom) return;
+    if(row.id){ const e=es.find(x=>x.id===row.id); if(e){ e.nombre=nom; e.zona=String(row.zona||'').trim(); e.ts=ts; e.pending=true; keptIds.push(e.id); toPush.push(e); } }
+    else { const ne={id:'ES-'+Date.now()+'-'+i, cliente_id:openId, nombre:nom, zona:String(row.zona||'').trim(), hato:[], lotes:[], ts, pending:true}; es.push(ne); keptIds.push(ne.id); toPush.push(ne); }
+  });
+  const toDelete=[];
+  origIds.forEach(oid=>{ if(!keptIds.includes(oid) && !getVisitas().some(v=>v.estancia_id===oid)){ es=es.filter(x=>x.id!==oid); toDelete.push(oid); } });
+  saveEstancias(es);
+  toPush.forEach(e=>cloudPush('estancias', e));
+  toDelete.forEach(oid=>cloudDelete('estancias', oid));
   cerrarModal(); showToast('✓ Cliente guardado'); renderHome();
-  abrirCliente(openId);   // lleva al detalle del cliente: próximo paso = cargar estancia
+  abrirCliente(openId);
 }
 function borrarCliente(id){
   if(estanciasDe(id).length||visitasDe(id).length){ showToast('Tiene estancias o visitas; no se puede borrar'); return; }
