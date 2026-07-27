@@ -151,6 +151,7 @@ textarea{resize:vertical;min-height:66px}
       <div class="tile" onclick="openHistorial()"><div class="ico">🗂️</div><div class="tlab">Historial</div><div class="tsub">de visitas</div></div>
       <div class="tile" id="tileOT" onclick="openOTList()" style="display:none"><div class="ico">🏭</div><div class="tlab">Órdenes de Trabajo</div><div class="tsub">producción</div></div>
       <div class="tile" id="tileFormulas" onclick="openFormulas()" style="display:none"><div class="ico">🧪</div><div class="tlab">Formulaciones</div><div class="tsub">recetas</div></div>
+      <div class="tile" id="tileInv" onclick="openInv()" style="display:none"><div class="ico">📦</div><div class="tlab">Inventario</div><div class="tsub">insumos y materia prima</div></div>
       <div class="tile" id="tileUsuarios" onclick="openUsuarios()" style="display:none"><div class="ico">👥</div><div class="tlab">Usuarios</div><div class="tsub">accesos y roles</div></div>
     </div>
     <div class="sect-t">Últimas visitas</div>
@@ -222,6 +223,12 @@ textarea{resize:vertical;min-height:66px}
       <button class="btn btn-primary" onclick="guardarOT(false)">✓ Guardar</button>
     </div>
     <button class="btn btn-amber btn-block" onclick="guardarOT(true)">✓ Guardar e imprimir OT</button>
+  </div>
+
+  <!-- INVENTARIO -->
+  <div class="screen" id="sInv">
+    <div style="margin-bottom:10px"><input type="search" id="invBuscar" placeholder="🔎 Buscar insumo…" oninput="renderInv()"></div>
+    <div class="card"><div class="card-h"><span>Inventario</span><span id="invCount" style="font-weight:500;color:var(--gray-400)"></span></div><div id="invList"></div></div>
   </div>
 
   <!-- CLIENTE DETALLE -->
@@ -561,6 +568,7 @@ function applyRoleUI(){
   const verPlanta = currentRol==='planta' || currentRol==='gerente';
   showEl('tileOT', verPlanta);
   showEl('tileFormulas', verPlanta);
+  showEl('tileInv', verPlanta);
 }
 
 // ══════════════════════════════════════════════════════════
@@ -579,9 +587,12 @@ const SYNC_DEFS = {
   estancias:{ get:getEstancias, save:saveEstancias, table:'estancias', toRow:estRow, fromRow:rowEst },
   visitas:{ get:getVisitas, save:saveVisitas, table:'visitas', toRow:visRow, fromRow:rowVis },
   ot:{ get:getOTs, save:saveOTs, table:'bio_ot', toRow:otRow, fromRow:rowOT },
+  mov:{ get:getMovs, save:saveMovs, table:'bio_mov', toRow:movRow, fromRow:rowMov },
 };
 function otRow(o){ return { id:o.id, num:o.num, fecha:o.fecha||null, producto_cod:o.producto_cod||'', producto_nom:o.producto_nom||'', kg_bolsa:o.kg_bolsa||null, kg:o.kg||null, bolsas:o.bolsas||0, lote:o.lote||'', cliente:o.cliente||'', comercial:o.comercial||'', insumos:o.insumos||[], estado:o.estado||'abierta', ts:o.ts||null }; }
 function rowOT(r){ return { id:r.id, num:r.num, fecha:r.fecha, producto_cod:r.producto_cod, producto_nom:r.producto_nom, kg_bolsa:r.kg_bolsa, kg:r.kg, bolsas:r.bolsas, lote:r.lote, cliente:r.cliente, comercial:r.comercial, insumos:(typeof r.insumos==='string'?JSON.parse(r.insumos||'[]'):(r.insumos||[])), estado:r.estado, ts:r.ts, pending:false }; }
+function movRow(m){ return { id:m.id, insumo_c:m.insumo_c||'', insumo_n:m.insumo_n||'', u:m.u||'kg', tipo:m.tipo||'ingreso', cant:m.cant||0, motivo:m.motivo||'', proveedor:m.proveedor||'', costo:m.costo==null?null:m.costo, ot_id:m.ot_id||'', fecha:m.fecha||null, usuario:m.usuario||'', ts:m.ts||null }; }
+function rowMov(r){ return { id:r.id, insumo_c:r.insumo_c||'', insumo_n:r.insumo_n||'', u:r.u||'kg', tipo:r.tipo, cant:Number(r.cant)||0, motivo:r.motivo||'', proveedor:r.proveedor||'', costo:r.costo, ot_id:r.ot_id||'', fecha:r.fecha||'', usuario:r.usuario||'', ts:r.ts, pending:false }; }
 let syncTimer=null;
 async function cloudPush(name,obj){
   if(!AUTH_ON||!obj) return;
@@ -608,11 +619,11 @@ async function cloudPull(name){
     d.save(Object.values(merged));
   }catch(e){}
 }
-async function cloudPullAll(){ if(!AUTH_ON) return; await cloudPull('clientes'); await cloudPull('estancias'); await cloudPull('visitas'); await cloudPull('ot'); refreshVista(); }
+async function cloudPullAll(){ if(!AUTH_ON) return; await cloudPull('clientes'); await cloudPull('estancias'); await cloudPull('visitas'); await cloudPull('ot'); await cloudPull('mov'); refreshVista(); }
 function refreshVista(){ const act=document.querySelector('.screen.active'); if(!act) return;
   if(act.id==='sHome') renderHome(); else if(act.id==='sClientes') renderClientes();
   else if(act.id==='sCliente'&&curCliente) abrirCliente(curCliente); else if(act.id==='sHistorial') renderHistorial();
-  else if(act.id==='sOT') renderOTList(); }
+  else if(act.id==='sOT') renderOTList(); else if(act.id==='sInv') renderInv(); }
 function startSync(){ if(!AUTH_ON) return; cloudPullAll(); if(syncTimer) clearInterval(syncTimer); syncTimer=setInterval(cloudPullAll, 30000); }
 
 let curCliente=null, editVisitaId=null, curSub='Visitas técnicas a campo', _lotesEdit=[], _evals=[], _estEdit=[];
@@ -1095,7 +1106,7 @@ function renderOTList(){
   let ots=getOTs().slice().sort((a,b)=>String(b.ts||'').localeCompare(String(a.ts||'')));
   if(q) ots=ots.filter(o=>((o.producto_nom||'')+' '+(o.lote||'')+' '+(o.cliente||'')+' '+o.num).toLowerCase().includes(q));
   gs('otCount').textContent=ots.length?ots.length+' OT':'';
-  gs('otList').innerHTML=ots.length? ots.map(o=>`<div class="li" onclick="verOT('${o.id}')"><div style="min-width:0"><div class="li-t">OT N° ${o.num} · ${esc(o.producto_nom)}</div><div class="li-s">${fmtFecha(o.fecha)} · ${(o.kg||0).toLocaleString('es-PY')} kg · ${o.bolsas} bolsas${o.lote?' · '+esc(o.lote):''}</div></div><div class="li-chev">›</div></div>`).join('') : '<div class="empty">Sin órdenes. Tocá ＋ Nueva orden de trabajo.</div>';
+  gs('otList').innerHTML=ots.length? ots.map(o=>`<div class="li" onclick="verOT('${o.id}')"><div style="min-width:0"><div class="li-t">OT N° ${o.num} · ${esc(o.producto_nom)}${o.estado==='producida'?' <span style="color:var(--green)">✅</span>':''}</div><div class="li-s">${fmtFecha(o.fecha)} · ${(o.kg||0).toLocaleString('es-PY')} kg · ${o.bolsas} bolsas${o.lote?' · '+esc(o.lote):''}</div></div><div class="li-chev">›</div></div>`).join('') : '<div class="empty">Sin órdenes. Tocá ＋ Nueva orden de trabajo.</div>';
 }
 function nuevaOT(){ if(!esPlanta()){ showToast('Sin permiso'); return; }
   showScreen('sOTNueva','Nueva OT','Orden de trabajo',true);
@@ -1136,9 +1147,13 @@ function guardarOT(imprimir){
 function verOT(id){ const o=getOTs().find(x=>x.id===id); if(!o) return;
   const nf=n=>Number(n).toLocaleString('es-PY',{maximumFractionDigits:2});
   const filas=(o.insumos||[]).map(l=>`<tr><td style="color:var(--gray-500)">${esc(l.c)}</td><td>${esc(l.n)}</td><td style="text-align:right;font-weight:600">${nf(l.cant)}${l.t==='b'?' u':' kg'}</td></tr>`).join('');
-  gs('modalBox').innerHTML=`<h3>OT N° ${o.num}</h3><div style="font-size:12px;color:var(--gray-600);margin-bottom:6px">${esc(o.producto_nom)} · ${fmtFecha(o.fecha)}<br>${(o.kg||0).toLocaleString('es-PY')} kg · ${o.bolsas} bolsas${o.lote?' · Lote '+esc(o.lote):''}${o.cliente?'<br>Cliente: '+esc(o.cliente):''}${o.comercial?' · '+esc(o.comercial):''}</div>
+  const prod=o.estado==='producida';
+  gs('modalBox').innerHTML=`<h3>OT N° ${o.num} ${prod?'<span style="font-size:12px;color:var(--green);font-weight:700">✅ producida</span>':''}</h3><div style="font-size:12px;color:var(--gray-600);margin-bottom:6px">${esc(o.producto_nom)} · ${fmtFecha(o.fecha)}<br>${(o.kg||0).toLocaleString('es-PY')} kg · ${o.bolsas} bolsas${o.lote?' · Lote '+esc(o.lote):''}${o.cliente?'<br>Cliente: '+esc(o.cliente):''}${o.comercial?' · '+esc(o.comercial):''}</div>
     <table style="width:100%;border-collapse:collapse;font-size:12px"><tbody>${filas}</tbody></table>
-    <div class="row2" style="margin-top:12px">${esPlanta()?`<button class="btn btn-sec" onclick="editarOT('${o.id}')">✎ Editar</button>`:''}<button class="btn btn-amber" onclick="otPrint('${o.id}')" style="${esPlanta()?'':'flex:1'}">🖨️ Imprimir</button></div>
+    ${esPlanta()?(prod
+      ? `<button class="btn btn-sec btn-block" style="margin-top:12px" onclick="otRevertir('${o.id}')">↩ Revertir producción (devolver insumos)</button>`
+      : `<button class="btn btn-primary btn-block" style="margin-top:12px" onclick="otProducir('${o.id}')">📦 Confirmar producción · descontar insumos</button>`):''}
+    <div class="row2" style="margin-top:8px">${esPlanta()?`<button class="btn btn-sec" onclick="editarOT('${o.id}')">✎ Editar</button>`:''}<button class="btn btn-amber" onclick="otPrint('${o.id}')" style="${esPlanta()?'':'flex:1'}">🖨️ Imprimir</button></div>
     ${esPlanta()?`<button class="btn btn-sec btn-block" style="margin-top:8px;color:var(--red)" onclick="borrarOT('${o.id}')">Borrar OT</button>`:''}
     <button class="btn btn-ghost btn-block" style="margin-top:8px" onclick="cerrarModal()">Cerrar</button>`;
   gs('modal').classList.add('show');
@@ -1148,7 +1163,9 @@ function editarOT(id){ const o=getOTs().find(x=>x.id===id); if(!o)return; cerrar
   gs('otKg').value=o.kg; gs('otNum').value=o.num; gs('otLote').value=o.lote||''; gs('otCliente').value=o.cliente||''; gs('otComercial').value=o.comercial||''; gs('otFecha').value=o.fecha;
   otRecalc(); showScreen('sOTNueva','Editar OT','',true);
 }
-function borrarOT(id){ if(!esPlanta())return; if(!confirm('¿Borrar esta OT?'))return; saveOTs(getOTs().filter(x=>x.id!==id)); cloudDelete('ot',id); cerrarModal(); renderOTList(); }
+function borrarOT(id){ if(!esPlanta())return; if(!confirm('¿Borrar esta OT?'))return;
+  getMovs().filter(m=>m.ot_id===id).forEach(m=>cloudDelete('mov',m.id)); saveMovs(getMovs().filter(m=>m.ot_id!==id)); // devolver insumos si estaba producida
+  saveOTs(getOTs().filter(x=>x.id!==id)); cloudDelete('ot',id); cerrarModal(); renderOTList(); }
 function otPrint(id){ const o=getOTs().find(x=>x.id===id); if(!o) return;
   const nf=n=>Number(n).toLocaleString('es-PY',{maximumFractionDigits:2});
   const filas=(o.insumos||[]).map(l=>`<tr><td>${esc(l.c)}</td><td>${esc(l.n)}</td><td class="r">${nf(l.cant)}${l.t==='b'?' u':''}</td><td class="r">${l.t==='p'?nf(l.p)+'%':''}</td></tr>`).join('');
@@ -1172,6 +1189,105 @@ function otPrint(id){ const o=getOTs().find(x=>x.id===id); if(!o) return;
    <div class="noprint" style="text-align:center;margin-top:16px"><button onclick="window.print()" style="background:#2f7d3b;color:#fff;border:none;padding:10px 22px;border-radius:8px;cursor:pointer">🖨️ Imprimir / Guardar PDF</button></div>
    </div></body></html>`);
   w.document.close();
+}
+
+// ══ INVENTARIO (insumos y materia prima) ══
+// Catálogo: unión de PL_INSUMOS (materias primas) + insumos que aparecen en las
+// fórmulas (envases/etiquetas) + extras manuales. La mano de obra (t='m') NO es inventario.
+function invCatalogo(){
+  const map={};
+  const add=(c,n,u,cat,prov)=>{ if(!c) return; if(!map[c]) map[c]={c,n:n||c,u,cat,prov:prov||''}; else if((!map[c].n||map[c].n===map[c].c)&&n) map[c].n=n; };
+  PL_INSUMOS.forEach(i=>add(i.c,i.n,'kg','Materia prima',i.prov));
+  PL_FORMULAS.forEach(f=>f.ins.forEach(i=>{ if(i.t==='m') return; const u=i.t==='b'?'u':'kg'; const cat=i.t==='b'?(/etiq/i.test(i.n)?'Etiqueta':'Envase'):'Materia prima'; add(i.c,i.n,u,cat); }));
+  getArr('bio:invextra').forEach(i=>add(i.c,i.n,i.u||'kg',i.cat||'Otro',i.prov));
+  return Object.values(map).sort((a,b)=>a.n.localeCompare(b.n));
+}
+function invItem(c){ return invCatalogo().find(x=>x.c===c); }
+function getMovs(){ return getArr('bio:mov'); }
+function saveMovs(a){ setArr('bio:mov',a); }
+function invStock(c){ let s=0; getMovs().forEach(m=>{ if(m.insumo_c!==c) return; const q=Number(m.cant)||0; if(m.tipo==='ingreso') s+=q; else if(m.tipo==='egreso') s-=q; else s+=q; }); return Math.round(s*100)/100; }
+function invMins(){ try{ return JSON.parse(localStorage.getItem('bio:invmin'))||{}; }catch{ return {}; } }
+function setInvMin(c,v){ const m=invMins(); if(v>0) m[c]=v; else delete m[c]; try{ localStorage.setItem('bio:invmin',JSON.stringify(m)); }catch{} }
+
+function openInv(){ if(!esPlanta()){ showToast('Sin permiso'); return; } showScreen('sInv','Inventario','Insumos y materia prima',true); renderInv(); }
+function renderInv(){
+  const q=(gs('invBuscar').value||'').trim().toLowerCase();
+  let cat=invCatalogo(); if(q) cat=cat.filter(i=>(i.n+' '+i.c).toLowerCase().includes(q));
+  const min=invMins(); let bajos=0;
+  const row=i=>{ const s=invStock(i.c); const mn=min[i.c]||0; const low= mn>0? s<=mn : s<=0; if(low) bajos++;
+    return `<div class="li" onclick="invDetalle('${i.c}')"><div style="min-width:0"><div class="li-t">${esc(i.n)}</div><div class="li-s">${esc(i.c)}${i.prov?' · '+esc(i.prov):''}${mn>0?' · mín '+mn+' '+i.u:''}</div></div><div style="text-align:right;flex-shrink:0"><div style="font-weight:700;color:${low?'var(--red)':'var(--gray-800)'}">${s.toLocaleString('es-PY')} ${i.u}</div>${low?'<div style="font-size:11px;color:var(--red)">⚠ bajo</div>':''}</div></div>`; };
+  const groups={}; cat.forEach(i=>{ (groups[i.cat]=groups[i.cat]||[]).push(i); });
+  const order=['Materia prima','Envase','Etiqueta','Otro'];
+  const keys=Object.keys(groups).sort((a,b)=>{ const ia=order.indexOf(a),ib=order.indexOf(b); return (ia<0?9:ia)-(ib<0?9:ib); });
+  gs('invList').innerHTML = keys.map(k=>`<div style="padding:10px 14px 4px;font-size:11px;font-weight:700;color:var(--green);text-transform:uppercase;letter-spacing:.04em">${esc(k)} <span style="color:var(--gray-400)">(${groups[k].length})</span></div>`+groups[k].map(row).join('')).join('') || '<div class="empty">Sin insumos.</div>';
+  gs('invCount').textContent = cat.length+' insumos'+(bajos?' · '+bajos+' bajos':'');
+}
+function invDetalle(c){
+  const it=invItem(c); if(!it) return;
+  const s=invStock(c); const mn=invMins()[c]||0;
+  const movs=getMovs().filter(m=>m.insumo_c===c).sort((a,b)=>String(b.ts||'').localeCompare(String(a.ts||''))).slice(0,15);
+  const tN={ingreso:'Ingreso',egreso:'Salida',ajuste:'Ajuste'};
+  const filas=movs.map(m=>{ const neg=m.tipo==='egreso'||(m.tipo==='ajuste'&&Number(m.cant)<0); const val=Math.abs(Number(m.cant)||0);
+    return `<tr style="border-top:1px solid var(--gray-200)"><td style="padding:4px 6px;color:var(--gray-500)">${fmtFecha(m.fecha)}</td><td>${tN[m.tipo]||m.tipo}${m.ot_id?' · OT':''}${m.motivo&&!m.ot_id?'<div style="font-size:10px;color:var(--gray-400)">'+esc(m.motivo)+'</div>':''}</td><td style="text-align:right;font-weight:600;color:${neg?'var(--red)':'var(--green)'}">${neg?'−':'+'}${val.toLocaleString('es-PY')}</td></tr>`; }).join('') || '<tr><td colspan="3" style="color:var(--gray-400);padding:8px 6px">Sin movimientos aún.</td></tr>';
+  const edit=esPlanta();
+  gs('modalBox').innerHTML=`<h3 style="margin-bottom:2px">${esc(it.n)}</h3><div style="font-size:12px;color:var(--gray-600)">${esc(it.c)}${it.prov?' · '+esc(it.prov):''}</div>
+    <div style="display:flex;align-items:baseline;gap:8px;margin:10px 0"><div style="font-size:28px;font-weight:800;color:${(mn>0?s<=mn:s<=0)?'var(--red)':'var(--gray-800)'}">${s.toLocaleString('es-PY')}</div><div style="color:var(--gray-500)">${it.u} en stock</div></div>
+    ${edit?`<label class="fl">Stock mínimo (alerta)</label><input type="number" id="invMinInp" value="${mn||''}" placeholder="sin alerta" onchange="setInvMin('${c}',num(this.value)||0);renderInv()">
+    <div style="display:flex;gap:8px;margin:12px 0"><button class="btn btn-primary" style="flex:1" onclick="invMovModal('${c}','ingreso')">＋ Ingreso</button><button class="btn btn-sec" style="flex:1" onclick="invMovModal('${c}','egreso')">− Salida</button><button class="btn btn-amber" style="flex:1" onclick="invMovModal('${c}','ajuste')">⚖ Ajuste</button></div>`:''}
+    <div style="font-size:12px;font-weight:700;color:var(--gray-600);margin-top:8px">Últimos movimientos</div>
+    <table style="width:100%;border-collapse:collapse;font-size:12px"><tbody>${filas}</tbody></table>
+    <button class="btn btn-ghost btn-block" style="margin-top:12px" onclick="cerrarModal()">Cerrar</button>`;
+  gs('modal').classList.add('show');
+}
+let _invC=null,_invTipo=null;
+function invMovModal(c,tipo){
+  const it=invItem(c); if(!it) return; _invC=c; _invTipo=tipo; const s=invStock(c);
+  const tit={ingreso:'Registrar ingreso',egreso:'Registrar salida',ajuste:'Ajuste por conteo'};
+  let campos='';
+  if(tipo==='ajuste'){
+    campos=`<label class="fl">Stock actual del sistema</label><input value="${s} ${it.u}" readonly style="background:var(--gray-100)"><label class="fl">Stock real contado (${it.u})</label><input type="number" id="mvReal" inputmode="decimal" placeholder="lo que contaste">`;
+  } else {
+    campos=`<label class="fl">Cantidad (${it.u})</label><input type="number" id="mvCant" inputmode="decimal" placeholder="0">`;
+    if(tipo==='ingreso') campos+=`<div class="row2"><div><label class="fl">Proveedor</label><input id="mvProv" placeholder="opcional" value="${esc(it.prov||'')}"></div><div><label class="fl">Costo x ${it.u} (Gs)</label><input type="number" id="mvCosto" inputmode="numeric" placeholder="opcional"></div></div>`;
+    campos+=`<label class="fl">Motivo</label><input id="mvMotivo" placeholder="${tipo==='ingreso'?'Compra':'Merma / traslado'}">`;
+  }
+  gs('modalBox').innerHTML=`<h3>${tit[tipo]}</h3><div style="font-size:12px;color:var(--gray-600);margin-bottom:8px">${esc(it.n)} · ${esc(it.c)} · stock ${s.toLocaleString('es-PY')} ${it.u}</div>
+    ${campos}<label class="fl">Fecha</label><input type="date" id="mvFecha" value="${hoy()}">
+    <div class="row2" style="margin-top:12px"><button class="btn btn-sec" onclick="invDetalle('${c}')">Cancelar</button><button class="btn btn-primary" onclick="invGuardarMov()">Guardar</button></div>`;
+  gs('modal').classList.add('show');
+}
+function invGuardarMov(){
+  const it=invItem(_invC); if(!it) return; let cant, motivo, prov='', costo=null;
+  if(_invTipo==='ajuste'){
+    const real=num(gs('mvReal').value); if(real==null){ showToast('Ingresá el stock contado'); return; }
+    cant=Math.round((real-invStock(_invC))*100)/100; if(cant===0){ showToast('El stock ya coincide'); return; } motivo='Conteo físico';
+  } else {
+    const v=num(gs('mvCant').value); if(!v||v<=0){ showToast('Ingresá la cantidad'); return; }
+    cant=Math.abs(v); motivo=(gs('mvMotivo')&&gs('mvMotivo').value.trim())||(_invTipo==='ingreso'?'Compra':'Salida');
+    if(_invTipo==='ingreso'){ prov=(gs('mvProv').value||'').trim(); costo=num(gs('mvCosto').value); }
+  }
+  const m={ id:'MV-'+Date.now(), insumo_c:_invC, insumo_n:it.n, u:it.u, tipo:_invTipo, cant, motivo, proveedor:prov, costo, ot_id:'', fecha:gs('mvFecha').value||hoy(), usuario:(getSession()&&getSession().nombre)||'', ts:new Date().toISOString(), pending:true };
+  const a=getMovs(); a.unshift(m); saveMovs(a); cloudPush('mov',m);
+  showToast('✓ Movimiento guardado'); invDetalle(_invC); renderInv();
+}
+// Descuento de insumos desde una OT (confirmar producción)
+function otProducir(id){
+  const o=getOTs().find(x=>x.id===id); if(!o||!esPlanta()) return;
+  if(o.estado==='producida'){ showToast('Los insumos ya fueron descontados'); return; }
+  if(!confirm('¿Descontar del inventario los insumos de esta OT?')) return;
+  const movs=getMovs(); const stamp=new Date().toISOString(); const nuevos=[];
+  (o.insumos||[]).forEach((l,i)=>{ if(l.t==='m') return; const m={ id:'MV-'+Date.now()+'-'+i, insumo_c:l.c, insumo_n:l.n, u:l.t==='b'?'u':'kg', tipo:'egreso', cant:Math.abs(Number(l.cant)||0), motivo:'Producción OT N° '+o.num, proveedor:'', costo:null, ot_id:o.id, fecha:o.fecha||hoy(), usuario:(getSession()&&getSession().nombre)||'', ts:stamp, pending:true }; nuevos.push(m); });
+  saveMovs(nuevos.concat(movs)); nuevos.forEach(m=>cloudPush('mov',m));
+  o.estado='producida'; o.ts=stamp; o.pending=true; saveOTs(getOTs().map(x=>x.id===o.id?o:x)); cloudPush('ot',o);
+  cerrarModal(); showToast('✓ Insumos descontados del inventario'); renderOTList();
+}
+function otRevertir(id){
+  const o=getOTs().find(x=>x.id===id); if(!o||!esPlanta()) return;
+  if(!confirm('¿Revertir la producción? Se devuelven los insumos al inventario.')) return;
+  getMovs().filter(m=>m.ot_id===id).forEach(m=>cloudDelete('mov',m.id));
+  saveMovs(getMovs().filter(m=>m.ot_id!==id));
+  o.estado='abierta'; o.ts=new Date().toISOString(); o.pending=true; saveOTs(getOTs().map(x=>x.id===o.id?o:x)); cloudPush('ot',o);
+  cerrarModal(); showToast('Producción revertida'); renderOTList();
 }
 
 // ── INFORME PDF (molde del .docx) ──
