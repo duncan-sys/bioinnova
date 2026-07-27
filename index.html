@@ -730,7 +730,14 @@ function evalBlockHtml(ev,i){
         <div><label class="fl">Presentación</label><input type="text" id="ev${i}_pres" value="${esc(ev.presentacion)}" placeholder="—"></div>
         <div><label class="fl">Consumo observado</label><input type="text" id="ev${i}_cons" list="consumoList" value="${esc(ev.consumo)}" placeholder="elegí o escribí…" autocomplete="off"></div>
       </div>
-      ${cat==='Terminación'?`<label class="fl">Precio del kg de carne <span style="color:var(--gray-400);font-weight:400">(Gs — producto del cliente, para costo/beneficio)</span></label><input type="number" id="ev${i}_precioc" inputmode="numeric" value="${ev.precio_kg_carne!=null?ev.precio_kg_carne:''}" placeholder="ej: 12000">`:''}
+      ${cat==='Terminación'?`
+      <div style="font-size:12px;font-weight:700;color:var(--gray-700);margin:10px 0 2px">💰 Costo / beneficio (opcional)</div>
+      <div class="row2">
+        <div><label class="fl">Consumo diario del producto (kg/día)</label><input type="text" inputmode="decimal" id="ev${i}_conskg" value="${ev.consumo_kg!=null?ev.consumo_kg:''}" placeholder="ej: 1,2"></div>
+        <div><label class="fl">Costo del kg del producto (Gs)</label><input type="number" inputmode="numeric" id="ev${i}_costop" value="${ev.costo_producto!=null?ev.costo_producto:''}" placeholder="ej: 2540"></div>
+      </div>
+      <label class="fl">Precio del kg de carne (Gs) <span style="color:var(--gray-400);font-weight:400">(lo que cobra el productor, sobre carcasa)</span></label>
+      <input type="number" id="ev${i}_precioc" inputmode="numeric" value="${ev.precio_kg_carne!=null?ev.precio_kg_carne:''}" placeholder="ej: 12000">`:''}
       <div style="font-size:12px;font-weight:700;color:var(--gray-700);margin:10px 0 2px">KPIs — ${esc(cat)}</div>
       ${kpisHtml}
       <label class="fl">Comentario / diagnóstico de este lote <span style="color:var(--gray-400);font-weight:400">(opcional)</span></label>
@@ -750,6 +757,8 @@ function syncEvals(){
       dias: gs('ev'+i+'_dias')?gs('ev'+i+'_dias').value:ev.dias,
       animales: gs('ev'+i+'_anim')?gs('ev'+i+'_anim').value:ev.animales,
       precio_kg_carne: gs('ev'+i+'_precioc')?gs('ev'+i+'_precioc').value:ev.precio_kg_carne,
+      consumo_kg: gs('ev'+i+'_conskg')?gs('ev'+i+'_conskg').value:ev.consumo_kg,
+      costo_producto: gs('ev'+i+'_costop')?gs('ev'+i+'_costop').value:ev.costo_producto,
       kpis, comentario: gs('ev'+i+'_com')?gs('ev'+i+'_com').value:ev.comentario };
   });
 }
@@ -771,8 +780,9 @@ function guardarVisita(imprimir){
     const cat=ev.categoria;
     const kpis=(KPIS[cat]||[]).map((d,j)=>{ const val=String((ev.kpis&&ev.kpis[j]!=null)?ev.kpis[j]:'').trim(); return {k:d.k,u:d.u,min:d.min,max:d.max,valor:val,estado:kpiEstado(val,d).rep}; });
     const consumo=String(ev.consumo||'').trim(); addConsumo(consumo);
-    return { categoria:cat, lote:(ev.lote||''), producto:(ev.producto||''), presentacion:String(ev.presentacion||'').trim(), consumo, dias_sistema:num(ev.dias), n_animales:num(ev.animales), precio_kg_carne:(cat==='Terminación'?num(ev.precio_kg_carne):null), kpis, comentario:String(ev.comentario||'').trim() };
-  }).filter(ev=> ev.lote || ev.producto || ev.n_animales!=null || ev.comentario || ev.precio_kg_carne!=null || ev.kpis.some(k=>k.valor));
+    const esT=cat==='Terminación';
+    return { categoria:cat, lote:(ev.lote||''), producto:(ev.producto||''), presentacion:String(ev.presentacion||'').trim(), consumo, dias_sistema:num(ev.dias), n_animales:num(ev.animales), precio_kg_carne:(esT?num(ev.precio_kg_carne):null), consumo_kg:(esT?num(ev.consumo_kg):null), costo_producto:(esT?num(ev.costo_producto):null), kpis, comentario:String(ev.comentario||'').trim() };
+  }).filter(ev=> ev.lote || ev.producto || ev.n_animales!=null || ev.comentario || ev.precio_kg_carne!=null || ev.consumo_kg!=null || ev.costo_producto!=null || ev.kpis.some(k=>k.valor));
   if(!evaluaciones.length){ showToast('Cargá al menos una categoría/lote con datos'); return; }
   const estId=gs('vEstancia').value||'';
   const v={
@@ -817,14 +827,28 @@ function verVisita(id){
 }
 function unidadCorta(u){ return /escala|0–|1–/.test(u||'')?'':(u||''); }
 function semHtmlMini(rep){ const cls= rep&&rep.includes('rango')?'sem-green':(rep&&rep!=='—'?'sem-amber':'sem-gray'); return `<span class="sem ${cls}">${esc(rep||'—')}</span>`; }
-// Terminación: precio del kg de carne + valor estimado de la ganancia diaria (GMD × precio)
+// Terminación: análisis costo/beneficio diario.
+//  Costo/día  = consumo diario del producto (kg) × costo del kg del producto
+//  Ingreso/día = GMD × (rinde de carcasa %) × precio del kg de carne  (el productor cobra sobre carcasa)
+//  Margen/día  = ingreso − costo
 function gananciaDiariaHtml(ev){
-  if(!ev || ev.categoria!=='Terminación' || ev.precio_kg_carne==null || ev.precio_kg_carne==='') return '';
-  const precio=num(ev.precio_kg_carne); if(precio==null) return '';
-  const g=(ev.kpis||[]).find(k=>k.k==='GMD'); const gmd=g?num(g.valor):null;
-  let s='💰 Precio carne: Gs '+precio.toLocaleString('es-PY')+'/kg';
-  if(gmd!=null) s+=' · Valor de la ganancia diaria ≈ <b>Gs '+Math.round(gmd*precio).toLocaleString('es-PY')+'/día</b> ('+gmd+' kg × precio)';
-  return '<div style="font-size:11px;color:var(--green-d);background:var(--green-lt);border-radius:6px;padding:4px 8px;margin-top:4px">'+s+'</div>';
+  if(!ev || ev.categoria!=='Terminación') return '';
+  const gmdK=(ev.kpis||[]).find(k=>k.k==='GMD'), rendK=(ev.kpis||[]).find(k=>k.k==='Rendimiento de carcasa');
+  const gmd=gmdK?num(gmdK.valor):null, rend=rendK?num(rendK.valor):null;
+  const consumoKg=num(ev.consumo_kg), costoProd=num(ev.costo_producto), precio=num(ev.precio_kg_carne);
+  const costoDia=(consumoKg!=null&&costoProd!=null)?consumoKg*costoProd:null;
+  const kgCarcasa=(gmd!=null&&rend!=null)?gmd*(rend/100):null;
+  const ingresoDia=(kgCarcasa!=null&&precio!=null)?kgCarcasa*precio:null;
+  const margen=(ingresoDia!=null&&costoDia!=null)?ingresoDia-costoDia:null;
+  if(costoDia==null && ingresoDia==null) return '';
+  const g=n=>'Gs '+Math.round(n).toLocaleString('es-PY');
+  const nf=n=>Number(n).toLocaleString('es-PY',{maximumFractionDigits:2});
+  const rows=[];
+  if(costoDia!=null) rows.push('Costo alimentación/día: <b>'+g(costoDia)+'</b> <span style="color:#718096">('+nf(consumoKg)+' kg × '+g(costoProd)+')</span>');
+  if(ingresoDia!=null) rows.push('Ingreso/día: <b>'+g(ingresoDia)+'</b> <span style="color:#718096">('+nf(gmd)+' kg GMD × '+nf(rend)+'% carcasa × '+g(precio)+')</span>');
+  else if(gmd!=null&&precio!=null&&rend==null) rows.push('<span style="color:#c8820a">Ingreso/día: falta el KPI Rendimiento de carcasa para calcularlo</span>');
+  if(margen!=null) rows.push('<b style="color:'+(margen>=0?'#255f2e':'#c53030')+'">Margen diario: '+g(margen)+'/día</b>');
+  return '<div style="font-size:11px;color:var(--green-d);background:var(--green-lt);border-radius:6px;padding:6px 8px;margin-top:4px">💰 '+rows.join('<br>')+'</div>';
 }
 function editarVisita(id){ if(!canEdit()){ showToast('Sin permiso'); return; } const v=getVisitas().find(x=>x.id===id); if(!v)return; cerrarModal(); editVisitaId=id; abrirFormVisita(v.cliente_id);
   gs('vCliente').value=v.cliente_id; visitaClienteChange(); gs('vEstancia').value=v.estancia_id||'';
@@ -833,7 +857,7 @@ function editarVisita(id){ if(!canEdit()){ showToast('Sin permiso'); return; } c
   _evals = visitaEvals(v).map(ev=>{
     const defs=KPIS[ev.categoria]||[]; const kpisObj={};
     (ev.kpis||[]).forEach(k=>{ const j=defs.findIndex(d=>d.k===k.k); if(j>=0) kpisObj[j]=k.valor||''; });
-    return { categoria:ev.categoria, lote:ev.lote||'', producto:ev.producto||'', presentacion:ev.presentacion||'', consumo:ev.consumo||'', dias:(ev.dias_sistema!=null?ev.dias_sistema:''), animales:(ev.n_animales!=null?ev.n_animales:''), precio_kg_carne:(ev.precio_kg_carne!=null?ev.precio_kg_carne:''), kpis:kpisObj, comentario:ev.comentario||'' };
+    return { categoria:ev.categoria, lote:ev.lote||'', producto:ev.producto||'', presentacion:ev.presentacion||'', consumo:ev.consumo||'', dias:(ev.dias_sistema!=null?ev.dias_sistema:''), animales:(ev.n_animales!=null?ev.n_animales:''), precio_kg_carne:(ev.precio_kg_carne!=null?ev.precio_kg_carne:''), consumo_kg:(ev.consumo_kg!=null?ev.consumo_kg:''), costo_producto:(ev.costo_producto!=null?ev.costo_producto:''), kpis:kpisObj, comentario:ev.comentario||'' };
   });
   if(!_evals.length) _evals=[nuevoEval()];
   renderEvals();
