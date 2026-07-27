@@ -456,8 +456,9 @@ async function cloudPull(name){
     const cloud={}; rows.forEach(r=>cloud[r.id]=d.fromRow(r));
     const merged={}; Object.values(cloud).forEach(o=>merged[o.id]=o);
     d.get().forEach(l=>{ const c=cloud[l.id];
-      if(!c){ merged[l.id]={...l,pending:false}; cloudPush(name,l); }                                  // solo local → subir
-      else if(l.pending || String(l.ts||'')>String(c.ts||'')){ merged[l.id]={...l,pending:false}; cloudPush(name,l); }  // local más nuevo → subir
+      if(c){ if(l.pending || String(l.ts||'')>String(c.ts||'')){ merged[l.id]={...l,pending:false}; cloudPush(name,l); } }  // en ambos: gana local si es más nuevo o pendiente
+      else if(l.pending){ merged[l.id]=l; cloudPush(name,l); }   // nuevo local sin sincronizar → subir
+      // else: estaba sincronizado (pending falso) y ya NO está en la nube → lo borraron en otro equipo → se descarta (no reaparece)
     });
     d.save(Object.values(merged));
   }catch(e){}
