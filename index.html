@@ -149,6 +149,8 @@ textarea{resize:vertical;min-height:66px}
       </div>
       <div class="tile" onclick="openClientes()"><div class="ico">🏡</div><div class="tlab">Clientes</div><div class="tsub">y estancias</div></div>
       <div class="tile" onclick="openHistorial()"><div class="ico">🗂️</div><div class="tlab">Historial</div><div class="tsub">de visitas</div></div>
+      <div class="tile" id="tileOT" onclick="openOTList()" style="display:none"><div class="ico">🏭</div><div class="tlab">Órdenes de Trabajo</div><div class="tsub">producción</div></div>
+      <div class="tile" id="tileFormulas" onclick="openFormulas()" style="display:none"><div class="ico">🧪</div><div class="tlab">Formulaciones</div><div class="tsub">recetas</div></div>
       <div class="tile" id="tileUsuarios" onclick="openUsuarios()" style="display:none"><div class="ico">👥</div><div class="tlab">Usuarios</div><div class="tsub">accesos y roles</div></div>
     </div>
     <div class="sect-t">Últimas visitas</div>
@@ -171,12 +173,55 @@ textarea{resize:vertical;min-height:66px}
         <label class="fl">Email</label><input type="email" id="usrEmail" placeholder="tu@bioinnova.com" autocomplete="off">
         <label class="fl">Contraseña (mín. 6)</label><input type="text" id="usrPass" placeholder="clave inicial" autocomplete="off">
         <label class="fl">Rol</label>
-        <select id="usrRol"><option value="tecnico">Técnico comercial</option><option value="gerente">Gerente</option><option value="lectura">Solo lectura</option></select>
+        <select id="usrRol"><option value="tecnico">Técnico comercial</option><option value="planta">Planta</option><option value="gerente">Gerente</option><option value="lectura">Solo lectura</option></select>
         <div id="usrMsg" style="display:none;font-size:12px;margin-top:10px;text-align:center"></div>
         <button class="btn btn-primary btn-block" style="margin-top:12px" onclick="crearUsuario()">Crear usuario</button>
       </div>
     </div>
     <div class="card"><div class="card-h"><span>Usuarios</span><span id="usrCount" style="font-weight:500;color:var(--gray-400)"></span></div><div id="usrList"></div></div>
+  </div>
+
+  <!-- FORMULACIONES -->
+  <div class="screen" id="sFormulas">
+    <div style="margin-bottom:10px"><input type="search" id="fBuscar" placeholder="🔎 Buscar producto…" oninput="renderFormulas()"></div>
+    <div class="card"><div class="card-h"><span>Formulaciones</span><span id="fCount" style="font-weight:500;color:var(--gray-400)"></span></div><div id="fList"></div></div>
+  </div>
+
+  <!-- ÓRDENES DE TRABAJO -->
+  <div class="screen" id="sOT">
+    <button class="btn btn-primary btn-block" id="btnNuevaOT" style="margin-bottom:10px" onclick="nuevaOT()">＋ Nueva orden de trabajo</button>
+    <div style="margin-bottom:10px"><input type="search" id="otBuscar" placeholder="🔎 Buscar (producto, lote, cliente)…" oninput="renderOTList()"></div>
+    <div class="card"><div class="card-h"><span>Órdenes de trabajo</span><span id="otCount" style="font-weight:500;color:var(--gray-400)"></span></div><div id="otList"></div></div>
+  </div>
+
+  <!-- NUEVA OT -->
+  <div class="screen" id="sOTNueva">
+    <div class="card">
+      <div class="card-h">Datos de la orden</div>
+      <div class="card-b">
+        <label class="fl">Producto a producir</label>
+        <select id="otProducto" onchange="otRecalc()"></select>
+        <div class="row2">
+          <div><label class="fl">Kg a producir</label><input type="number" id="otKg" inputmode="numeric" placeholder="ej: 18000" oninput="otRecalc()"></div>
+          <div><label class="fl">Bolsas</label><input type="text" id="otBolsas" readonly style="background:var(--gray-100)"></div>
+        </div>
+        <div class="row2">
+          <div><label class="fl">Lote</label><input type="text" id="otLote" placeholder="sugerido/editable"></div>
+          <div><label class="fl">N° de OT</label><input type="text" id="otNum" readonly style="background:var(--gray-100)"></div>
+        </div>
+        <div class="row2">
+          <div><label class="fl">Cliente (opcional)</label><input type="text" id="otCliente" placeholder="Para quién"></div>
+          <div><label class="fl">Comercial (opcional)</label><input type="text" id="otComercial" placeholder="Nombre"></div>
+        </div>
+        <label class="fl">Fecha</label><input type="date" id="otFecha">
+      </div>
+    </div>
+    <div class="card"><div class="card-h"><span>Insumos necesarios</span><span id="otTotalKg" style="font-weight:500;color:var(--gray-400)"></span></div><div id="otInsumos"></div></div>
+    <div class="row2" style="margin-bottom:10px">
+      <button class="btn btn-sec" onclick="openOTList()">Cancelar</button>
+      <button class="btn btn-primary" onclick="guardarOT(false)">✓ Guardar</button>
+    </div>
+    <button class="btn btn-amber btn-block" onclick="guardarOT(true)">✓ Guardar e imprimir OT</button>
   </div>
 
   <!-- CLIENTE DETALLE -->
@@ -322,6 +367,86 @@ const PRODUCTOS={
  ]
 };
 function catClass(c){ return c==='Cría'?'chip-cria':c==='Recría'?'chip-recria':'chip-terminacion'; }
+
+// ══════════════════════════════════════════════════════════
+//  PLANTA — Insumos y Formulaciones (extraídas del Excel BioInnova)
+//  Fórmula: ins[{c:código, n:concepto, p:%, t:tipo}]  tipo: p=% · b=bolsa/etiqueta (=bolsas) · m=mano de obra (=kg) · x=otro
+// ══════════════════════════════════════════════════════════
+const PL_INSUMOS=[
+{c:'INS003',n:'Afrecho de Arroz',prov:'Rodrigo Ortiz',ck:863.64},
+{c:'INS015',n:'Urea protegida producote',prov:'Huerto Olivos',ck:0.87},
+{c:'INS045',n:'Azufre pec 99%',prov:'GILGAL',ck:0.91},
+{c:'INS002',n:'Burlanda kilos',prov:'Tenerife',ck:0.22},
+{c:'INS040',n:'Calcareo',prov:'Cecom',ck:292.82},
+{c:'INS058',n:'Cascarilla de Soja',prov:'Jose Vazquez',ck:0.15},
+{c:'BIO25-003',n:'CONFIPESO 4 AS',prov:'Bioinnova S.A',ck:0},
+{c:'BIO25-002',n:'CONFIPESO 4 CL',prov:'Bioinnova S.A',ck:0},
+{c:'BIO25-001',n:'CONFIPESO 4 SL',prov:'Bioinnova S.A',ck:0},
+{c:'INS037',n:'Fosfato Dicalcico',prov:'Nutriagro',ck:1.23},
+{c:'INS008',n:'Harina de Soja',prov:'Tenerife',ck:0.3},
+{c:'INS027',n:'Leche Polvo',prov:'Lacteos Unidos',ck:10818.18},
+{c:'INS001',n:'Maiz',prov:'Tenerife',ck:1263.64},
+{c:'INS046',n:'Oxido de Magnesio 52',prov:'GILGAL',ck:0.55},
+{c:'INS048',n:'Prymix Bio P1G',prov:'GILGAL',ck:1.64},
+{c:'INS038',n:'Prymix confipeso',prov:'GILGAL',ck:1.91},
+{c:'INS039',n:'Prymix confipeso Levadura',prov:'GILGAL',ck:3.18},
+{c:'INS047',n:'Prymix Bio micromin',prov:'GILGAL',ck:2.2},
+{c:'INS007',n:'Sal entrefina yodada animal',prov:'Continental',ck:1345.45},
+{c:'INS014',n:'Urea Pecuaria 46%',prov:'ECOP',ck:0.76},
+{c:'INS056',n:'Fosfato Dicalcico 18%',prov:'Proquitec',ck:1.23},
+{c:'INS057',n:'Fosfato Dicalcico Gilgal',prov:'Gilgal',ck:0},
+{c:'BIO25-004',n:'CONFIPESO 4 L',prov:'Bioinnova S.A.',ck:0},
+{c:'INS049',n:'Prymix Bio Leche',prov:'Gilgal',ck:3.29},
+{c:'BIO25-014',n:'CONFIPESO 4 O',prov:'Bioinnova S.A.',ck:0},
+{c:'INS071',n:'Premix confipeso 4 O',prov:'GILGAL',ck:1.84},
+];
+const PL_FORMULAS=[
+{c:'BIOSAL02',n:'Bioinnova Cria 90 - 30 kg',kg:30,ins:[{c:'INS047',n:'Prymix Bio micromin',p:4.4,t:'p'},{c:'INS040',n:'Calcareo',p:20.6,t:'p'},{c:'INS007',n:'Sal entrefina yodada animal',p:25,t:'p'},{c:'INS037',n:'Fosfato Dicalcico',p:25,t:'p'},{c:'INS056',n:'Fosfato Dicalcico 18%',p:25,t:'p'},{c:'INS041',n:'Bolsa laminada 49x75 - Linea Mineral',p:0,t:'b'},{c:'INS059',n:'Etiqueta Blanca 10x20',p:0,t:'b'},{c:'INS019',n:'Mano de obra',p:0,t:'m'}]},
+{c:'BIOSAL03',n:'Bioinnova Nutri 80 - 30 kg',kg:30,ins:[{c:'INS047',n:'Prymix Bio micromin',p:3.4,t:'p'},{c:'INS040',n:'Calcareo',p:26.7,t:'p'},{c:'INS007',n:'Sal entrefina yodada animal',p:25,t:'p'},{c:'INS037',n:'Fosfato Dicalcico',p:22.22,t:'p'},{c:'INS056',n:'Fosfato Dicalcico 18%',p:22.22,t:'p'},{c:'INS046',n:'Oxido de Magnesio 52',p:0.22,t:'p'},{c:'INS045',n:'Azufre pec 99%',p:0.24,t:'p'},{c:'INS041',n:'Bolsa laminada 49x75 impresa',p:0,t:'b'},{c:'INS065',n:'Etiqueta Verde 10x20',p:0,t:'b'},{c:'INS019',n:'Mano de obra',p:0,t:'m'}]},
+{c:'BIOSAL04',n:'Bioinnova Recria 65 - 30 kg',kg:30,ins:[{c:'INS047',n:'Prymix Bio micromin',p:2.4,t:'p'},{c:'INS040',n:'Calcareo',p:35.6,t:'p'},{c:'INS007',n:'Sal entrefina yodada animal',p:25,t:'p'},{c:'INS056',n:'Fosfato Dicalcico 18%',p:36.2,t:'p'},{c:'INS046',n:'Oxido de Magnesio 52',p:0.43,t:'p'},{c:'INS045',n:'Azufre pec 99%',p:0.45,t:'p'},{c:'INS041',n:'Bolsa laminada 49x75',p:0,t:'b'},{c:'INS063',n:'Etiq. Recria 65',p:0,t:'b'},{c:'INS019',n:'Mano de obra',p:0,t:'m'}]},
+{c:'BIOSAL05',n:'Bioinnova Engorda 40 - 30 kg',kg:30,ins:[{c:'INS047',n:'Prymix Bio micromin',p:1.88,t:'p'},{c:'INS040',n:'Calcareo',p:43.52,t:'p'},{c:'INS007',n:'Sal entrefina yodada animal',p:31.25,t:'p'},{c:'INS037',n:'Fosfato Dicalcico',p:11.11,t:'p'},{c:'INS056',n:'Fosfato Dicalcico 18%',p:11.11,t:'p'},{c:'INS046',n:'Oxido de Magnesio 52',p:0.55,t:'p'},{c:'INS045',n:'Azufre pec 99%',p:0.58,t:'p'},{c:'INS041',n:'Bolsa laminada 49x75',p:0,t:'b'},{c:'INS059',n:'Etiqueta Blanca 10x20',p:0,t:'b'},{c:'INS019',n:'Mano de obra',p:0,t:'m'}]},
+{c:'MINN026',n:'Bioinnova Recria 0.5% PE - 30kg',kg:30,ins:[{c:'INS001',n:'Maiz',p:14,t:'p'},{c:'INS002',n:'Burlanda kilos',p:8,t:'p'},{c:'INS058',n:'Cascarilla de Soja',p:4,t:'p'},{c:'BIO25-003',n:'CONFIPESO 4 AS',p:44,t:'p'},{c:'INS007',n:'Sal entrefina yodada animal',p:19,t:'p'},{c:'INS015',n:'Urea protegida producote',p:2,t:'p'},{c:'INS014',n:'Urea Pecuaria 46%',p:4,t:'p'},{c:'INS056',n:'Fosfato Dicalcico 18%',p:5,t:'p'},{c:'INS030',n:'Bolsa laminada 57X80 cm - Innova',p:0,t:'b'},{c:'INS052',n:'Etiq. Recria',p:0,t:'b'},{c:'INS019',n:'Mano de Obra',p:0,t:'m'}]},
+{c:'MINN002',n:'Bioinnova Confi 10 - 40kg',kg:40,ins:[{c:'INS002',n:'Burlanda kilos',p:6,t:'p'},{c:'INS008',n:'Harina de Soja',p:13,t:'p'},{c:'BIO25-001',n:'CONFIPESO 4 SL',p:50,t:'p'},{c:'INS007',n:'Sal entrefina yodada animal',p:1,t:'p'},{c:'INS014',n:'Urea Pecuaria 46%',p:30,t:'p'},{c:'INS031',n:'Bolsa laminada 60X100 cm',p:0,t:'b'},{c:'INS066',n:'Etiqueta Blanca 10x20',p:0,t:'b'},{c:'INS019',n:'Mano de obra',p:0,t:'m'}]},
+{c:'MINN003',n:'Bioinnova Confi 40 - 40kg',kg:40,ins:[{c:'INS001',n:'Maiz',p:28,t:'p'},{c:'INS002',n:'Burlanda kilos',p:21,t:'p'},{c:'INS008',n:'Harina de Soja',p:11,t:'p'},{c:'BIO25-001',n:'CONFIPESO 4 SL',p:30,t:'p'},{c:'INS014',n:'Urea Pecuaria 46%',p:5,t:'p'},{c:'INS015',n:'Urea protegida producote',p:5,t:'p'},{c:'INS031',n:'Bolsa laminada 60X100 cm',p:0,t:'b'},{c:'INS062',n:'Etiqueta Blanca 10x20',p:0,t:'b'},{c:'INS019',n:'Mano de obra',p:0,t:'m'}]},
+{c:'BIO25-007',n:'Desmamantes Precoz 22% CL - 40kg',kg:40,ins:[{c:'INS001',n:'Maiz',p:28.5,t:'p'},{c:'INS002',n:'Burlanda kilos',p:14,t:'p'},{c:'INS008',n:'Harina de Soja',p:10.4,t:'p'},{c:'BIO25-002',n:'CONFIPESO 4 CL',p:4.3,t:'p'},{c:'INS003',n:'Afrecho de Arroz',p:40.1,t:'p'},{c:'INS014',n:'Urea Pecuaria 46%',p:1,t:'p'},{c:'INS015',n:'Urea protegida producote',p:1,t:'p'},{c:'INS007',n:'Sal entrefina yodada animal',p:0.7,t:'p'},{c:'INS059',n:'Etiqueta Gris 10x20',p:0,t:'b'},{c:'INS031',n:'Bolsa laminada 60X100 cm',p:0,t:'b'},{c:'INS019',n:'Mano de obra',p:0,t:'m'}]},
+{c:'BIO25-005',n:'Desmamante Campo 18% - 40Kg',kg:40,ins:[{c:'INS001',n:'Maiz',p:53.8,t:'p'},{c:'INS003',n:'Afrecho de Arroz',p:25,t:'p'},{c:'INS002',n:'Burlanda kilos',p:10,t:'p'},{c:'INS008',n:'Harina de Soja',p:4.2,t:'p'},{c:'BIO25-001',n:'CONFIPESO 4 SL',p:4.5,t:'p'},{c:'INS007',n:'Sal entrefina yodada animal',p:0.5,t:'p'},{c:'INS014',n:'Urea Pecuaria 46%',p:2,t:'p'},{c:'INS066',n:'Etiqueta Gris 10x20',p:0,t:'b'},{c:'INS031',n:'Bolsa laminada 60X100 cm',p:0,t:'b'},{c:'INS019',n:'Mano de obra',p:0,t:'m'}]},
+{c:'BIO25-008',n:'Desmamantes Campo 18% CL - 40kg',kg:40,ins:[{c:'INS001',n:'Maiz',p:53.8,t:'p'},{c:'INS003',n:'Afrecho de Arroz',p:25,t:'p'},{c:'INS002',n:'Burlanda kilos',p:10,t:'p'},{c:'INS008',n:'Harina de Soja',p:4.2,t:'p'},{c:'BIO25-002',n:'CONFIPESO 4 CL',p:4.5,t:'p'},{c:'INS007',n:'Sal entrefina yodada animal',p:0.5,t:'p'},{c:'INS014',n:'Urea Pecuaria 46%',p:2,t:'p'},{c:'INS069',n:'Etiqueta Gris 10x20',p:0,t:'b'},{c:'INS031',n:'Bolsa laminada 60X100 cm',p:0,t:'b'},{c:'INS019',n:'Mano de obra',p:0,t:'m'}]},
+{c:'TERM001',n:'Terminacion 4 - 30kg',kg:30,ins:[{c:'INS001',n:'Maiz',p:48,t:'p'},{c:'INS002',n:'Burlanda kilos',p:8,t:'p'},{c:'BIO25-001',n:'CONFIPESO 4 SL',p:3,t:'p'},{c:'INS003',n:'Afrecho de Arroz',p:39,t:'p'},{c:'INS014',n:'Urea Pecuaria 46%',p:1.7,t:'p'},{c:'INS007',n:'Sal entrefina yodada animal',p:0.3,t:'p'},{c:'INS067',n:'Etiqueta Marron 10x20',p:0,t:'b'},{c:'INS031',n:'Bolsa laminada 60X100 cm',p:0,t:'b'},{c:'INS019',n:'Mano de obra',p:0,t:'m'}]},
+{c:'MINN018',n:'Bioinnova Alta Fibra 40% - 40kg',kg:40,ins:[{c:'INS001',n:'Maiz',p:25.5,t:'p'},{c:'INS002',n:'Burlanda kilos',p:13,t:'p'},{c:'INS058',n:'Cascarilla de Soja',p:46,t:'p'},{c:'BIO25-001',n:'CONFIPESO 4 SL',p:3.5,t:'p'},{c:'INS003',n:'Afrecho de Arroz',p:10,t:'p'},{c:'INS015',n:'Urea protegida producote',p:1,t:'p'},{c:'INS014',n:'Urea Pecuaria 46%',p:1,t:'p'},{c:'INS036',n:'Etiqueta Alta Fibra 40 kg',p:0,t:'b'},{c:'INS031',n:'Bolsa laminada 60X100 cm',p:0,t:'b'},{c:'INS019',n:'Mano de obra',p:0,t:'m'}]},
+{c:'MINN011',n:'Bioinnova Reproductor 19% - 40 kg',kg:40,ins:[{c:'INS001',n:'Maiz',p:45,t:'p'},{c:'INS002',n:'Burlanda kilos',p:15,t:'p'},{c:'INS003',n:'Afrecho de Arroz',p:25,t:'p'},{c:'BIO25-001',n:'CONFIPESO 4 SL',p:4,t:'p'},{c:'INS008',n:'Harina de Soja',p:10,t:'p'},{c:'INS014',n:'Urea Pecuaria 46%',p:1,t:'p'},{c:'INS031',n:'Bolsa laminada 60X100 cm',p:0,t:'b'},{c:'INS062',n:'Etiqueta Rojo 10x20',p:0,t:'b'},{c:'INS019',n:'Mano de obra',p:0,t:'m'}]},
+{c:'MINN027',n:'Bioinnova Ovinos - 40kg',kg:40,ins:[{c:'INS058',n:'Cascarilla de Soja',p:15,t:'p'},{c:'BIO25-014',n:'CONFIPESO 4 O',p:3,t:'p'},{c:'INS008',n:'Harina de Soja',p:5.7,t:'p'},{c:'INS007',n:'Sal entrefina yodada animal',p:0.5,t:'p'},{c:'INS001',n:'Maiz',p:15,t:'p'},{c:'INS002',n:'Burlanda kilos',p:50,t:'p'},{c:'INS003',n:'Afrecho de Arroz',p:10,t:'p'},{c:'INS014',n:'Urea Pecuaria 46%',p:0.8,t:'p'},{c:'INS067',n:'Etiqueta Marron 10x20',p:0,t:'b'},{c:'INS031',n:'Bolsa laminada 60X100 cm',p:0,t:'b'},{c:'INS019',n:'Mano de obra',p:0,t:'m'}]},
+{c:'DBIO-010',n:'BIO CONFI 40 NORTE - 40kg',kg:40,ins:[{c:'INS001',n:'Maiz',p:1,t:'p'},{c:'INS002',n:'Burlanda kilos',p:41.87,t:'p'},{c:'INS058',n:'Cascarilla de Soja',p:15,t:'p'},{c:'INS003',n:'Afrecho de Arroz',p:16.1,t:'p'},{c:'BIO25-002',n:'CONFIPESO 4 CL',p:1.2,t:'p'},{c:'INS007',n:'Sal entrefina yodada animal',p:3.5,t:'p'},{c:'INS014',n:'Urea Pecuaria 46%',p:6,t:'p'},{c:'INS015',n:'Urea protegida producote',p:4,t:'p'},{c:'INS040',n:'Calcareo',p:11.2,t:'p'},{c:'INS046',n:'Oxido de Magnesio 52',p:0.13,t:'p'},{c:'INS022',n:'Etiquetas',p:0,t:'b'},{c:'INS031',n:'Bolsa laminada 60X100 cm',p:0,t:'b'},{c:'INS019',n:'Mano de obra',p:0,t:'m'}]},
+{c:'MINN006',n:'Bioinnova Aguas - 30kg',kg:30,ins:[{c:'INS001',n:'Maiz',p:14,t:'p'},{c:'INS002',n:'Burlanda kilos',p:27,t:'p'},{c:'INS008',n:'Harina de Soja',p:10,t:'p'},{c:'BIO25-003',n:'CONFIPESO 4 AS',p:36,t:'p'},{c:'INS007',n:'Sal entrefina yodada animal',p:13,t:'p'},{c:'INS030',n:'Bolsa Laminada 57x80 cm',p:0,t:'b'},{c:'INS061',n:'Etiqueta Celeste 10x20',p:0,t:'b'},{c:'INS019',n:'Mano de obra',p:0,t:'m'}]},
+{c:'MINN012',n:'Bioinnova Aguas Extras - 30 kg',kg:30,ins:[{c:'INS001',n:'Maiz',p:53,t:'p'},{c:'INS002',n:'Burlanda kilos',p:15,t:'p'},{c:'INS008',n:'Harina de Soja',p:10,t:'p'},{c:'BIO25-003',n:'CONFIPESO 4 AS',p:12,t:'p'},{c:'INS007',n:'Sal entrefina yodada animal',p:7,t:'p'},{c:'INS015',n:'Urea protegida producote',p:1.5,t:'p'},{c:'INS014',n:'Urea Pecuaria 46%',p:1.5,t:'p'},{c:'INS030',n:'Bolsa Laminada 57x80 cm',p:0,t:'b'},{c:'INS061',n:'Etiq. Celeste 10x20',p:0,t:'b'},{c:'INS019',n:'Mano de obra',p:0,t:'m'}]},
+{c:'MINN014',n:'Bioinnova Aguas Chaco - 30kg',kg:30,ins:[{c:'INS001',n:'Maiz',p:32,t:'p'},{c:'INS002',n:'Burlanda kilos',p:28,t:'p'},{c:'INS008',n:'Harina de Soja',p:9,t:'p'},{c:'BIO25-003',n:'CONFIPESO 4 AS',p:21,t:'p'},{c:'INS007',n:'Sal entrefina yodada animal',p:10,t:'p'},{c:'INS030',n:'Bolsa Laminada 57x80 cm',p:0,t:'b'},{c:'INS061',n:'Etiq. Celeste 10x20',p:0,t:'b'},{c:'INS019',n:'Mano de obra',p:0,t:'m'}]},
+{c:'MINN007',n:'Bioinnova Secas - 30kg',kg:30,ins:[{c:'INS001',n:'Maiz',p:9.4,t:'p'},{c:'INS002',n:'Burlanda kilos',p:7,t:'p'},{c:'INS008',n:'Harina de Soja',p:4.6,t:'p'},{c:'INS003',n:'Afrecho de Arroz',p:15,t:'p'},{c:'BIO25-003',n:'CONFIPESO 4 AS',p:37,t:'p'},{c:'INS014',n:'Urea Pecuaria 46%',p:6,t:'p'},{c:'INS015',n:'Urea protegida producote',p:4,t:'p'},{c:'INS007',n:'Sal entrefina yodada animal',p:17,t:'p'},{c:'INS030',n:'Bolsa Laminada 57x80',p:0,t:'b'},{c:'INS060',n:'Etiq. Amarilla',p:0,t:'b'},{c:'INS019',n:'Mano de obra',p:0,t:'m'}]},
+{c:'MINN004',n:'Bioinnova Secas Chaco - 30kg',kg:30,ins:[{c:'INS001',n:'Maiz',p:30,t:'p'},{c:'INS002',n:'Burlanda kilos',p:30,t:'p'},{c:'INS007',n:'Sal entrefina yodada animal',p:7,t:'p'},{c:'BIO25-003',n:'CONFIPESO 4 AS',p:15,t:'p'},{c:'INS008',n:'Harina de Soja',p:14,t:'p'},{c:'INS014',n:'Urea Pecuaria 46%',p:2.8,t:'p'},{c:'INS015',n:'Urea protegida producote',p:1.2,t:'p'},{c:'INS030',n:'Bolsa laminada 57X80 cm',p:0,t:'b'},{c:'INS069',n:'Etiqueta Naranja 10x20',p:0,t:'b'},{c:'INS019',n:'Mano de obra',p:0,t:'m'}]},
+{c:'BIO25-006',n:'Bioinnova Creep Feeding - 30 kg',kg:30,ins:[{c:'INS001',n:'Maiz',p:48.5,t:'p'},{c:'INS027',n:'Leche Polvo',p:4,t:'p'},{c:'INS002',n:'Burlanda kilos',p:7,t:'p'},{c:'INS008',n:'Harina de Soja',p:27.5,t:'p'},{c:'BIO25-002',n:'CONFIPESO 4 CL',p:12,t:'p'},{c:'INS007',n:'Sal entrefina yodada animal',p:1,t:'p'},{c:'INS030',n:'Bolsa Laminada 57x80 cm',p:0,t:'b'},{c:'INS059',n:'Etiq. Celeste 10x20',p:0,t:'b'},{c:'INS019',n:'Mano de obra',p:0,t:'m'}]},
+{c:'MINN025',n:'Bioinnova Engorda 0.5% PE - 30kg',kg:30,ins:[{c:'INS001',n:'Maiz',p:16,t:'p'},{c:'INS002',n:'Burlanda kilos',p:10,t:'p'},{c:'INS058',n:'Cascarilla de Soja',p:2,t:'p'},{c:'BIO25-003',n:'CONFIPESO 4 AS',p:39,t:'p'},{c:'INS007',n:'Sal entrefina yodada animal',p:20,t:'p'},{c:'INS003',n:'Afrecho de Arroz',p:5,t:'p'},{c:'INS015',n:'Urea protegida producote',p:6,t:'p'},{c:'INS056',n:'Fosfato Dicalcico 18%',p:2,t:'p'},{c:'INS030',n:'Bolsa Laminada 57x80 cm',p:0,t:'b'},{c:'INS061',n:'Etiq. Celeste 10x20',p:0,t:'b'},{c:'INS019',n:'Mano de obra',p:0,t:'m'}]},
+{c:'MINN028',n:'Bioinnova Concentrado Proteico - 30 Kg',kg:30,ins:[{c:'BIO25-003',n:'CONFIPESO 4 AS',p:6.8,t:'p'},{c:'INS001',n:'Maiz',p:20,t:'p'},{c:'INS008',n:'Harina de Soja',p:9.1,t:'p'},{c:'INS002',n:'Burlanda kilos',p:56,t:'p'},{c:'INS015',n:'Urea protegida producote',p:1.3,t:'p'},{c:'INS007',n:'Sal entrefina yodada animal',p:0.7,t:'p'},{c:'INS014',n:'Urea Pecuaria 46%',p:3.4,t:'p'},{c:'INS056',n:'Fosfato Dicalcico 18%',p:1,t:'p'},{c:'INS040',n:'Calcareo',p:1.7,t:'p'},{c:'INS030',n:'Bolsa laminada 57X80 cm',p:0,t:'b'},{c:'INS069',n:'Etiqueta Naranja 10x20',p:0,t:'b'},{c:'INS019',n:'Mano de obra',p:0,t:'m'}]},
+{c:'DBIO-004',n:'Bioinnova Proteica 1g - 30kg',kg:30,ins:[{c:'INS015',n:'Urea protegida producote',p:3,t:'p'},{c:'INS008',n:'Harina de Soja',p:35.6,t:'p'},{c:'BIO25-002',n:'CONFIPESO 4 CL',p:2.4,t:'p'},{c:'INS003',n:'Afrecho de Arroz',p:7,t:'p'},{c:'INS014',n:'Urea Pecuaria 46%',p:6,t:'p'},{c:'INS007',n:'Sal entrefina yodada animal',p:20.3,t:'p'},{c:'INS056',n:'Fosfato Dicalcico 18%',p:3.8,t:'p'},{c:'INS040',n:'Calcareo',p:21.9,t:'p'},{c:'INS060',n:'Etiq. Amarilla',p:0,t:'b'},{c:'INS030',n:'Bolsa Laminada 57x80',p:0,t:'b'},{c:'INS019',n:'Mano de obra',p:0,t:'m'}]},
+{c:'DBIO-005',n:'Bioinnova Enerpro 3g - 30kg',kg:30,ins:[{c:'INS001',n:'Maiz',p:40.1,t:'p'},{c:'INS002',n:'Burlanda kilos',p:4.8,t:'p'},{c:'BIO25-003',n:'CONFIPESO 4 AS',p:0.7,t:'p'},{c:'INS003',n:'Afrecho de Arroz',p:35,t:'p'},{c:'INS014',n:'Urea Pecuaria 46%',p:4.3,t:'p'},{c:'INS007',n:'Sal entrefina yodada animal',p:7.5,t:'p'},{c:'INS056',n:'Fosfato Dicalcico 18%',p:3.8,t:'p'},{c:'INS040',n:'Calcareo',p:3.8,t:'p'},{c:'INS061',n:'Etiqueta Celeste 10 x 20',p:0,t:'b'},{c:'INS030',n:'Bolsa Laminada 57x80 cm',p:0,t:'b'},{c:'INS019',n:'Mano de obra',p:0,t:'m'}]},
+{c:'DBIO-001',n:'Bioinnova Engorde 16% - 40kg',kg:40,ins:[{c:'INS001',n:'Maiz',p:46.03,t:'p'},{c:'INS003',n:'Afrecho de Arroz',p:35,t:'p'},{c:'INS040',n:'Calcareo',p:8.55,t:'p'},{c:'INS008',n:'Harina de Soja',p:6.5,t:'p'},{c:'INS014',n:'Urea Pecuaria 46%',p:2,t:'p'},{c:'INS002',n:'Burlanda kilos',p:0.71,t:'p'},{c:'INS007',n:'Sal entrefina yodada animal',p:0.95,t:'p'},{c:'BIO25-001',n:'CONFIPESO 4 SL',p:0.3,t:'p'},{c:'INS031',n:'Bolsa laminada 60X100 cm',p:0,t:'b'},{c:'INS022',n:'Etiqueta Blanca 10 x 20',p:0,t:'b'},{c:'INS019',n:'Mano de obra',p:0,t:'m'}]},
+{c:'DBIO-002',n:'Bioinnova Engorde 18% - 40kg',kg:40,ins:[{c:'INS001',n:'Maiz',p:35.86,t:'p'},{c:'INS003',n:'Afrecho de Arroz',p:32,t:'p'},{c:'INS040',n:'Calcareo',p:11,t:'p'},{c:'INS008',n:'Harina de Soja',p:7,t:'p'},{c:'INS014',n:'Urea Pecuaria 46%',p:2,t:'p'},{c:'INS002',n:'Burlanda kilos',p:11,t:'p'},{c:'INS007',n:'Sal entrefina yodada animal',p:0.9,t:'p'},{c:'BIO25-001',n:'CONFIPESO 4 SL',p:0.2,t:'p'},{c:'INS031',n:'Bolsa laminada 60X100 cm',p:0,t:'b'},{c:'INS022',n:'Etiqueta Blanca 10 x 20',p:0,t:'b'},{c:'INS019',n:'Mano de obra',p:0,t:'m'}]},
+{c:'MINN029',n:'Bioinnova Reproductor 28% - 40 kg',kg:40,ins:[{c:'BIO25-001',n:'CONFIPESO 4 SL',p:3.5,t:'p'},{c:'INS001',n:'Maiz',p:28,t:'p'},{c:'INS002',n:'Burlanda kilos',p:46.5,t:'p'},{c:'INS015',n:'Urea protegida producote',p:1.5,t:'p'},{c:'INS007',n:'Sal entrefina yodada animal',p:0.5,t:'p'},{c:'INS014',n:'Urea Pecuaria 46%',p:2.5,t:'p'},{c:'INS003',n:'Afrecho de Arroz',p:17.5,t:'p'},{c:'INS061',n:'Bolsa laminada 60X100 cm',p:0,t:'b'},{c:'INS062',n:'Etiqueta Rojo 10x20',p:0,t:'b'},{c:'INS019',n:'Mano de obra',p:0,t:'m'}]},
+];
+// Bolsas de un producto por kg de producción
+function plKgBolsa(f){ return (f&&f.kg)||30; }
+function plInsumo(cod){ return PL_INSUMOS.find(x=>x.c===cod); }
+function plFormula(cod){ return PL_FORMULAS.find(x=>x.c===cod); }
+// Calcula las cantidades de insumos para producir kgProd de una fórmula
+function otCalcular(f, kgProd){
+  const kgB=plKgBolsa(f); const bolsas = kgB? Math.round(kgProd/kgB) : 0;
+  const lineas = (f.ins||[]).map(i=>{
+    let cant=0;
+    if(i.t==='p') cant = kgProd * (i.p/100);
+    else if(i.t==='b') cant = bolsas;      // bolsa/etiqueta = 1 por bolsa
+    else if(i.t==='m') cant = kgProd;      // mano de obra = por kg
+    else cant = 0;
+    return { c:i.c, n:i.n, p:i.p, t:i.t, cant:Math.round(cant*100)/100 };
+  });
+  return { bolsas, lineas };
+}
 // Consumo observado: opciones sugeridas + valores que el comercial escribió (se recuerdan)
 const CONSUMO_PRESETS=['90–120 g/día','300–800 g/día','400–800 g/día','0,3–0,5 % PV','0,5 % PV','0,5–1,0 % PV','2,0–2,4 % PV'];
 function getConsumos(){ try{ const v=JSON.parse(localStorage.getItem('bio:consumos')); return Array.isArray(v)?v:[]; }catch{ return []; } }
@@ -387,7 +512,8 @@ const sb = {
   async del(table,match){ let url=`${SUPABASE_URL}/rest/v1/${table}?`; for(const [k,v] of Object.entries(match)) url+=`${k}=eq.${v}&`; return sbRun(url,{method:'DELETE'}); },
   async upsert(table,data,onConflict){ const r=await sbRun(`${SUPABASE_URL}/rest/v1/${table}?on_conflict=${onConflict}`,{method:'POST',headers:{'Content-Type':'application/json',Prefer:'resolution=merge-duplicates,return=representation'},body:JSON.stringify(data)}); return r.json(); }
 };
-const ROLES = { gerente:{label:'Gerente',editar:true}, tecnico:{label:'Técnico comercial',editar:true}, lectura:{label:'Solo lectura',editar:false} };
+const ROLES = { gerente:{label:'Gerente',editar:true,planta:true}, tecnico:{label:'Técnico comercial',editar:true}, planta:{label:'Planta',editar:false,planta:true}, lectura:{label:'Solo lectura',editar:false} };
+function esPlanta(){ return !currentRol || currentRol==='gerente' || currentRol==='planta'; }
 let currentUser=null, currentRol=null;
 function rolLabel(r){ return (ROLES[r]&&ROLES[r].label)||r; }
 function canEdit(){ if(!currentRol) return true; return !!(ROLES[currentRol]&&ROLES[currentRol].editar); }   // sin login (modo local) = acceso total
@@ -429,9 +555,12 @@ function applyAuth(){
 function doLogout(){ if(syncTimer) clearInterval(syncTimer); clearSession(); location.reload(); }
 function applyRoleUI(){
   const showEl=(id,show)=>{ const el=gs(id); if(el) el.style.display=show?'':'none'; };
-  showEl('tileVisita', canEdit());
+  showEl('tileVisita', canEdit() && currentRol!=='planta');
   showEl('btnNuevoCliente', canEdit());
   showEl('tileUsuarios', currentRol==='gerente');
+  const verPlanta = currentRol==='planta' || currentRol==='gerente';
+  showEl('tileOT', verPlanta);
+  showEl('tileFormulas', verPlanta);
 }
 
 // ══════════════════════════════════════════════════════════
@@ -449,7 +578,10 @@ const SYNC_DEFS = {
   clientes:{ get:getClientes, save:saveClientes, table:'clientes', toRow:cliRow, fromRow:rowCli, toRowSafe:(c)=>{ const r=cliRow(c); delete r.ruc; delete r.direccion; return r; } },
   estancias:{ get:getEstancias, save:saveEstancias, table:'estancias', toRow:estRow, fromRow:rowEst },
   visitas:{ get:getVisitas, save:saveVisitas, table:'visitas', toRow:visRow, fromRow:rowVis },
+  ot:{ get:getOTs, save:saveOTs, table:'bio_ot', toRow:otRow, fromRow:rowOT },
 };
+function otRow(o){ return { id:o.id, num:o.num, fecha:o.fecha||null, producto_cod:o.producto_cod||'', producto_nom:o.producto_nom||'', kg_bolsa:o.kg_bolsa||null, kg:o.kg||null, bolsas:o.bolsas||0, lote:o.lote||'', cliente:o.cliente||'', comercial:o.comercial||'', insumos:o.insumos||[], estado:o.estado||'abierta', ts:o.ts||null }; }
+function rowOT(r){ return { id:r.id, num:r.num, fecha:r.fecha, producto_cod:r.producto_cod, producto_nom:r.producto_nom, kg_bolsa:r.kg_bolsa, kg:r.kg, bolsas:r.bolsas, lote:r.lote, cliente:r.cliente, comercial:r.comercial, insumos:(typeof r.insumos==='string'?JSON.parse(r.insumos||'[]'):(r.insumos||[])), estado:r.estado, ts:r.ts, pending:false }; }
 let syncTimer=null;
 async function cloudPush(name,obj){
   if(!AUTH_ON||!obj) return;
@@ -476,10 +608,11 @@ async function cloudPull(name){
     d.save(Object.values(merged));
   }catch(e){}
 }
-async function cloudPullAll(){ if(!AUTH_ON) return; await cloudPull('clientes'); await cloudPull('estancias'); await cloudPull('visitas'); refreshVista(); }
+async function cloudPullAll(){ if(!AUTH_ON) return; await cloudPull('clientes'); await cloudPull('estancias'); await cloudPull('visitas'); await cloudPull('ot'); refreshVista(); }
 function refreshVista(){ const act=document.querySelector('.screen.active'); if(!act) return;
   if(act.id==='sHome') renderHome(); else if(act.id==='sClientes') renderClientes();
-  else if(act.id==='sCliente'&&curCliente) abrirCliente(curCliente); else if(act.id==='sHistorial') renderHistorial(); }
+  else if(act.id==='sCliente'&&curCliente) abrirCliente(curCliente); else if(act.id==='sHistorial') renderHistorial();
+  else if(act.id==='sOT') renderOTList(); }
 function startSync(){ if(!AUTH_ON) return; cloudPullAll(); if(syncTimer) clearInterval(syncTimer); syncTimer=setInterval(cloudPullAll, 30000); }
 
 let curCliente=null, editVisitaId=null, curSub='Visitas técnicas a campo', _lotesEdit=[], _evals=[], _estEdit=[];
@@ -902,7 +1035,7 @@ async function renderUsuarios(){
       return `<div style="padding:10px 14px;border-bottom:1px solid var(--gray-200);${activo?'':'opacity:.55'}">
         <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start">
           <div style="min-width:0"><div class="li-t">${esc(u.nombre||'(sin nombre)')} ${activo?'':'<span style="font-size:9px;color:var(--red);font-weight:700">● INACTIVO</span>'}</div><div class="li-s">${esc(u.email||'')}</div></div>
-          <select onchange="cambiarRol('${u.id}',this.value)" style="font-size:12px;width:auto;padding:6px 8px">${['tecnico','gerente','lectura'].map(r=>`<option value="${r}" ${u.rol===r?'selected':''}>${rolLabel(r)}</option>`).join('')}</select>
+          <select onchange="cambiarRol('${u.id}',this.value)" style="font-size:12px;width:auto;padding:6px 8px">${['tecnico','planta','gerente','lectura'].map(r=>`<option value="${r}" ${u.rol===r?'selected':''}>${rolLabel(r)}</option>`).join('')}</select>
         </div>
         <div style="display:flex;gap:6px;margin-top:8px">
           <button class="btn btn-sec" style="flex:1;font-size:11px;padding:6px" onclick="editarNombreUsuario('${u.id}','${nom}')">✏ Nombre</button>
@@ -932,6 +1065,114 @@ async function cambiarRol(id,rol){ try{ await sb.update('perfiles',{id},{rol}); 
 async function editarNombreUsuario(id,actual){ const n=prompt('Nombre del usuario:',actual); if(n===null)return; const nn=n.trim(); if(!nn){ showToast('No puede quedar vacío'); return; } try{ await sb.update('perfiles',{id},{nombre:nn}); showToast('✓ Nombre actualizado'); renderUsuarios(); }catch(e){ showToast('No se pudo actualizar'); } }
 async function toggleActivoUsuario(id,activar){ const on=(activar===true||activar==='true'); if(!on&&!confirm('¿Desactivar este usuario? No podrá iniciar sesión (es reversible).'))return; try{ await sb.update('perfiles',{id},{activo:on}); showToast(on?'✓ Activado':'✓ Desactivado'); renderUsuarios(); }catch(e){ showToast('No se pudo (¿falta la columna activo?)'); } }
 async function eliminarUsuario(id,nombre){ if(!confirm('¿Eliminar a "'+nombre+'" de la lista?\nBorra el perfil; la cuenta de acceso sigue en Supabase. Para bloquear el acceso, usá Desactivar.'))return; try{ const r=await sb.del('perfiles',{id}); if(!r.ok)throw new Error(); showToast('✓ Perfil eliminado'); renderUsuarios(); }catch(e){ showToast('No se pudo eliminar'); } }
+
+// ══ PLANTA: Formulaciones ══
+function openFormulas(){ if(!esPlanta()){ showToast('Sin permiso'); return; } showScreen('sFormulas','Formulaciones','Recetas de producción',true); renderFormulas(); }
+function renderFormulas(){
+  const q=(gs('fBuscar').value||'').trim().toLowerCase();
+  let fs=PL_FORMULAS.slice().sort((a,b)=>a.n.localeCompare(b.n));
+  if(q) fs=fs.filter(f=>(f.n+' '+f.c).toLowerCase().includes(q));
+  gs('fCount').textContent=fs.length+' productos';
+  gs('fList').innerHTML=fs.map((f)=>{ const gi=PL_FORMULAS.indexOf(f); return `<div class="li" onclick="verFormula(${gi})"><div style="min-width:0"><div class="li-t">${esc(f.n)}</div><div class="li-s">${f.c?esc(f.c)+' · ':''}${f.ins.length} insumos · ${plKgBolsa(f)} kg/bolsa</div></div><div class="li-chev">›</div></div>`; }).join('') || '<div class="empty">Sin resultados.</div>';
+}
+function verFormula(gi){ const f=PL_FORMULAS[gi]; if(!f) return;
+  const filas=f.ins.map(i=>`<tr><td style="color:var(--gray-500)">${esc(i.c)}</td><td>${esc(i.n)}</td><td style="text-align:right;font-weight:600">${i.t==='p'?(i.p+'%'):(i.t==='b'?'× bolsa':i.t==='m'?'× kg':'—')}</td></tr>`).join('');
+  gs('modalBox').innerHTML=`<h3>${esc(f.n)}</h3><div style="font-size:12px;color:var(--gray-600);margin-bottom:8px">${f.c?esc(f.c)+' · ':''}${plKgBolsa(f)} kg/bolsa</div>
+    <table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="color:var(--gray-500)"><th style="text-align:left">Cód.</th><th style="text-align:left">Insumo</th><th style="text-align:right">Proporción</th></tr></thead><tbody>${filas}</tbody></table>
+    <button class="btn btn-amber btn-block" style="margin-top:12px" onclick="cerrarModal();nuevaOTde(${gi})">🏭 Crear OT de este producto</button>
+    <button class="btn btn-ghost btn-block" style="margin-top:8px" onclick="cerrarModal()">Cerrar</button>`;
+  gs('modal').classList.add('show');
+}
+// ══ PLANTA: Órdenes de Trabajo ══
+let editOTId=null;
+function getOTs(){ return getArr('bio:ot'); }
+function saveOTs(a){ setArr('bio:ot',a); }
+function otBase(){ return Number(localStorage.getItem('bio:otbase'))||34; }
+function otNextNum(){ const nums=getOTs().map(o=>Number(o.num)||0); const mx=nums.length?Math.max.apply(null,nums):0; return Math.max(otBase(), mx+1); }
+function openOTList(){ if(!esPlanta()){ showToast('Sin permiso'); return; } showScreen('sOT','Órdenes de Trabajo','Producción',true); gs('btnNuevaOT').style.display=esPlanta()?'':'none'; renderOTList(); }
+function renderOTList(){
+  const q=(gs('otBuscar').value||'').trim().toLowerCase();
+  let ots=getOTs().slice().sort((a,b)=>String(b.ts||'').localeCompare(String(a.ts||'')));
+  if(q) ots=ots.filter(o=>((o.producto_nom||'')+' '+(o.lote||'')+' '+(o.cliente||'')+' '+o.num).toLowerCase().includes(q));
+  gs('otCount').textContent=ots.length?ots.length+' OT':'';
+  gs('otList').innerHTML=ots.length? ots.map(o=>`<div class="li" onclick="verOT('${o.id}')"><div style="min-width:0"><div class="li-t">OT N° ${o.num} · ${esc(o.producto_nom)}</div><div class="li-s">${fmtFecha(o.fecha)} · ${(o.kg||0).toLocaleString('es-PY')} kg · ${o.bolsas} bolsas${o.lote?' · '+esc(o.lote):''}</div></div><div class="li-chev">›</div></div>`).join('') : '<div class="empty">Sin órdenes. Tocá ＋ Nueva orden de trabajo.</div>';
+}
+function nuevaOT(){ if(!esPlanta()){ showToast('Sin permiso'); return; }
+  showScreen('sOTNueva','Nueva OT','Orden de trabajo',true);
+  gs('otProducto').innerHTML='<option value="">— Elegir producto —</option>'+PL_FORMULAS.map((f,idx)=>({idx,f})).sort((a,b)=>a.f.n.localeCompare(b.f.n)).map(x=>`<option value="${x.idx}">${esc(x.f.n)}${x.f.c?' ('+esc(x.f.c)+')':''}</option>`).join('');
+  gs('otKg').value=''; gs('otBolsas').value=''; gs('otLote').value=''; gs('otCliente').value='';
+  gs('otComercial').value=(getSession()&&getSession().nombre)||'';
+  gs('otFecha').value=hoy(); gs('otNum').value=otNextNum(); gs('otInsumos').innerHTML=''; gs('otTotalKg').textContent='';
+  editOTId=null;
+}
+function nuevaOTde(gi){ nuevaOT(); gs('otProducto').value=gi; otRecalc(); }
+function otRecalc(){
+  const idx=gs('otProducto').value; if(idx===''){ gs('otBolsas').value=''; gs('otInsumos').innerHTML=''; gs('otTotalKg').textContent=''; return; }
+  const f=PL_FORMULAS[Number(idx)]; const kg=num(gs('otKg').value)||0; const r=otCalcular(f, kg);
+  gs('otBolsas').value=r.bolsas;
+  if(!gs('otLote').value.trim()){ const pref=(f.c||f.n.slice(0,2)).toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,3); const d=new Date(); gs('otLote').value=pref+String(d.getMonth()+1).padStart(2,'0')+d.getFullYear()+String(gs('otNum').value).padStart(4,'0'); }
+  const nf=n=>Number(n).toLocaleString('es-PY',{maximumFractionDigits:2});
+  const totKg=r.lineas.filter(l=>l.t==='p').reduce((a,l)=>a+l.cant,0);
+  gs('otTotalKg').textContent=nf(totKg)+' kg de mezcla';
+  gs('otInsumos').innerHTML=`<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="color:var(--gray-500)"><th style="text-align:left;padding:6px 10px">Cód.</th><th style="text-align:left">Concepto</th><th style="text-align:right">Cantidad</th><th style="text-align:right;padding-right:10px">%</th></tr></thead><tbody>`
+    + r.lineas.map(l=>`<tr style="border-top:1px solid var(--gray-200)"><td style="padding:5px 10px;color:var(--gray-500)">${esc(l.c)}</td><td>${esc(l.n)}</td><td style="text-align:right;font-weight:600">${nf(l.cant)}${l.t==='b'?' u':' kg'}</td><td style="text-align:right;padding-right:10px;color:var(--gray-400)">${l.t==='p'?nf(l.p)+'%':''}</td></tr>`).join('')
+    + '</tbody></table>';
+}
+function guardarOT(imprimir){
+  if(!esPlanta()){ showToast('Sin permiso'); return; }
+  const idx=gs('otProducto').value; if(idx===''){ showToast('Elegí el producto'); return; }
+  const kg=num(gs('otKg').value); if(!kg){ showToast('Ingresá los kg a producir'); return; }
+  const f=PL_FORMULAS[Number(idx)]; const r=otCalcular(f, kg);
+  const o={ id: editOTId||('OT-'+Date.now()), num: Number(gs('otNum').value)||otNextNum(),
+    fecha:gs('otFecha').value||hoy(), producto_cod:f.c||'', producto_nom:f.n, kg_bolsa:plKgBolsa(f),
+    kg, bolsas:r.bolsas, lote:gs('otLote').value.trim(), cliente:gs('otCliente').value.trim(), comercial:gs('otComercial').value.trim(),
+    insumos:r.lineas, estado:'abierta', ts:new Date().toISOString(), pending:true };
+  let ots=getOTs(); if(editOTId){ ots=ots.map(x=>x.id===editOTId?o:x); } else { ots.unshift(o); }
+  saveOTs(ots); cloudPush('ot', o); editOTId=null;
+  showToast('✓ OT guardada');
+  if(imprimir) otPrint(o.id);
+  openOTList();
+}
+function verOT(id){ const o=getOTs().find(x=>x.id===id); if(!o) return;
+  const nf=n=>Number(n).toLocaleString('es-PY',{maximumFractionDigits:2});
+  const filas=(o.insumos||[]).map(l=>`<tr><td style="color:var(--gray-500)">${esc(l.c)}</td><td>${esc(l.n)}</td><td style="text-align:right;font-weight:600">${nf(l.cant)}${l.t==='b'?' u':' kg'}</td></tr>`).join('');
+  gs('modalBox').innerHTML=`<h3>OT N° ${o.num}</h3><div style="font-size:12px;color:var(--gray-600);margin-bottom:6px">${esc(o.producto_nom)} · ${fmtFecha(o.fecha)}<br>${(o.kg||0).toLocaleString('es-PY')} kg · ${o.bolsas} bolsas${o.lote?' · Lote '+esc(o.lote):''}${o.cliente?'<br>Cliente: '+esc(o.cliente):''}${o.comercial?' · '+esc(o.comercial):''}</div>
+    <table style="width:100%;border-collapse:collapse;font-size:12px"><tbody>${filas}</tbody></table>
+    <div class="row2" style="margin-top:12px">${esPlanta()?`<button class="btn btn-sec" onclick="editarOT('${o.id}')">✎ Editar</button>`:''}<button class="btn btn-amber" onclick="otPrint('${o.id}')" style="${esPlanta()?'':'flex:1'}">🖨️ Imprimir</button></div>
+    ${esPlanta()?`<button class="btn btn-sec btn-block" style="margin-top:8px;color:var(--red)" onclick="borrarOT('${o.id}')">Borrar OT</button>`:''}
+    <button class="btn btn-ghost btn-block" style="margin-top:8px" onclick="cerrarModal()">Cerrar</button>`;
+  gs('modal').classList.add('show');
+}
+function editarOT(id){ const o=getOTs().find(x=>x.id===id); if(!o)return; cerrarModal(); nuevaOT(); editOTId=id;
+  const idx=PL_FORMULAS.findIndex(f=>(o.producto_cod&&f.c===o.producto_cod)||f.n===o.producto_nom); gs('otProducto').value=idx>=0?idx:'';
+  gs('otKg').value=o.kg; gs('otNum').value=o.num; gs('otLote').value=o.lote||''; gs('otCliente').value=o.cliente||''; gs('otComercial').value=o.comercial||''; gs('otFecha').value=o.fecha;
+  otRecalc(); showScreen('sOTNueva','Editar OT','',true);
+}
+function borrarOT(id){ if(!esPlanta())return; if(!confirm('¿Borrar esta OT?'))return; saveOTs(getOTs().filter(x=>x.id!==id)); cloudDelete('ot',id); cerrarModal(); renderOTList(); }
+function otPrint(id){ const o=getOTs().find(x=>x.id===id); if(!o) return;
+  const nf=n=>Number(n).toLocaleString('es-PY',{maximumFractionDigits:2});
+  const filas=(o.insumos||[]).map(l=>`<tr><td>${esc(l.c)}</td><td>${esc(l.n)}</td><td class="r">${nf(l.cant)}${l.t==='b'?' u':''}</td><td class="r">${l.t==='p'?nf(l.p)+'%':''}</td></tr>`).join('');
+  const w=window.open('','_blank'); if(!w){ showToast('Permití las ventanas emergentes para imprimir'); return; }
+  w.document.write(`<html><head><meta charset="utf-8"><title>OT ${o.num} — ${esc(o.producto_nom)}</title><style>
+   *{box-sizing:border-box} body{font-family:Arial,sans-serif;color:#1a202c;font-size:12.5px;margin:0}.wrap{max-width:760px;margin:0 auto;padding:24px}
+   .top{text-align:center;border-bottom:2px solid #2f7d3b;padding-bottom:8px;margin-bottom:12px} .top img{height:44px}
+   table{width:100%;border-collapse:collapse;margin-bottom:8px} td,th{border:1px solid #cbd5e0;padding:5px 8px} th{background:#eef5ef;font-size:11px;text-align:left} .r{text-align:right}
+   .hdr td{border:none;padding:3px 6px} .hdr .k{color:#718096;width:120px} .hdr .v{font-weight:700}
+   h2{font-size:13px;color:#2f7d3b;margin:14px 0 6px} .tot td{background:#eef5ef;font-weight:700}
+   @media print{.wrap{padding:10mm} .noprint{display:none}}</style></head><body><div class="wrap">
+   <div class="top"><img src="${location.origin}${location.pathname.replace(/[^/]*$/,'')}logo.jpg"><div style="font-weight:700;font-size:13px;margin-top:4px">ORDEN DE TRABAJO</div></div>
+   <table class="hdr"><tr><td class="k">Cliente</td><td class="v">${esc(o.cliente||'—')}</td><td class="k">Fecha</td><td class="v">${fmtFecha(o.fecha)}</td></tr>
+    <tr><td class="k">Cód. Producto</td><td class="v">${esc(o.producto_cod||'—')}</td><td class="k">OT N°</td><td class="v">${o.num}</td></tr>
+    <tr><td class="k">Producto</td><td class="v">${esc(o.producto_nom)}</td><td class="k">Comercial</td><td class="v">${esc(o.comercial||'—')}</td></tr>
+    <tr><td class="k">Lote</td><td class="v">${esc(o.lote||'—')}</td><td class="k">Kg / Bolsas</td><td class="v">${(o.kg||0).toLocaleString('es-PY')} kg · ${o.bolsas} bolsas</td></tr></table>
+   <h2>Insumos</h2>
+   <table><thead><tr><th>Código</th><th>Concepto</th><th class="r">Cantidad</th><th class="r">%</th></tr></thead><tbody>${filas}
+    <tr class="tot"><td colspan="2">PRODUCTO FINAL — ${esc(o.producto_nom)}</td><td class="r">${(o.kg||0).toLocaleString('es-PY')} kg</td><td class="r">${o.bolsas} bolsas</td></tr></tbody></table>
+   <div style="display:flex;justify-content:space-between;margin-top:36px;font-size:12px"><div>Preparado por: ____________</div><div>Controlado por: ____________</div></div>
+   <div class="noprint" style="text-align:center;margin-top:16px"><button onclick="window.print()" style="background:#2f7d3b;color:#fff;border:none;padding:10px 22px;border-radius:8px;cursor:pointer">🖨️ Imprimir / Guardar PDF</button></div>
+   </div></body></html>`);
+  w.document.close();
+}
 
 // ── INFORME PDF (molde del .docx) ──
 function informePDF(id){
