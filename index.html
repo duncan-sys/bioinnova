@@ -111,7 +111,7 @@ textarea{resize:vertical;min-height:66px}
 <div id="loginOverlay" style="position:fixed;inset:0;z-index:9999;background:linear-gradient(160deg,#255f2e,#173f1d);display:none;align-items:center;justify-content:center;padding:20px">
   <div style="width:100%;max-width:350px;background:#fff;border-radius:18px;padding:26px 22px;box-shadow:0 12px 44px rgba(0,0,0,.4)">
     <div style="text-align:center;margin-bottom:20px">
-      <img src="logo.svg" alt="BioInnova" style="height:46px;max-width:100%">
+      <img src="logo.jpg" alt="BioInnova" style="height:54px;max-width:100%">
       <div style="font-size:12px;color:var(--gray-500);margin-top:8px">Ingresá con tu cuenta</div>
     </div>
     <label class="fl">Email</label>
@@ -137,7 +137,7 @@ textarea{resize:vertical;min-height:66px}
 
   <!-- HOME -->
   <div class="screen active" id="sHome">
-    <div style="text-align:center;padding:2px 0 12px"><img src="logo.svg" alt="BioInnova" style="height:30px"></div>
+    <div style="text-align:center;padding:2px 0 12px"><img src="logo.jpg" alt="BioInnova" style="height:36px;background:#fff;border-radius:8px;padding:4px 10px;box-shadow:0 1px 3px rgba(0,0,0,.06)"></div>
     <div class="stat-strip">
       <div class="stat"><div class="sv" id="stClientes">0</div><div class="sl">Clientes</div></div>
       <div class="stat"><div class="sv" id="stVisitas">0</div><div class="sl">Visitas</div></div>
@@ -195,37 +195,22 @@ textarea{resize:vertical;min-height:66px}
         <label class="fl">Cliente</label>
         <select id="vCliente" onchange="visitaClienteChange()"></select>
         <label class="fl">Estancia</label>
-        <select id="vEstancia" onchange="populateLotes()"></select>
+        <select id="vEstancia" onchange="renderEvals()"></select>
         <div class="row2">
           <div><label class="fl">Fecha</label><input type="date" id="vFecha"></div>
           <div><label class="fl">Técnico comercial</label><input type="text" id="vTecnico" placeholder="Nombre"></div>
         </div>
-        <label class="fl">Categoría evaluada</label>
-        <select id="vCategoria" onchange="visitaCategoriaChange()"></select>
-        <label class="fl">Lote <span style="color:var(--gray-400);font-weight:400">(opcional — cabecera, media, cola…)</span></label>
-        <select id="vLote" onchange="visitaLoteChange()"></select>
-        <div class="row2">
-          <div><label class="fl">Nº de animales</label><input type="number" id="vAnimales" inputmode="numeric" placeholder="0"></div>
-          <div><label class="fl">Días en el sistema</label><input type="number" id="vDias" inputmode="numeric" placeholder="0"></div>
-        </div>
-        <label class="fl">Producto Bioinnova en uso</label>
-        <select id="vProducto" onchange="visitaProductoChange()"></select>
-        <div class="row2">
-          <div><label class="fl">Presentación</label><input type="text" id="vPresentacion" placeholder="—"></div>
-          <div><label class="fl">Consumo observado</label><input type="text" id="vConsumo" placeholder="ej: 2,2 % PV / 100 g/día"></div>
-        </div>
       </div>
     </div>
+    <div class="sect-t">Categorías y lotes evaluados</div>
+    <div id="evalsWrap"></div>
+    <button class="btn btn-ghost btn-block" style="margin-bottom:12px" onclick="addEval()">＋ Agregar categoría / lote</button>
     <div class="card">
-      <div class="card-h"><span id="vKpiTitulo">KPIs</span><span style="font-weight:500;color:var(--gray-400);font-size:11px">valor medido</span></div>
-      <div class="card-b" id="vKpis"></div>
-    </div>
-    <div class="card">
-      <div class="card-h">Diagnóstico y recomendación</div>
+      <div class="card-h">Diagnóstico general y cierre</div>
       <div class="card-b">
-        <label class="fl">Diagnóstico técnico</label>
-        <textarea id="vDiag" placeholder="Estado general del lote, hallazgos…"></textarea>
-        <label class="fl">Recomendación (para el cliente)</label>
+        <label class="fl">Diagnóstico general de la visita</label>
+        <textarea id="vDiag" placeholder="Estado general, hallazgos del conjunto…"></textarea>
+        <label class="fl">Recomendación general (para el cliente)</label>
         <textarea id="vReco" placeholder="Acciones sugeridas, ajustes de producto…"></textarea>
         <label class="fl">Próxima visita (opcional)</label>
         <input type="date" id="vProxima">
@@ -373,7 +358,8 @@ const sb = {
   async query(table, filters={}){ let url=`${SUPABASE_URL}/rest/v1/${table}?select=*`; for(const [k,v] of Object.entries(filters)) url+=`&${k}=eq.${v}`; const r=await fetch(url,{headers:sbHeaders()}); return r.json(); },
   async insert(table,data){ const r=await fetch(`${SUPABASE_URL}/rest/v1/${table}`,{method:'POST',headers:sbHeaders({'Content-Type':'application/json',Prefer:'return=representation'}),body:JSON.stringify(data)}); return r.json(); },
   async update(table,match,data){ let url=`${SUPABASE_URL}/rest/v1/${table}?`; for(const [k,v] of Object.entries(match)) url+=`${k}=eq.${v}&`; const r=await fetch(url,{method:'PATCH',headers:sbHeaders({'Content-Type':'application/json',Prefer:'return=representation'}),body:JSON.stringify(data)}); return r.json(); },
-  async del(table,match){ let url=`${SUPABASE_URL}/rest/v1/${table}?`; for(const [k,v] of Object.entries(match)) url+=`${k}=eq.${v}&`; return fetch(url,{method:'DELETE',headers:sbHeaders()}); }
+  async del(table,match){ let url=`${SUPABASE_URL}/rest/v1/${table}?`; for(const [k,v] of Object.entries(match)) url+=`${k}=eq.${v}&`; return fetch(url,{method:'DELETE',headers:sbHeaders()}); },
+  async upsert(table,data,onConflict){ const r=await fetch(`${SUPABASE_URL}/rest/v1/${table}?on_conflict=${onConflict}`,{method:'POST',headers:sbHeaders({'Content-Type':'application/json',Prefer:'resolution=merge-duplicates,return=representation'}),body:JSON.stringify(data)}); return r.json(); }
 };
 const ROLES = { gerente:{label:'Gerente',editar:true}, tecnico:{label:'Técnico comercial',editar:true}, lectura:{label:'Solo lectura',editar:false} };
 let currentUser=null, currentRol=null;
@@ -412,8 +398,9 @@ function applyAuth(){
   const chip=gs('userChip'); if(chip){ chip.textContent='👤 '+(s.nombre||s.user.email)+' · '+rolLabel(currentRol); chip.style.display=''; }
   const lo=gs('logoutBtn'); if(lo) lo.style.display='';
   goHome();
+  startSync();   // baja datos de la nube y arranca la sync periódica
 }
-function doLogout(){ clearSession(); location.reload(); }
+function doLogout(){ if(syncTimer) clearInterval(syncTimer); clearSession(); location.reload(); }
 function applyRoleUI(){
   const showEl=(id,show)=>{ const el=gs(id); if(el) el.style.display=show?'':'none'; };
   showEl('tileVisita', canEdit());
@@ -421,7 +408,50 @@ function applyRoleUI(){
   showEl('tileUsuarios', currentRol==='gerente');
 }
 
-let curCliente=null, editVisitaId=null, curSub='Visitas técnicas a campo', _lotesEdit=[];
+// ══════════════════════════════════════════════════════════
+//  SINCRONIZACIÓN EN LA NUBE (offline-first)
+//  Guarda SIEMPRE en el equipo; sube/baja de Supabase cuando hay red.
+//  Merge por id: gana el ts más nuevo. Los pendientes se suben al reconectar.
+// ══════════════════════════════════════════════════════════
+function cliRow(c){ return { id:c.id, nombre:c.nombre||'', contacto:c.contacto||'', tel:c.tel||'', email:c.email||'', ubicacion:c.ubicacion||'', obs:c.obs||'', ts:c.ts }; }
+function rowCli(r){ return { id:r.id, nombre:r.nombre||'', contacto:r.contacto||'', tel:r.tel||'', email:r.email||'', ubicacion:r.ubicacion||'', obs:r.obs||'', ts:r.ts }; }
+function estRow(e){ return { id:e.id, cliente_id:e.cliente_id||'', nombre:e.nombre||'', zona:e.zona||'', hato:e.hato||[], lotes:e.lotes||[], obs:e.obs||'', ts:e.ts }; }
+function rowEst(r){ const p=x=>typeof x==='string'?(()=>{try{return JSON.parse(x)}catch{return[]}})():(x||[]); return { id:r.id, cliente_id:r.cliente_id||'', nombre:r.nombre||'', zona:r.zona||'', hato:p(r.hato), lotes:p(r.lotes), obs:r.obs||'', ts:r.ts }; }
+function visRow(v){ return { id:v.id, cliente_id:v.cliente_id||'', estancia_id:v.estancia_id||'', fecha:v.fecha||null, tecnico:v.tecnico||'', evaluaciones:(v.evaluaciones||visitaEvals(v)), diagnostico:v.diagnostico||'', recomendacion:v.recomendacion||'', proxima:v.proxima||null, ts:v.ts }; }
+function rowVis(r){ const p=x=>typeof x==='string'?(()=>{try{return JSON.parse(x)}catch{return[]}})():(x||[]); return { id:r.id, cliente_id:r.cliente_id||'', estancia_id:r.estancia_id||'', fecha:r.fecha||'', tecnico:r.tecnico||'', evaluaciones:p(r.evaluaciones), diagnostico:r.diagnostico||'', recomendacion:r.recomendacion||'', proxima:r.proxima||'', ts:r.ts }; }
+const SYNC_DEFS = {
+  clientes:{ get:getClientes, save:saveClientes, table:'clientes', toRow:cliRow, fromRow:rowCli },
+  estancias:{ get:getEstancias, save:saveEstancias, table:'estancias', toRow:estRow, fromRow:rowEst },
+  visitas:{ get:getVisitas, save:saveVisitas, table:'visitas', toRow:visRow, fromRow:rowVis },
+};
+let syncTimer=null;
+async function cloudPush(name,obj){
+  if(!AUTH_ON||!obj) return;
+  const d=SYNC_DEFS[name];
+  try{ const r=await sb.upsert(d.table, d.toRow(obj), 'id'); if(Array.isArray(r)){ d.save(d.get().map(x=>x.id===obj.id?{...x,pending:false}:x)); } }catch(e){}
+}
+async function cloudDelete(name,id){ if(!AUTH_ON) return; try{ await sb.del(SYNC_DEFS[name].table,{id}); }catch(e){} }
+async function cloudPull(name){
+  if(!AUTH_ON) return;
+  const d=SYNC_DEFS[name];
+  try{
+    const rows=await sb.query(d.table); if(!Array.isArray(rows)) return;
+    const cloud={}; rows.forEach(r=>cloud[r.id]=d.fromRow(r));
+    const merged={}; Object.values(cloud).forEach(o=>merged[o.id]=o);
+    d.get().forEach(l=>{ const c=cloud[l.id];
+      if(!c){ merged[l.id]={...l,pending:false}; cloudPush(name,l); }                                  // solo local → subir
+      else if(l.pending || String(l.ts||'')>String(c.ts||'')){ merged[l.id]={...l,pending:false}; cloudPush(name,l); }  // local más nuevo → subir
+    });
+    d.save(Object.values(merged));
+  }catch(e){}
+}
+async function cloudPullAll(){ if(!AUTH_ON) return; await cloudPull('clientes'); await cloudPull('estancias'); await cloudPull('visitas'); refreshVista(); }
+function refreshVista(){ const act=document.querySelector('.screen.active'); if(!act) return;
+  if(act.id==='sHome') renderHome(); else if(act.id==='sClientes') renderClientes();
+  else if(act.id==='sCliente'&&curCliente) abrirCliente(curCliente); else if(act.id==='sHistorial') renderHistorial(); }
+function startSync(){ if(!AUTH_ON) return; cloudPullAll(); if(syncTimer) clearInterval(syncTimer); syncTimer=setInterval(cloudPullAll, 30000); }
+
+let curCliente=null, editVisitaId=null, curSub='Visitas técnicas a campo', _lotesEdit=[], _evals=[];
 function showScreen(id,titulo,sub,back){
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
   gs(id).classList.add('active');
@@ -448,9 +478,12 @@ function renderHome(){
 }
 function visitaLi(v){
   const c=clienteById(v.cliente_id), e=estanciaById(v.estancia_id);
+  const evs=visitaEvals(v); const cats=[...new Set(evs.map(x=>x.categoria))];
+  const chips=cats.slice(0,3).map(ct=>`<span class="chip ${catClass(ct)}">${esc(ct)}</span>`).join(' ');
+  const nL=evs.length;
   return `<div class="li" onclick="verVisita('${v.id}')">
-    <div style="min-width:0"><div class="li-t">${esc(c?c.nombre:'—')} <span class="chip ${catClass(v.categoria)}">${esc(v.categoria)}</span></div>
-    <div class="li-s">${esc(e?e.nombre:'')}${v.lote?' · '+esc(v.lote):''}${(e||v.lote)?' · ':''}${fmtFecha(v.fecha)} · ${v.n_animales||0} an.</div></div>
+    <div style="min-width:0"><div class="li-t">${esc(c?c.nombre:'—')} ${chips}</div>
+    <div class="li-s">${esc(e?e.nombre:'')}${e?' · ':''}${fmtFecha(v.fecha)} · ${nL} lote${nL!==1?'s':''}</div></div>
     <div class="li-chev">›</div></div>`;
 }
 
@@ -483,16 +516,17 @@ function guardarCliente(id){
   const nombre=gs('mNombre').value.trim(); if(!nombre){ showToast('Ingresá el nombre'); return; }
   let cl=getClientes(); let c=id?cl.find(x=>x.id===id):null;
   const data={nombre,contacto:gs('mContacto').value.trim(),tel:gs('mTel').value.trim(),email:gs('mEmail').value.trim(),ubicacion:gs('mUbic').value.trim(),obs:gs('mObs').value.trim()};
-  if(c){ Object.assign(c,data); c.ts=new Date().toISOString(); } else { cl.push({id:'CL-'+Date.now(),...data,ts:new Date().toISOString()}); }
+  if(c){ Object.assign(c,data); c.ts=new Date().toISOString(); c.pending=true; } else { cl.push({id:'CL-'+Date.now(),...data,ts:new Date().toISOString(),pending:true}); }
   let openId=id;
   if(!c){ openId=cl[cl.length-1].id; }
-  saveClientes(cl); cerrarModal(); showToast('✓ Cliente guardado'); renderHome();
+  saveClientes(cl); cloudPush('clientes', cl.find(x=>x.id===openId));
+  cerrarModal(); showToast('✓ Cliente guardado'); renderHome();
   abrirCliente(openId);   // lleva al detalle del cliente: próximo paso = cargar estancia
 }
 function borrarCliente(id){
   if(estanciasDe(id).length||visitasDe(id).length){ showToast('Tiene estancias o visitas; no se puede borrar'); return; }
   if(!confirm('¿Borrar este cliente?')) return;
-  saveClientes(getClientes().filter(c=>c.id!==id)); cerrarModal(); openClientes(); renderHome();
+  saveClientes(getClientes().filter(c=>c.id!==id)); cloudDelete('clientes',id); cerrarModal(); openClientes(); renderHome();
 }
 
 // ── CLIENTE DETALLE ──
@@ -556,84 +590,134 @@ function guardarEstancia(id){
   const lotes=_lotesEdit.filter(l=>String(l.nombre||'').trim()).map((l,i)=>({id:l.id||('LT-'+Date.now()+'-'+i),categoria:l.categoria,nombre:String(l.nombre).trim(),cabezas:num(l.cabezas)}));
   let es=getEstancias(); let e=id?es.find(x=>x.id===id):null;
   const data={cliente_id:curCliente,nombre,zona:gs('mEsZona').value.trim(),hato,lotes,obs:gs('mEsObs').value.trim()};
-  if(e){ Object.assign(e,data); e.ts=new Date().toISOString(); } else { es.push({id:'ES-'+Date.now(),...data,ts:new Date().toISOString()}); }
-  saveEstancias(es); cerrarModal(); showToast('✓ Estancia guardada'); abrirCliente(curCliente);
+  let savedId=id;
+  if(e){ Object.assign(e,data); e.ts=new Date().toISOString(); e.pending=true; } else { es.push({id:'ES-'+Date.now(),...data,ts:new Date().toISOString(),pending:true}); savedId=es[es.length-1].id; }
+  saveEstancias(es); cloudPush('estancias', es.find(x=>x.id===savedId));
+  cerrarModal(); showToast('✓ Estancia guardada'); abrirCliente(curCliente);
 }
 function borrarEstancia(id){
   if(!confirm('¿Borrar esta estancia?')) return;
-  saveEstancias(getEstancias().filter(e=>e.id!==id)); cerrarModal(); abrirCliente(curCliente);
+  saveEstancias(getEstancias().filter(e=>e.id!==id)); cloudDelete('estancias',id); cerrarModal(); abrirCliente(curCliente);
 }
 
 // ── VISITA ──
 function nuevaVisita(){ if(!canEdit()){ showToast('Tu rol es de solo lectura'); return; } editVisitaId=null; abrirFormVisita(null); }
 function nuevaVisitaCliente(){ if(!canEdit()){ showToast('Tu rol es de solo lectura'); return; } editVisitaId=null; abrirFormVisita(curCliente); }
+function nuevoEval(){ return { categoria:CATEGORIAS[0], lote:'', producto:'', presentacion:'', consumo:'', dias:'', animales:'', kpis:{}, comentario:'' }; }
+// convierte una visita (nueva con evaluaciones, o vieja con categoría única) a un array de evaluaciones
+function visitaEvals(v){
+  if(v.evaluaciones && v.evaluaciones.length) return v.evaluaciones;
+  if(v.categoria) return [{ categoria:v.categoria, lote:v.lote||'', producto:v.producto||'', presentacion:v.presentacion||'', consumo:v.consumo||'', dias_sistema:v.dias_sistema, n_animales:v.n_animales, kpis:v.kpis||[], comentario:'' }];
+  return [];
+}
 function abrirFormVisita(clienteId){
   const cl=getClientes();
   if(!cl.length){ showToast('Primero cargá un cliente'); openClientes(); return; }
   showScreen('sVisita','Nueva visita','Cargá los datos y KPIs',true);
   gs('vCliente').innerHTML='<option value="">— Elegir —</option>'+cl.slice().sort((a,b)=>a.nombre.localeCompare(b.nombre)).map(c=>`<option value="${c.id}">${esc(c.nombre)}</option>`).join('');
-  gs('vCategoria').innerHTML=CATEGORIAS.map(c=>`<option>${c}</option>`).join('');
   gs('vFecha').value=hoy(); gs('vTecnico').value=(getSession()&&getSession().nombre)||localStorage.getItem('bio:tecnico')||'';
-  gs('vAnimales').value=''; gs('vDias').value=''; gs('vConsumo').value=''; gs('vPresentacion').value='';
   gs('vDiag').value=''; gs('vReco').value=''; gs('vProxima').value='';
   gs('vCliente').value=clienteId||'';
-  visitaClienteChange(); visitaCategoriaChange();
+  _evals=[ nuevoEval() ];
+  visitaClienteChange();
 }
 function visitaClienteChange(){
   const cid=gs('vCliente').value; const ests=estanciasDe(cid);
   gs('vEstancia').innerHTML = ests.length? ests.map(e=>`<option value="${e.id}">${esc(e.nombre)}</option>`).join('') : '<option value="">(sin estancias — cargalas en el cliente)</option>';
-  populateLotes();
+  renderEvals();
 }
-function populateLotes(){
-  const sel=gs('vLote'); if(!sel) return;
-  const est=estanciaById(gs('vEstancia').value); const cat=gs('vCategoria').value;
+// ── Bloques de evaluación (categoría + lote) ──
+function renderEvals(){ const wrap=gs('evalsWrap'); if(!wrap) return; wrap.innerHTML=_evals.map((ev,i)=>evalBlockHtml(ev,i)).join(''); }
+function evalBlockHtml(ev,i){
+  const cat=ev.categoria||CATEGORIAS[0];
+  const est=estanciaById(gs('vEstancia').value);
   const lotes=((est&&est.lotes)||[]).filter(l=>l.categoria===cat);
-  sel.innerHTML='<option value="">Toda la categoría</option>'+lotes.map(l=>`<option value="${esc(l.nombre)}" data-cab="${l.cabezas!=null?l.cabezas:''}">${esc(l.nombre)}${l.cabezas!=null?' ('+l.cabezas+' cab.)':''}</option>`).join('')+'<option value="__otro">➕ Otro lote…</option>';
+  const loteOpts='<option value="">Toda la categoría</option>'
+    + lotes.map(l=>`<option value="${esc(l.nombre)}" ${ev.lote===l.nombre?'selected':''} data-cab="${l.cabezas!=null?l.cabezas:''}">${esc(l.nombre)}${l.cabezas!=null?' ('+l.cabezas+' cab.)':''}</option>`).join('')
+    + (ev.lote && !lotes.some(l=>l.nombre===ev.lote)?`<option value="${esc(ev.lote)}" selected>${esc(ev.lote)}</option>`:'')
+    + '<option value="__otro">➕ Otro lote…</option>';
+  const prods=PRODUCTOS[cat]||[];
+  const prodOpts='<option value="">— Elegir —</option>'
+    + prods.map(p=>`<option value="${esc(p.n)}" ${ev.producto===p.n?'selected':''} data-p="${esc(p.p)}">${esc(p.n)}</option>`).join('')
+    + (ev.producto && !prods.some(p=>p.n===ev.producto)?`<option value="${esc(ev.producto)}" selected>${esc(ev.producto)}</option>`:'')
+    + '<option value="__otro">➕ Otro…</option>';
+  const kpisHtml=(KPIS[cat]||[]).map((d,j)=>{ const val=(ev.kpis&&ev.kpis[j]!=null)?ev.kpis[j]:''; const st=kpiEstado(val,d);
+    return `<div class="kpi"><div class="kpi-top"><span class="kpi-n">${esc(d.k)}</span><span class="kpi-ref">🟢 ${esc(refTxt(d))}</span></div>
+    <div class="kpi-in"><input type="text" inputmode="decimal" id="ev${i}_kv${j}" value="${esc(val)}" placeholder="valor" oninput="evalKpiLive(${i},${j})"><span id="ev${i}_ks${j}" class="sem ${st.cls}">${st.txt}</span></div></div>`; }).join('');
+  return `<div class="card">
+    <div class="card-h"><span>Evaluación ${i+1} <span class="chip ${catClass(cat)}">${esc(cat)}</span></span>${_evals.length>1?`<span onclick="removeEval(${i})" title="Quitar" style="cursor:pointer;color:var(--red);font-size:18px">✕</span>`:''}</div>
+    <div class="card-b">
+      <label class="fl">Categoría / rubro</label>
+      <select id="ev${i}_cat" onchange="evalCatChange(${i})">${CATEGORIAS.map(c=>`<option ${cat===c?'selected':''}>${c}</option>`).join('')}</select>
+      <label class="fl">Lote <span style="color:var(--gray-400);font-weight:400">(opcional — cabecera, media, cola…)</span></label>
+      <select id="ev${i}_lote" onchange="evalLoteChange(${i})">${loteOpts}</select>
+      <div class="row2">
+        <div><label class="fl">Nº de animales</label><input type="number" id="ev${i}_anim" inputmode="numeric" value="${ev.animales!=null?ev.animales:''}" placeholder="0"></div>
+        <div><label class="fl">Días en el sistema</label><input type="number" id="ev${i}_dias" inputmode="numeric" value="${ev.dias!=null?ev.dias:''}" placeholder="0"></div>
+      </div>
+      <label class="fl">Producto Bioinnova en uso</label>
+      <select id="ev${i}_prod" onchange="evalProdChange(${i})">${prodOpts}</select>
+      <div class="row2">
+        <div><label class="fl">Presentación</label><input type="text" id="ev${i}_pres" value="${esc(ev.presentacion)}" placeholder="—"></div>
+        <div><label class="fl">Consumo observado</label><input type="text" id="ev${i}_cons" value="${esc(ev.consumo)}" placeholder="ej: 2,2 % PV"></div>
+      </div>
+      <div style="font-size:12px;font-weight:700;color:var(--gray-700);margin:10px 0 2px">KPIs — ${esc(cat)}</div>
+      ${kpisHtml}
+      <label class="fl">Comentario / diagnóstico de este lote <span style="color:var(--gray-400);font-weight:400">(opcional)</span></label>
+      <textarea id="ev${i}_com" placeholder="Hallazgos y recomendación de este lote…">${esc(ev.comentario)}</textarea>
+    </div>
+  </div>`;
 }
-function visitaLoteChange(){
-  const sel=gs('vLote'); const val=sel.value;
-  if(val==='__otro'){ sel.selectedIndex=0; const nom=prompt('Nombre del lote:'); if(nom&&nom.trim()){ const o=document.createElement('option'); o.value=nom.trim(); o.textContent=nom.trim(); sel.insertBefore(o,sel.options[sel.options.length-1]); o.selected=true; } return; }
-  const opt=sel.options[sel.selectedIndex]; if(opt&&opt.dataset.cab){ gs('vAnimales').value=opt.dataset.cab; }
+function syncEvals(){
+  _evals=_evals.map((ev,i)=>{
+    const cat=gs('ev'+i+'_cat')?gs('ev'+i+'_cat').value:ev.categoria;
+    const kpis={}; (KPIS[cat]||[]).forEach((d,j)=>{ const el=gs('ev'+i+'_kv'+j); if(el) kpis[j]=el.value; });
+    return { categoria:cat,
+      lote: gs('ev'+i+'_lote')?gs('ev'+i+'_lote').value:ev.lote,
+      producto: gs('ev'+i+'_prod')?gs('ev'+i+'_prod').value:ev.producto,
+      presentacion: gs('ev'+i+'_pres')?gs('ev'+i+'_pres').value:ev.presentacion,
+      consumo: gs('ev'+i+'_cons')?gs('ev'+i+'_cons').value:ev.consumo,
+      dias: gs('ev'+i+'_dias')?gs('ev'+i+'_dias').value:ev.dias,
+      animales: gs('ev'+i+'_anim')?gs('ev'+i+'_anim').value:ev.animales,
+      kpis, comentario: gs('ev'+i+'_com')?gs('ev'+i+'_com').value:ev.comentario };
+  });
 }
-function visitaCategoriaChange(){
-  const cat=gs('vCategoria').value;
-  // productos
-  gs('vProducto').innerHTML='<option value="">— Elegir —</option>'+(PRODUCTOS[cat]||[]).map(p=>`<option value="${esc(p.n)}" data-p="${esc(p.p)}">${esc(p.n)}</option>`).join('')+'<option value="__otro">➕ Otro…</option>';
-  gs('vPresentacion').value='';
-  // KPIs
-  gs('vKpiTitulo').textContent='KPIs — '+cat;
-  gs('vKpis').innerHTML=(KPIS[cat]||[]).map((d,i)=>`<div class="kpi"><div class="kpi-top"><span class="kpi-n">${esc(d.k)}</span><span class="kpi-ref">🟢 ${esc(refTxt(d))}</span></div>
-    <div class="kpi-in"><input type="text" inputmode="decimal" id="kv${i}" placeholder="valor" oninput="kpiLive(${i})"><span id="ks${i}" class="sem sem-gray">—</span></div></div>`).join('');
-  populateLotes();
-}
-function kpiLive(i){
-  const cat=gs('vCategoria').value; const d=KPIS[cat][i]; const st=kpiEstado(gs('kv'+i).value,d);
-  const el=gs('ks'+i); el.className='sem '+st.cls; el.textContent=st.txt;
-}
-function visitaProductoChange(){
-  const sel=gs('vProducto'); const val=sel.value;
-  if(val==='__otro'){ gs('vPresentacion').value=''; sel.selectedIndex=0; const nom=prompt('Nombre del producto:'); if(nom){ const o=document.createElement('option'); o.value=nom; o.textContent=nom; o.selected=true; sel.insertBefore(o,sel.options[sel.options.length-1]); } return; }
-  const opt=sel.options[sel.selectedIndex]; if(opt&&opt.dataset.p) gs('vPresentacion').value=opt.dataset.p;
-}
+function addEval(){ syncEvals(); _evals.push(nuevoEval()); renderEvals(); const w=gs('evalsWrap'); if(w&&w.lastElementChild) w.lastElementChild.scrollIntoView({behavior:'smooth',block:'center'}); }
+function removeEval(i){ syncEvals(); _evals.splice(i,1); if(!_evals.length) _evals=[nuevoEval()]; renderEvals(); }
+function evalCatChange(i){ syncEvals(); _evals[i].categoria=gs('ev'+i+'_cat').value; _evals[i].lote=''; _evals[i].producto=''; _evals[i].presentacion=''; _evals[i].kpis={}; renderEvals(); }
+function evalLoteChange(i){ const sel=gs('ev'+i+'_lote'); const val=sel.value;
+  if(val==='__otro'){ sel.selectedIndex=0; const nom=prompt('Nombre del lote:'); if(nom&&nom.trim()){ syncEvals(); _evals[i].lote=nom.trim(); renderEvals(); } return; }
+  const opt=sel.options[sel.selectedIndex]; if(opt&&opt.dataset.cab){ const a=gs('ev'+i+'_anim'); if(a) a.value=opt.dataset.cab; } }
+function evalProdChange(i){ const sel=gs('ev'+i+'_prod'); const val=sel.value;
+  if(val==='__otro'){ sel.selectedIndex=0; const nom=prompt('Nombre del producto:'); if(nom&&nom.trim()){ syncEvals(); _evals[i].producto=nom.trim(); _evals[i].presentacion=''; renderEvals(); } return; }
+  const opt=sel.options[sel.selectedIndex]; if(opt&&opt.dataset.p){ const p=gs('ev'+i+'_pres'); if(p) p.value=opt.dataset.p; } }
+function evalKpiLive(i,j){ const cat=gs('ev'+i+'_cat').value; const d=KPIS[cat][j]; const st=kpiEstado(gs('ev'+i+'_kv'+j).value,d); const el=gs('ev'+i+'_ks'+j); el.className='sem '+st.cls; el.textContent=st.txt; }
 function guardarVisita(imprimir){
   if(!canEdit()){ showToast('Sin permiso'); return; }
   const cid=gs('vCliente').value; if(!cid){ showToast('Elegí el cliente'); return; }
-  const cat=gs('vCategoria').value;
-  const kpis=(KPIS[cat]||[]).map((d,i)=>{ const val=gs('kv'+i).value.trim(); return {k:d.k,u:d.u,min:d.min,max:d.max,valor:val,estado:kpiEstado(val,d).rep}; });
+  syncEvals();
+  const evaluaciones=_evals.map(ev=>{
+    const cat=ev.categoria;
+    const kpis=(KPIS[cat]||[]).map((d,j)=>{ const val=String((ev.kpis&&ev.kpis[j]!=null)?ev.kpis[j]:'').trim(); return {k:d.k,u:d.u,min:d.min,max:d.max,valor:val,estado:kpiEstado(val,d).rep}; });
+    return { categoria:cat, lote:(ev.lote||''), producto:(ev.producto||''), presentacion:String(ev.presentacion||'').trim(), consumo:String(ev.consumo||'').trim(), dias_sistema:num(ev.dias), n_animales:num(ev.animales), kpis, comentario:String(ev.comentario||'').trim() };
+  }).filter(ev=> ev.lote || ev.producto || ev.n_animales!=null || ev.comentario || ev.kpis.some(k=>k.valor));
+  if(!evaluaciones.length){ showToast('Cargá al menos una categoría/lote con datos'); return; }
+  const estId=gs('vEstancia').value||'';
   const v={
     id: editVisitaId||('VI-'+Date.now()),
-    cliente_id:cid, estancia_id:gs('vEstancia').value||'',
+    cliente_id:cid, estancia_id:estId,
     fecha:gs('vFecha').value||hoy(), tecnico:gs('vTecnico').value.trim(),
-    categoria:cat, lote:(gs('vLote')?gs('vLote').value:''), n_animales:num(gs('vAnimales').value), dias_sistema:num(gs('vDias').value),
-    producto:gs('vProducto').value, presentacion:gs('vPresentacion').value.trim(), consumo:gs('vConsumo').value.trim(),
-    kpis, diagnostico:gs('vDiag').value.trim(), recomendacion:gs('vReco').value.trim(),
-    proxima:gs('vProxima').value||'', ts:new Date().toISOString()
+    evaluaciones,
+    diagnostico:gs('vDiag').value.trim(), recomendacion:gs('vReco').value.trim(),
+    proxima:gs('vProxima').value||'', ts:new Date().toISOString(), pending:true
   };
   if(gs('vTecnico').value.trim()) localStorage.setItem('bio:tecnico',gs('vTecnico').value.trim());
-  // si el lote es nuevo para la estancia, lo recordamos para próximas visitas
-  if(v.lote && v.estancia_id){ const es=getEstancias(); const e=es.find(x=>x.id===v.estancia_id); if(e){ e.lotes=e.lotes||[]; if(!e.lotes.some(l=>l.categoria===v.categoria && String(l.nombre).toLowerCase()===v.lote.toLowerCase())){ e.lotes.push({id:'LT-'+Date.now(),categoria:v.categoria,nombre:v.lote,cabezas:v.n_animales}); saveEstancias(es); } } }
+  // recordar lotes nuevos en la estancia (de cualquier evaluación)
+  if(estId){ const es=getEstancias(); const e=es.find(x=>x.id===estId); if(e){ e.lotes=e.lotes||[]; let changed=false;
+    evaluaciones.forEach(ev=>{ if(ev.lote && !e.lotes.some(l=>l.categoria===ev.categoria && String(l.nombre).toLowerCase()===ev.lote.toLowerCase())){ e.lotes.push({id:'LT-'+Date.now()+'-'+e.lotes.length,categoria:ev.categoria,nombre:ev.lote,cabezas:ev.n_animales}); changed=true; } });
+    if(changed){ e.ts=new Date().toISOString(); e.pending=true; saveEstancias(es); cloudPush('estancias', e); } } }
   let vs=getVisitas(); if(editVisitaId){ vs=vs.map(x=>x.id===editVisitaId?v:x); } else { vs.unshift(v); }
-  saveVisitas(vs); editVisitaId=null;
+  saveVisitas(vs); cloudPush('visitas', v); editVisitaId=null;
   showToast('✓ Visita guardada');
   if(imprimir) informePDF(v.id);
   if(curCliente) abrirCliente(curCliente); else goHome();
@@ -641,13 +725,18 @@ function guardarVisita(imprimir){
 function verVisita(id){
   const v=getVisitas().find(x=>x.id===id); if(!v) return;
   const c=clienteById(v.cliente_id), e=estanciaById(v.estancia_id);
-  const filas=(v.kpis||[]).map(k=>`<tr><td>${esc(k.k)}</td><td style="text-align:center">${k.valor||'—'} ${esc(unidadCorta(k.u))}</td><td style="text-align:center">${semHtmlMini(k.estado)}</td></tr>`).join('');
+  const bloques=visitaEvals(v).map(ev=>{
+    const filas=(ev.kpis||[]).map(k=>`<tr><td>${esc(k.k)}</td><td style="text-align:center">${k.valor||'—'} ${esc(unidadCorta(k.u))}</td><td style="text-align:center">${semHtmlMini(k.estado)}</td></tr>`).join('');
+    return `<div style="margin-top:10px;border-top:1px solid var(--gray-200);padding-top:8px">
+      <div style="font-size:12px;font-weight:700"><span class="chip ${catClass(ev.categoria)}">${esc(ev.categoria)}</span>${ev.lote?' Lote '+esc(ev.lote):''} <span style="color:var(--gray-400);font-weight:400">· ${ev.n_animales||0} an.${ev.producto?' · '+esc(ev.producto):''}</span></div>
+      <table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:4px"><tbody>${filas}</tbody></table>
+      ${ev.comentario?'<div style="font-size:11px;color:var(--gray-600);margin-top:3px">💬 '+esc(ev.comentario)+'</div>':''}</div>`;
+  }).join('');
   gs('modalBox').innerHTML=`<h3>Visita — ${esc(c?c.nombre:'')}</h3>
-    <div style="font-size:12px;color:var(--gray-600);margin-bottom:8px">${esc(e?e.nombre:'')} · ${fmtFecha(v.fecha)} · <span class="chip ${catClass(v.categoria)}">${esc(v.categoria)}</span></div>
-    <div style="font-size:12px;color:var(--gray-700);margin-bottom:8px">${v.lote?'<b>Lote '+esc(v.lote)+'</b> · ':''}${v.n_animales||0} animales · ${esc(v.producto||'—')}${v.consumo?' · '+esc(v.consumo):''}</div>
-    <table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="color:var(--gray-500)"><th style="text-align:left">KPI</th><th>Medido</th><th>Estado</th></tr></thead><tbody>${filas}</tbody></table>
-    ${v.diagnostico?'<div class="sect-t">Diagnóstico</div><div style="font-size:12px">'+esc(v.diagnostico)+'</div>':''}
-    ${v.recomendacion?'<div class="sect-t">Recomendación</div><div style="font-size:12px">'+esc(v.recomendacion)+'</div>':''}
+    <div style="font-size:12px;color:var(--gray-600)">${esc(e?e.nombre:'')} · ${fmtFecha(v.fecha)}${v.tecnico?' · '+esc(v.tecnico):''}</div>
+    ${bloques}
+    ${v.diagnostico?'<div class="sect-t">Diagnóstico general</div><div style="font-size:12px">'+esc(v.diagnostico)+'</div>':''}
+    ${v.recomendacion?'<div class="sect-t">Recomendación general</div><div style="font-size:12px">'+esc(v.recomendacion)+'</div>':''}
     <div class="row2" style="margin-top:14px">${canEdit()?`<button class="btn btn-sec" onclick="editarVisita('${v.id}')">✎ Editar</button>`:''}<button class="btn btn-amber" onclick="informePDF('${v.id}')" style="${canEdit()?'':'flex:1'}">🖨️ Informe</button></div>
     ${canEdit()?`<button class="btn btn-sec btn-block" style="margin-top:8px;color:var(--red)" onclick="borrarVisita('${v.id}')">Borrar visita</button>`:''}
     <button class="btn btn-ghost btn-block" style="margin-top:8px" onclick="cerrarModal()">Cerrar</button>`;
@@ -657,24 +746,24 @@ function unidadCorta(u){ return /escala|0–|1–/.test(u||'')?'':(u||''); }
 function semHtmlMini(rep){ const cls= rep&&rep.includes('rango')?'sem-green':(rep&&rep!=='—'?'sem-amber':'sem-gray'); return `<span class="sem ${cls}">${esc(rep||'—')}</span>`; }
 function editarVisita(id){ if(!canEdit()){ showToast('Sin permiso'); return; } const v=getVisitas().find(x=>x.id===id); if(!v)return; cerrarModal(); editVisitaId=id; abrirFormVisita(v.cliente_id);
   gs('vCliente').value=v.cliente_id; visitaClienteChange(); gs('vEstancia').value=v.estancia_id||'';
-  gs('vCategoria').value=v.categoria; visitaCategoriaChange();
-  if(v.lote && !Array.from(gs('vLote').options).some(o=>o.value===v.lote)){ const o=document.createElement('option'); o.value=v.lote; o.textContent=v.lote; gs('vLote').insertBefore(o,gs('vLote').options[gs('vLote').options.length-1]); }
-  gs('vLote').value=v.lote||'';
-  gs('vFecha').value=v.fecha; gs('vTecnico').value=v.tecnico||''; gs('vAnimales').value=v.n_animales!=null?v.n_animales:''; gs('vDias').value=v.dias_sistema!=null?v.dias_sistema:'';
-  // producto
-  if(v.producto && !Array.from(gs('vProducto').options).some(o=>o.value===v.producto)){ const o=document.createElement('option'); o.value=v.producto; o.textContent=v.producto; gs('vProducto').insertBefore(o,gs('vProducto').options[gs('vProducto').options.length-1]); }
-  gs('vProducto').value=v.producto||''; gs('vPresentacion').value=v.presentacion||''; gs('vConsumo').value=v.consumo||'';
-  (v.kpis||[]).forEach((k,i)=>{ if(gs('kv'+i)){ gs('kv'+i).value=k.valor||''; kpiLive(i); } });
+  gs('vFecha').value=v.fecha; gs('vTecnico').value=v.tecnico||'';
   gs('vDiag').value=v.diagnostico||''; gs('vReco').value=v.recomendacion||''; gs('vProxima').value=v.proxima||'';
+  _evals = visitaEvals(v).map(ev=>{
+    const defs=KPIS[ev.categoria]||[]; const kpisObj={};
+    (ev.kpis||[]).forEach(k=>{ const j=defs.findIndex(d=>d.k===k.k); if(j>=0) kpisObj[j]=k.valor||''; });
+    return { categoria:ev.categoria, lote:ev.lote||'', producto:ev.producto||'', presentacion:ev.presentacion||'', consumo:ev.consumo||'', dias:(ev.dias_sistema!=null?ev.dias_sistema:''), animales:(ev.n_animales!=null?ev.n_animales:''), kpis:kpisObj, comentario:ev.comentario||'' };
+  });
+  if(!_evals.length) _evals=[nuevoEval()];
+  renderEvals();
   showScreen('sVisita','Editar visita','',true);
 }
-function borrarVisita(id){ if(!canEdit()){ showToast('Sin permiso'); return; } if(!confirm('¿Borrar esta visita?'))return; saveVisitas(getVisitas().filter(v=>v.id!==id)); cerrarModal(); renderHome(); if(curCliente&&gs('sCliente').classList.contains('active'))abrirCliente(curCliente); else if(gs('sHistorial').classList.contains('active'))renderHistorial(); else goHome(); }
+function borrarVisita(id){ if(!canEdit()){ showToast('Sin permiso'); return; } if(!confirm('¿Borrar esta visita?'))return; saveVisitas(getVisitas().filter(v=>v.id!==id)); cloudDelete('visitas',id); cerrarModal(); renderHome(); if(curCliente&&gs('sCliente').classList.contains('active'))abrirCliente(curCliente); else if(gs('sHistorial').classList.contains('active'))renderHistorial(); else goHome(); }
 
 // ── HISTORIAL ──
 function renderHistorial(){
   const cat=gs('hFiltroCat').value, q=(gs('hBuscar').value||'').trim().toLowerCase();
   let vs=getVisitas().slice().sort((a,b)=>String(b.fecha||'').localeCompare(String(a.fecha||'')));
-  if(cat) vs=vs.filter(v=>v.categoria===cat);
+  if(cat) vs=vs.filter(v=>visitaEvals(v).some(ev=>ev.categoria===cat));
   if(q) vs=vs.filter(v=>{ const c=clienteById(v.cliente_id); return String(c&&c.nombre||'').toLowerCase().includes(q); });
   gs('hCount').textContent=vs.length?vs.length+' visitas':'';
   gs('histList').innerHTML = vs.length? vs.map(v=>visitaLi(v)).join('') : '<div class="empty">Sin visitas.</div>';
@@ -733,20 +822,25 @@ async function eliminarUsuario(id,nombre){ if(!confirm('¿Eliminar a "'+nombre+'
 function informePDF(id){
   const v=getVisitas().find(x=>x.id===id); if(!v){ showToast('Visita no encontrada'); return; }
   const c=clienteById(v.cliente_id)||{}, e=estanciaById(v.estancia_id)||{};
-  const filas=(v.kpis||[]).map(k=>{
-    const cls=k.estado&&k.estado.includes('rango')?'ok':(k.estado&&k.estado!=='—'?'warn':'na');
-    return `<tr><td>${esc(k.k)}</td><td class="c">${esc(k.u||'')}</td><td class="c">${k.min!=null?k.min:'—'}</td><td class="c">${k.max!=null?k.max:'—'}</td><td class="c b">${k.valor||'—'}</td><td class="c ${cls}">${esc(k.estado||'—')}</td></tr>`;
+  const secciones=visitaEvals(v).map(ev=>{
+    const filas=(ev.kpis||[]).map(k=>{ const cls=k.estado&&k.estado.includes('rango')?'ok':(k.estado&&k.estado!=='—'?'warn':'na');
+      return `<tr><td>${esc(k.k)}</td><td class="c">${esc(k.u||'')}</td><td class="c">${k.min!=null?k.min:'—'}</td><td class="c">${k.max!=null?k.max:'—'}</td><td class="c b">${k.valor||'—'}</td><td class="c ${cls}">${esc(k.estado||'—')}</td></tr>`; }).join('');
+    return `<h3 class="cat">${esc(ev.categoria)}${ev.lote?' — Lote: '+esc(ev.lote):''}</h3>
+      <table class="datos"><tr><td class="k">Nº de animales</td><td class="v">${ev.n_animales!=null?ev.n_animales:'—'}</td><td class="k">Días en sistema</td><td class="v">${ev.dias_sistema!=null?ev.dias_sistema:'—'}</td></tr>
+      <tr><td class="k">Producto</td><td class="v">${esc(ev.producto||'—')}</td><td class="k">Consumo</td><td class="v">${esc(ev.consumo||'—')}</td></tr></table>
+      <table><thead><tr><th>KPI</th><th class="c">Unidad</th><th class="c">Obj. Mín</th><th class="c">Obj. Máx</th><th class="c">Medido</th><th class="c">Estado</th></tr></thead><tbody>${filas}</tbody></table>
+      ${ev.comentario?`<div class="diag" style="margin-top:6px">${esc(ev.comentario)}</div>`:''}`;
   }).join('');
   const w=window.open('','_blank');
   w.document.write(`<html><head><meta charset="utf-8"><title>Informe técnico — ${esc(c.nombre||'')}</title><style>
     *{box-sizing:border-box} body{font-family:Arial,Helvetica,sans-serif;color:#1a202c;margin:0;font-size:12.5px}
     .wrap{max-width:780px;margin:0 auto;padding:26px}
-    .top{background:linear-gradient(135deg,#2f7d3b,#255f2e);color:#fff;padding:18px 22px;border-radius:12px;margin-bottom:16px}
-    .top h1{margin:0;font-size:19px;letter-spacing:.02em} .top p{margin:3px 0 0;font-size:12px;opacity:.9}
+    .top{background:#fff;border:1px solid #cbd5e0;padding:14px 22px;border-radius:12px;margin-bottom:16px;text-align:center}
+    .top img{height:52px} .top p{margin:6px 0 0;font-size:12px;color:#255f2e;font-weight:600}
     h2{font-size:13px;color:#2f7d3b;border-bottom:2px solid #2f7d3b;padding-bottom:3px;margin:20px 0 8px}
-    table{width:100%;border-collapse:collapse} td,th{border:1px solid #cbd5e0;padding:6px 8px}
-    .datos td{border:none;padding:4px 6px} .datos .k{color:#718096;font-size:11px;width:120px}
-    .datos .v{font-weight:600}
+    h3.cat{font-size:12.5px;color:#fff;background:#2f7d3b;padding:5px 10px;border-radius:5px;margin:16px 0 6px}
+    table{width:100%;border-collapse:collapse;margin-bottom:6px} td,th{border:1px solid #cbd5e0;padding:6px 8px}
+    .datos td{border:none;padding:4px 6px} .datos .k{color:#718096;font-size:11px;width:120px} .datos .v{font-weight:600}
     th{background:#eef5ef;font-size:11px;text-align:left} .c{text-align:center} .b{font-weight:700}
     .ok{background:#e6f2e8;color:#255f2e;font-weight:700} .warn{background:#fdf3e0;color:#c8820a;font-weight:700} .na{color:#a0aec0}
     .diag{background:#f7fafc;border-left:3px solid #2f7d3b;padding:10px 12px;border-radius:6px;margin-top:6px;white-space:pre-wrap}
@@ -754,16 +848,13 @@ function informePDF(id){
     .firma{display:flex;justify-content:space-between;margin-top:30px;font-size:12px}
     @media print{.wrap{padding:12mm} .noprint{display:none}}
   </style></head><body><div class="wrap">
-    <div class="top"><h1>BIOINNOVA — INFORME TÉCNICO A CAMPO</h1><p>Evaluación de desempeño y recomendación nutricional para el cliente</p></div>
+    <div class="top"><img src="${location.origin}${location.pathname.replace(/[^/]*$/,'')}logo.jpg" alt="BioInnova"><p>INFORME TÉCNICO A CAMPO · Nutrición de bovinos de corte</p></div>
     <h2>1. Datos de la visita</h2>
     <table class="datos"><tr><td class="k">Cliente</td><td class="v">${esc(c.nombre||'—')}</td><td class="k">Estancia</td><td class="v">${esc(e.nombre||'—')}</td></tr>
-      <tr><td class="k">Fecha de visita</td><td class="v">${fmtFecha(v.fecha)}</td><td class="k">Técnico comercial</td><td class="v">${esc(v.tecnico||'—')}</td></tr>
-      <tr><td class="k">Categoría evaluada</td><td class="v">${esc(v.categoria)}${v.lote?' · Lote: '+esc(v.lote):''}</td><td class="k">Nº de animales</td><td class="v">${v.n_animales!=null?v.n_animales:'—'}</td></tr>
-      <tr><td class="k">Producto Bioinnova</td><td class="v">${esc(v.producto||'—')}</td><td class="k">Presentación</td><td class="v">${esc(v.presentacion||'—')}</td></tr>
-      <tr><td class="k">Consumo observado</td><td class="v">${esc(v.consumo||'—')}</td><td class="k">Días en el sistema</td><td class="v">${v.dias_sistema!=null?v.dias_sistema:'—'}</td></tr></table>
-    <h2>2. Indicadores evaluados a campo (KPIs)</h2>
-    <table><thead><tr><th>KPI</th><th class="c">Unidad</th><th class="c">Obj. Mín</th><th class="c">Obj. Máx</th><th class="c">Medido</th><th class="c">Estado</th></tr></thead><tbody>${filas}</tbody></table>
-    <h2>3. Diagnóstico y recomendación técnica</h2>
+      <tr><td class="k">Fecha de visita</td><td class="v">${fmtFecha(v.fecha)}</td><td class="k">Técnico comercial</td><td class="v">${esc(v.tecnico||'—')}</td></tr></table>
+    <h2>2. Evaluación por categoría y lote</h2>
+    ${secciones}
+    <h2>3. Diagnóstico y recomendación general</h2>
     ${v.diagnostico?`<div class="diag">${esc(v.diagnostico)}</div>`:'<div class="na">—</div>'}
     ${v.recomendacion?`<div class="diag" style="border-color:#c8820a;margin-top:8px"><b>Recomendación:</b> ${esc(v.recomendacion)}</div>`:''}
     <h2>4. Cierre</h2>
@@ -777,7 +868,7 @@ function informePDF(id){
 // ── Offline / PWA ──
 if('serviceWorker' in navigator){ window.addEventListener('load',()=>{ navigator.serviceWorker.register('sw.js').catch(()=>{}); }); }
 function pintarConexion(){ const el=gs('hSub'); if(!el) return; el.textContent = navigator.onLine ? curSub : '📴 Sin conexión — se guarda en el equipo'; }
-window.addEventListener('online',()=>{ pintarConexion(); showToast('✓ Conexión restablecida'); });
+window.addEventListener('online',()=>{ pintarConexion(); showToast('✓ Conexión restablecida'); cloudPullAll(); });
 window.addEventListener('offline',()=>{ pintarConexion(); showToast('📴 Sin conexión — podés seguir cargando'); });
 
 // ── Init ──
