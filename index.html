@@ -225,10 +225,11 @@ textarea{resize:vertical;min-height:66px}
 
   <!-- HISTORIAL -->
   <div class="screen" id="sHistorial">
-    <div style="display:flex;gap:8px;margin-bottom:10px">
+    <div style="display:flex;gap:8px;margin-bottom:8px">
+      <select id="hFiltroTec" onchange="renderHistorial()" style="flex:1"></select>
       <select id="hFiltroCat" onchange="renderHistorial()" style="flex:1"></select>
-      <input type="search" id="hBuscar" placeholder="🔎 Cliente…" oninput="renderHistorial()" style="flex:1">
     </div>
+    <div style="margin-bottom:10px"><input type="search" id="hBuscar" placeholder="🔎 Buscar cliente…" oninput="renderHistorial()"></div>
     <div class="card"><div class="card-h"><span>Visitas</span><span id="hCount" style="font-weight:500;color:var(--gray-400)"></span></div><div id="histList"></div></div>
   </div>
 
@@ -266,7 +267,7 @@ const KPIS={
    {k:'Peso de entrada',u:'kg',min:180,max:240},
    {k:'GMD',u:'kg/día',min:0.4,max:0.8},
    {k:'Consumo suplemento',u:'% PV',min:0.3,max:0.5},
-   {k:'Condición corporal',u:'escala 1–9',min:4,max:6},
+   {k:'Condición corporal',u:'escala 1–5',min:3,max:3.5},
    {k:'Uniformidad del lote (CV)',u:'%',min:0,max:12},
    {k:'Disponibilidad de pastura',u:'kg MS/ha',min:1500,max:3000},
  ],
@@ -309,6 +310,8 @@ const PRODUCTOS={
    {n:'PJC - Bioinnova Engorde 16% - 40kg',l:'PJC',p:'Bolsa 40 kg'},
    {n:'PJC - Bioinnova Engorde 18% - 40kg',l:'PJC',p:'Bolsa 40 kg'},
    {n:'PRO - Bioinnova Engorda 0.5% PE - 30kg',l:'Proteinados',p:'Bolsa 30 kg'},
+   {n:'PRO - Bioinnova Aguas - 30kg',l:'Proteinados',p:'Bolsa 30 kg'},
+   {n:'PRO - Bioinnova Secas Extra - 30kg',l:'Proteinados',p:'Bolsa 30 kg'},
    {n:'SM - Bioinnova Engorda 40 - 30kg',l:'Sales Minerales',p:'Bolsa 30 kg'},
    {n:'NPF - Bioinnova Confi 4 L',l:'Núcleos',p:'Bolsa 25 kg'},
    {n:'NPF - Bioinnova Confi 4 AS',l:'Núcleos',p:'Bolsa 25 kg'},
@@ -318,6 +321,11 @@ const PRODUCTOS={
  ]
 };
 function catClass(c){ return c==='Cría'?'chip-cria':c==='Recría'?'chip-recria':'chip-terminacion'; }
+// Consumo observado: opciones sugeridas + valores que el comercial escribió (se recuerdan)
+const CONSUMO_PRESETS=['90–120 g/día','300–800 g/día','400–800 g/día','0,3–0,5 % PV','0,5 % PV','0,5–1,0 % PV','2,0–2,4 % PV'];
+function getConsumos(){ try{ const v=JSON.parse(localStorage.getItem('bio:consumos')); return Array.isArray(v)?v:[]; }catch{ return []; } }
+function addConsumo(val){ val=String(val||'').trim(); if(!val) return; const list=getConsumos(); const low=val.toLowerCase(); if(!list.some(x=>x.toLowerCase()===low) && !CONSUMO_PRESETS.some(x=>x.toLowerCase()===low)){ list.unshift(val); try{ localStorage.setItem('bio:consumos',JSON.stringify(list.slice(0,60))); }catch{} } }
+function consumoDatalistHtml(){ const opts=CONSUMO_PRESETS.concat(getConsumos()); return `<datalist id="consumoList">${opts.map(o=>'<option value="'+esc(o)+'">').join('')}</datalist>`; }
 
 // ── Estado del KPI (semáforo) ──
 function kpiEstado(valor,def){
@@ -430,14 +438,14 @@ function applyRoleUI(){
 //  Guarda SIEMPRE en el equipo; sube/baja de Supabase cuando hay red.
 //  Merge por id: gana el ts más nuevo. Los pendientes se suben al reconectar.
 // ══════════════════════════════════════════════════════════
-function cliRow(c){ return { id:c.id, nombre:c.nombre||'', contacto:c.contacto||'', tel:c.tel||'', email:c.email||'', ubicacion:c.ubicacion||'', obs:c.obs||'', ts:c.ts }; }
-function rowCli(r){ return { id:r.id, nombre:r.nombre||'', contacto:r.contacto||'', tel:r.tel||'', email:r.email||'', ubicacion:r.ubicacion||'', obs:r.obs||'', ts:r.ts }; }
+function cliRow(c){ return { id:c.id, nombre:c.nombre||'', ruc:c.ruc||'', direccion:c.direccion||'', contacto:c.contacto||'', tel:c.tel||'', email:c.email||'', ubicacion:c.ubicacion||'', obs:c.obs||'', ts:c.ts }; }
+function rowCli(r){ return { id:r.id, nombre:r.nombre||'', ruc:r.ruc||'', direccion:r.direccion||'', contacto:r.contacto||'', tel:r.tel||'', email:r.email||'', ubicacion:r.ubicacion||'', obs:r.obs||'', ts:r.ts }; }
 function estRow(e){ return { id:e.id, cliente_id:e.cliente_id||'', nombre:e.nombre||'', zona:e.zona||'', hato:e.hato||[], lotes:e.lotes||[], obs:e.obs||'', ts:e.ts }; }
 function rowEst(r){ const p=x=>typeof x==='string'?(()=>{try{return JSON.parse(x)}catch{return[]}})():(x||[]); return { id:r.id, cliente_id:r.cliente_id||'', nombre:r.nombre||'', zona:r.zona||'', hato:p(r.hato), lotes:p(r.lotes), obs:r.obs||'', ts:r.ts }; }
 function visRow(v){ return { id:v.id, cliente_id:v.cliente_id||'', estancia_id:v.estancia_id||'', fecha:v.fecha||null, tecnico:v.tecnico||'', evaluaciones:(v.evaluaciones||visitaEvals(v)), diagnostico:v.diagnostico||'', recomendacion:v.recomendacion||'', proxima:v.proxima||null, ts:v.ts }; }
 function rowVis(r){ const p=x=>typeof x==='string'?(()=>{try{return JSON.parse(x)}catch{return[]}})():(x||[]); return { id:r.id, cliente_id:r.cliente_id||'', estancia_id:r.estancia_id||'', fecha:r.fecha||'', tecnico:r.tecnico||'', evaluaciones:p(r.evaluaciones), diagnostico:r.diagnostico||'', recomendacion:r.recomendacion||'', proxima:r.proxima||'', ts:r.ts }; }
 const SYNC_DEFS = {
-  clientes:{ get:getClientes, save:saveClientes, table:'clientes', toRow:cliRow, fromRow:rowCli },
+  clientes:{ get:getClientes, save:saveClientes, table:'clientes', toRow:cliRow, fromRow:rowCli, toRowSafe:(c)=>{ const r=cliRow(c); delete r.ruc; delete r.direccion; return r; } },
   estancias:{ get:getEstancias, save:saveEstancias, table:'estancias', toRow:estRow, fromRow:rowEst },
   visitas:{ get:getVisitas, save:saveVisitas, table:'visitas', toRow:visRow, fromRow:rowVis },
 };
@@ -445,7 +453,11 @@ let syncTimer=null;
 async function cloudPush(name,obj){
   if(!AUTH_ON||!obj) return;
   const d=SYNC_DEFS[name];
-  try{ const r=await sb.upsert(d.table, d.toRow(obj), 'id'); if(Array.isArray(r)){ d.save(d.get().map(x=>x.id===obj.id?{...x,pending:false}:x)); } }catch(e){}
+  try{
+    let r=await sb.upsert(d.table, d.toRow(obj), 'id');
+    if(!Array.isArray(r) && r && (r.code||r.message) && d.toRowSafe){ r=await sb.upsert(d.table, d.toRowSafe(obj), 'id'); }  // reintento sin columnas nuevas (ej. ruc/direccion antes del ALTER)
+    if(Array.isArray(r)){ d.save(d.get().map(x=>x.id===obj.id?{...x,pending:false}:x)); }
+  }catch(e){}
 }
 async function cloudDelete(name,id){ if(!AUTH_ON) return; try{ await sb.del(SYNC_DEFS[name].table,{id}); }catch(e){} }
 async function cloudPull(name){
@@ -481,7 +493,12 @@ function showScreen(id,titulo,sub,back){
 }
 function goHome(){ curCliente=null; editVisitaId=null; showScreen('sHome','BioInnova','Visitas técnicas a campo',false); renderHome(); applyRoleUI(); }
 function openClientes(){ showScreen('sClientes','Clientes','Fichas y estancias',true); renderClientes(); }
-function openHistorial(){ showScreen('sHistorial','Historial','Todas las visitas',true); const sel=gs('hFiltroCat'); sel.innerHTML='<option value="">Todas las categorías</option>'+CATEGORIAS.map(c=>`<option>${c}</option>`).join(''); renderHistorial(); }
+function openHistorial(){ showScreen('sHistorial','Historial','Todas las visitas',true);
+  gs('hFiltroCat').innerHTML='<option value="">Todas las categorías</option>'+CATEGORIAS.map(c=>`<option>${c}</option>`).join('');
+  const tecs=[...new Set(getVisitas().map(v=>v.tecnico||'Sin técnico'))].sort((a,b)=>a.localeCompare(b));
+  gs('hFiltroTec').innerHTML='<option value="">Todos los técnicos</option>'+tecs.map(t=>`<option>${esc(t)}</option>`).join('');
+  renderHistorial();
+}
 
 // ── HOME ──
 function renderHome(){
@@ -521,8 +538,9 @@ function clienteModal(id){
   const c=id?clienteById(id):null;
   gs('modalBox').innerHTML=`<h3>${c?'Editar':'Nuevo'} cliente</h3>
     <label class="fl">Nombre / Razón social</label><input id="mNombre" value="${esc(c&&c.nombre)}" placeholder="Ej: Estancia La Rosita S.A.">
-    <label class="fl">Contacto</label><input id="mContacto" value="${esc(c&&c.contacto)}" placeholder="Nombre de la persona">
+    <div class="row2"><div><label class="fl">RUC</label><input id="mRuc" value="${esc(c&&c.ruc)}" placeholder="Ej: 80012345-6"></div><div><label class="fl">Contacto</label><input id="mContacto" value="${esc(c&&c.contacto)}" placeholder="Persona"></div></div>
     <div class="row2"><div><label class="fl">Teléfono</label><input id="mTel" value="${esc(c&&c.tel)}"></div><div><label class="fl">Email</label><input id="mEmail" value="${esc(c&&c.email)}"></div></div>
+    <label class="fl">Dirección (para la factura)</label><input id="mDireccion" value="${esc(c&&c.direccion)}" placeholder="Calle, ciudad…">
     <label class="fl">Zona / Ubicación</label><input id="mUbic" value="${esc(c&&c.ubicacion)}" placeholder="Ej: Chaco, Concepción…">
     <label class="fl">Observaciones</label><textarea id="mObs">${esc(c&&c.obs)}</textarea>
     <div class="sect-t" style="margin-top:14px">🏡 Estancias</div>
@@ -550,7 +568,7 @@ function guardarCliente(id){
   if(!canEdit()){ showToast('Sin permiso'); return; }
   const nombre=gs('mNombre').value.trim(); if(!nombre){ showToast('Ingresá el nombre'); return; }
   let cl=getClientes(); let c=id?cl.find(x=>x.id===id):null;
-  const data={nombre,contacto:gs('mContacto').value.trim(),tel:gs('mTel').value.trim(),email:gs('mEmail').value.trim(),ubicacion:gs('mUbic').value.trim(),obs:gs('mObs').value.trim()};
+  const data={nombre,ruc:gs('mRuc').value.trim(),direccion:gs('mDireccion').value.trim(),contacto:gs('mContacto').value.trim(),tel:gs('mTel').value.trim(),email:gs('mEmail').value.trim(),ubicacion:gs('mUbic').value.trim(),obs:gs('mObs').value.trim()};
   if(c){ Object.assign(c,data); c.ts=new Date().toISOString(); c.pending=true; } else { cl.push({id:'CL-'+Date.now(),...data,ts:new Date().toISOString(),pending:true}); }
   let openId=id;
   if(!c){ openId=cl[cl.length-1].id; }
@@ -587,7 +605,7 @@ function abrirCliente(id){
   gs('estBtnAgregar').style.display=ed?'':'none';
   gs('btnVisitaCliente').style.display=ed?'':'none';
   gs('cliInfo').innerHTML=`<div style="display:flex;justify-content:space-between;align-items:start"><div><div style="font-size:16px;font-weight:700">${esc(c.nombre)}</div>
-    <div style="font-size:12px;color:var(--gray-600);margin-top:3px">${c.contacto?'👤 '+esc(c.contacto)+'<br>':''}${c.tel?'📞 '+esc(c.tel)+'  ':''}${c.email?'✉ '+esc(c.email):''}${c.ubicacion?'<br>📍 '+esc(c.ubicacion):''}</div>
+    <div style="font-size:12px;color:var(--gray-600);margin-top:3px">${c.ruc?'🧾 RUC '+esc(c.ruc)+'<br>':''}${c.contacto?'👤 '+esc(c.contacto)+'<br>':''}${c.tel?'📞 '+esc(c.tel)+'  ':''}${c.email?'✉ '+esc(c.email):''}${c.direccion?'<br>🏠 '+esc(c.direccion):''}${c.ubicacion?'<br>📍 '+esc(c.ubicacion):''}</div>
     ${c.obs?'<div style="font-size:12px;color:var(--gray-500);margin-top:5px">'+esc(c.obs)+'</div>':''}</div>
     ${ed?`<span style="color:var(--green);cursor:pointer;font-size:13px;font-weight:600" onclick="clienteModal('${c.id}')">✎ Editar</span>`:''}</div>`;
   const ests=estanciasDe(id);
@@ -677,7 +695,7 @@ function visitaClienteChange(){
   renderEvals();
 }
 // ── Bloques de evaluación (categoría + lote) ──
-function renderEvals(){ const wrap=gs('evalsWrap'); if(!wrap) return; wrap.innerHTML=_evals.map((ev,i)=>evalBlockHtml(ev,i)).join(''); }
+function renderEvals(){ const wrap=gs('evalsWrap'); if(!wrap) return; wrap.innerHTML=consumoDatalistHtml()+_evals.map((ev,i)=>evalBlockHtml(ev,i)).join(''); }
 function evalBlockHtml(ev,i){
   const cat=ev.categoria||CATEGORIAS[0];
   const est=estanciaById(gs('vEstancia').value);
@@ -709,8 +727,9 @@ function evalBlockHtml(ev,i){
       <select id="ev${i}_prod" onchange="evalProdChange(${i})">${prodOpts}</select>
       <div class="row2">
         <div><label class="fl">Presentación</label><input type="text" id="ev${i}_pres" value="${esc(ev.presentacion)}" placeholder="—"></div>
-        <div><label class="fl">Consumo observado</label><input type="text" id="ev${i}_cons" value="${esc(ev.consumo)}" placeholder="ej: 2,2 % PV"></div>
+        <div><label class="fl">Consumo observado</label><input type="text" id="ev${i}_cons" list="consumoList" value="${esc(ev.consumo)}" placeholder="elegí o escribí…" autocomplete="off"></div>
       </div>
+      ${cat==='Terminación'?`<label class="fl">Precio del kg de carne <span style="color:var(--gray-400);font-weight:400">(Gs — producto del cliente, para costo/beneficio)</span></label><input type="number" id="ev${i}_precioc" inputmode="numeric" value="${ev.precio_kg_carne!=null?ev.precio_kg_carne:''}" placeholder="ej: 12000">`:''}
       <div style="font-size:12px;font-weight:700;color:var(--gray-700);margin:10px 0 2px">KPIs — ${esc(cat)}</div>
       ${kpisHtml}
       <label class="fl">Comentario / diagnóstico de este lote <span style="color:var(--gray-400);font-weight:400">(opcional)</span></label>
@@ -729,6 +748,7 @@ function syncEvals(){
       consumo: gs('ev'+i+'_cons')?gs('ev'+i+'_cons').value:ev.consumo,
       dias: gs('ev'+i+'_dias')?gs('ev'+i+'_dias').value:ev.dias,
       animales: gs('ev'+i+'_anim')?gs('ev'+i+'_anim').value:ev.animales,
+      precio_kg_carne: gs('ev'+i+'_precioc')?gs('ev'+i+'_precioc').value:ev.precio_kg_carne,
       kpis, comentario: gs('ev'+i+'_com')?gs('ev'+i+'_com').value:ev.comentario };
   });
 }
@@ -749,8 +769,9 @@ function guardarVisita(imprimir){
   const evaluaciones=_evals.map(ev=>{
     const cat=ev.categoria;
     const kpis=(KPIS[cat]||[]).map((d,j)=>{ const val=String((ev.kpis&&ev.kpis[j]!=null)?ev.kpis[j]:'').trim(); return {k:d.k,u:d.u,min:d.min,max:d.max,valor:val,estado:kpiEstado(val,d).rep}; });
-    return { categoria:cat, lote:(ev.lote||''), producto:(ev.producto||''), presentacion:String(ev.presentacion||'').trim(), consumo:String(ev.consumo||'').trim(), dias_sistema:num(ev.dias), n_animales:num(ev.animales), kpis, comentario:String(ev.comentario||'').trim() };
-  }).filter(ev=> ev.lote || ev.producto || ev.n_animales!=null || ev.comentario || ev.kpis.some(k=>k.valor));
+    const consumo=String(ev.consumo||'').trim(); addConsumo(consumo);
+    return { categoria:cat, lote:(ev.lote||''), producto:(ev.producto||''), presentacion:String(ev.presentacion||'').trim(), consumo, dias_sistema:num(ev.dias), n_animales:num(ev.animales), precio_kg_carne:(cat==='Terminación'?num(ev.precio_kg_carne):null), kpis, comentario:String(ev.comentario||'').trim() };
+  }).filter(ev=> ev.lote || ev.producto || ev.n_animales!=null || ev.comentario || ev.precio_kg_carne!=null || ev.kpis.some(k=>k.valor));
   if(!evaluaciones.length){ showToast('Cargá al menos una categoría/lote con datos'); return; }
   const estId=gs('vEstancia').value||'';
   const v={
@@ -780,6 +801,7 @@ function verVisita(id){
     return `<div style="margin-top:10px;border-top:1px solid var(--gray-200);padding-top:8px">
       <div style="font-size:12px;font-weight:700"><span class="chip ${catClass(ev.categoria)}">${esc(ev.categoria)}</span>${ev.lote?' Lote '+esc(ev.lote):''} <span style="color:var(--gray-400);font-weight:400">· ${ev.n_animales||0} an.${ev.producto?' · '+esc(ev.producto):''}</span></div>
       <table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:4px"><tbody>${filas}</tbody></table>
+      ${gananciaDiariaHtml(ev)}
       ${ev.comentario?'<div style="font-size:11px;color:var(--gray-600);margin-top:3px">💬 '+esc(ev.comentario)+'</div>':''}</div>`;
   }).join('');
   gs('modalBox').innerHTML=`<h3>Visita — ${esc(c?c.nombre:'')}</h3>
@@ -794,6 +816,15 @@ function verVisita(id){
 }
 function unidadCorta(u){ return /escala|0–|1–/.test(u||'')?'':(u||''); }
 function semHtmlMini(rep){ const cls= rep&&rep.includes('rango')?'sem-green':(rep&&rep!=='—'?'sem-amber':'sem-gray'); return `<span class="sem ${cls}">${esc(rep||'—')}</span>`; }
+// Terminación: precio del kg de carne + valor estimado de la ganancia diaria (GMD × precio)
+function gananciaDiariaHtml(ev){
+  if(!ev || ev.categoria!=='Terminación' || ev.precio_kg_carne==null || ev.precio_kg_carne==='') return '';
+  const precio=num(ev.precio_kg_carne); if(precio==null) return '';
+  const g=(ev.kpis||[]).find(k=>k.k==='GMD'); const gmd=g?num(g.valor):null;
+  let s='💰 Precio carne: Gs '+precio.toLocaleString('es-PY')+'/kg';
+  if(gmd!=null) s+=' · Valor de la ganancia diaria ≈ <b>Gs '+Math.round(gmd*precio).toLocaleString('es-PY')+'/día</b> ('+gmd+' kg × precio)';
+  return '<div style="font-size:11px;color:var(--green-d);background:var(--green-lt);border-radius:6px;padding:4px 8px;margin-top:4px">'+s+'</div>';
+}
 function editarVisita(id){ if(!canEdit()){ showToast('Sin permiso'); return; } const v=getVisitas().find(x=>x.id===id); if(!v)return; cerrarModal(); editVisitaId=id; abrirFormVisita(v.cliente_id);
   gs('vCliente').value=v.cliente_id; visitaClienteChange(); gs('vEstancia').value=v.estancia_id||'';
   gs('vFecha').value=v.fecha; gs('vTecnico').value=v.tecnico||'';
@@ -801,7 +832,7 @@ function editarVisita(id){ if(!canEdit()){ showToast('Sin permiso'); return; } c
   _evals = visitaEvals(v).map(ev=>{
     const defs=KPIS[ev.categoria]||[]; const kpisObj={};
     (ev.kpis||[]).forEach(k=>{ const j=defs.findIndex(d=>d.k===k.k); if(j>=0) kpisObj[j]=k.valor||''; });
-    return { categoria:ev.categoria, lote:ev.lote||'', producto:ev.producto||'', presentacion:ev.presentacion||'', consumo:ev.consumo||'', dias:(ev.dias_sistema!=null?ev.dias_sistema:''), animales:(ev.n_animales!=null?ev.n_animales:''), kpis:kpisObj, comentario:ev.comentario||'' };
+    return { categoria:ev.categoria, lote:ev.lote||'', producto:ev.producto||'', presentacion:ev.presentacion||'', consumo:ev.consumo||'', dias:(ev.dias_sistema!=null?ev.dias_sistema:''), animales:(ev.n_animales!=null?ev.n_animales:''), precio_kg_carne:(ev.precio_kg_carne!=null?ev.precio_kg_carne:''), kpis:kpisObj, comentario:ev.comentario||'' };
   });
   if(!_evals.length) _evals=[nuevoEval()];
   renderEvals();
@@ -812,11 +843,19 @@ function borrarVisita(id){ if(!canEdit()){ showToast('Sin permiso'); return; } i
 // ── HISTORIAL ──
 function renderHistorial(){
   const cat=gs('hFiltroCat').value, q=(gs('hBuscar').value||'').trim().toLowerCase();
+  const tec=gs('hFiltroTec')?gs('hFiltroTec').value:'';
   let vs=getVisitas().slice().sort((a,b)=>String(b.fecha||'').localeCompare(String(a.fecha||'')));
   if(cat) vs=vs.filter(v=>visitaEvals(v).some(ev=>ev.categoria===cat));
+  if(tec) vs=vs.filter(v=>(v.tecnico||'Sin técnico')===tec);
   if(q) vs=vs.filter(v=>{ const c=clienteById(v.cliente_id); return String(c&&c.nombre||'').toLowerCase().includes(q); });
   gs('hCount').textContent=vs.length?vs.length+' visitas':'';
-  gs('histList').innerHTML = vs.length? vs.map(v=>visitaLi(v)).join('') : '<div class="empty">Sin visitas.</div>';
+  if(!vs.length){ gs('histList').innerHTML='<div class="empty">Sin visitas.</div>'; return; }
+  // separadas por técnico comercial
+  const groups={}; vs.forEach(v=>{ const t=(v.tecnico||'Sin técnico'); (groups[t]=groups[t]||[]).push(v); });
+  gs('histList').innerHTML = Object.keys(groups).sort((a,b)=>a.localeCompare(b)).map(t=>
+    `<div style="padding:7px 14px;font-size:11px;font-weight:700;color:var(--green-d);background:var(--green-lt);text-transform:uppercase;letter-spacing:.03em">👤 ${esc(t)} · ${groups[t].length} visita${groups[t].length!==1?'s':''}</div>`
+    + groups[t].map(v=>visitaLi(v)).join('')
+  ).join('');
 }
 
 // ── USUARIOS (gerente) ──
@@ -879,6 +918,7 @@ function informePDF(id){
       <table class="datos"><tr><td class="k">Nº de animales</td><td class="v">${ev.n_animales!=null?ev.n_animales:'—'}</td><td class="k">Días en sistema</td><td class="v">${ev.dias_sistema!=null?ev.dias_sistema:'—'}</td></tr>
       <tr><td class="k">Producto</td><td class="v">${esc(ev.producto||'—')}</td><td class="k">Consumo</td><td class="v">${esc(ev.consumo||'—')}</td></tr></table>
       <table><thead><tr><th>KPI</th><th class="c">Unidad</th><th class="c">Obj. Mín</th><th class="c">Obj. Máx</th><th class="c">Medido</th><th class="c">Estado</th></tr></thead><tbody>${filas}</tbody></table>
+      ${(()=>{ const h=gananciaDiariaHtml(ev); return h? '<div class="diag" style="margin-top:6px;border-color:#2f7d3b">'+h.replace(/<div[^>]*>/,'').replace(/<\/div>$/,'')+'</div>':''; })()}
       ${ev.comentario?`<div class="diag" style="margin-top:6px">${esc(ev.comentario)}</div>`:''}`;
   }).join('');
   const w=window.open('','_blank');
@@ -901,6 +941,7 @@ function informePDF(id){
     <div class="top"><img src="${location.origin}${location.pathname.replace(/[^/]*$/,'')}logo.jpg" alt="BioInnova"><p>INFORME TÉCNICO A CAMPO · Nutrición de bovinos de corte</p></div>
     <h2>1. Datos de la visita</h2>
     <table class="datos"><tr><td class="k">Cliente</td><td class="v">${esc(c.nombre||'—')}</td><td class="k">Estancia</td><td class="v">${esc(e.nombre||'—')}</td></tr>
+      ${(c.ruc||c.direccion)?`<tr><td class="k">RUC</td><td class="v">${esc(c.ruc||'—')}</td><td class="k">Dirección</td><td class="v">${esc(c.direccion||'—')}</td></tr>`:''}
       <tr><td class="k">Fecha de visita</td><td class="v">${fmtFecha(v.fecha)}</td><td class="k">Técnico comercial</td><td class="v">${esc(v.tecnico||'—')}</td></tr></table>
     <h2>2. Evaluación por categoría y lote</h2>
     ${secciones}
