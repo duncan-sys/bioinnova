@@ -848,6 +848,7 @@ function gananciaDiariaHtml(ev){
   if(ingresoDia!=null) rows.push('Ingreso/día: <b>'+g(ingresoDia)+'</b> <span style="color:#718096">('+nf(gmd)+' kg GMD × '+nf(rend)+'% carcasa × '+g(precio)+')</span>');
   else if(gmd!=null&&precio!=null&&rend==null) rows.push('<span style="color:#c8820a">Ingreso/día: falta el KPI Rendimiento de carcasa para calcularlo</span>');
   if(margen!=null) rows.push('<b style="color:'+(margen>=0?'#255f2e':'#c53030')+'">Margen diario: '+g(margen)+'/día</b>');
+  if(margen!=null && costoDia>0) rows.push('<b style="color:'+(margen>=0?'#255f2e':'#c53030')+'">Margen sobre el costo del producto: '+Math.round(margen/costoDia*100)+'%</b> <span style="color:#718096">(Gs '+nf(margen/costoDia)+' de margen por cada Gs 1 de producto)</span>');
   return '<div style="font-size:11px;color:var(--green-d);background:var(--green-lt);border-radius:6px;padding:6px 8px;margin-top:4px">💰 '+rows.join('<br>')+'</div>';
 }
 function editarVisita(id){ if(!canEdit()){ showToast('Sin permiso'); return; } const v=getVisitas().find(x=>x.id===id); if(!v)return; cerrarModal(); editVisitaId=id; abrirFormVisita(v.cliente_id);
