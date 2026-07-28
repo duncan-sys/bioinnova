@@ -581,9 +581,12 @@ const ROL_MODULOS = {
   planta:     ['inventario','caja'],
   lectura:    ['clientes','historial','crm']
 };
-function puedeVer(mod){ if(!currentRol) return true; return (ROL_MODULOS[currentRol]||[]).includes(mod); }
+function puedeVer(mod){ if(!currentRol) return true; if(currentAccesos&&Object.prototype.hasOwnProperty.call(currentAccesos,mod)) return !!currentAccesos[mod]; return (ROL_MODULOS[currentRol]||[]).includes(mod); }
+// Acceso efectivo de un usuario dado (rol + overrides) — para el cuadro de Usuarios
+function accesoEfectivo(rol, accesos, mod){ if(accesos&&Object.prototype.hasOwnProperty.call(accesos,mod)) return !!accesos[mod]; return (ROL_MODULOS[rol]||[]).includes(mod); }
+const MODULOS_LBL=[['visita','Visitas'],['clientes','Clientes'],['historial','Historial'],['crm','CRM'],['viaticos','Viáticos'],['ot','OT'],['formulas','Formulaciones'],['inventario','Inventario'],['caja','Caja chica'],['usuarios','Usuarios']];
 function esPlanta(){ return puedeVer('ot'); }   // compat (usado por funciones de OT)
-let currentUser=null, currentRol=null;
+let currentUser=null, currentRol=null, currentAccesos=null;   // accesos = overrides por-usuario {mod:true|false}
 function rolLabel(r){ return (ROLES[r]&&ROLES[r].label)||r; }
 function canEdit(){ if(!currentRol) return true; return !!(ROLES[currentRol]&&ROLES[currentRol].editar); }   // sin login (modo local) = acceso total
 function esGerente(){ return !currentRol || currentRol==='gerente'; }
@@ -601,12 +604,12 @@ async function doLogin(){
     authToken=data.access_token;
     const perfil=await fetchPerfil(data.user.id,email);
     if(perfil.blocked) throw new Error('Tu usuario está desactivado — contactá al gerente');
-    setSession({token:data.access_token,refresh:data.refresh_token,user:{id:data.user.id,email},rol:perfil.rol,nombre:perfil.nombre});
+    setSession({token:data.access_token,refresh:data.refresh_token,user:{id:data.user.id,email},rol:perfil.rol,nombre:perfil.nombre,accesos:perfil.accesos||null});
     gs('loginLoading').style.display='none'; gs('loginPass').value=''; applyAuth();
   }catch(e){ gs('loginLoading').style.display='none'; err.textContent=e.message||'No se pudo iniciar sesión'; err.style.display='block'; }
 }
 async function fetchPerfil(id,email){
-  try{ const rows=await sb.query('perfiles',{id}); if(rows&&rows.length){ if(rows[0].activo===false) return {blocked:true}; return {rol:rows[0].rol||'lectura',nombre:rows[0].nombre||email}; }
+  try{ const rows=await sb.query('perfiles',{id}); if(rows&&rows.length){ if(rows[0].activo===false) return {blocked:true}; let acc=rows[0].accesos; if(typeof acc==='string'){ try{ acc=JSON.parse(acc); }catch{ acc=null; } } return {rol:rows[0].rol||'lectura',nombre:rows[0].nombre||email,accesos:acc||null}; }
     try{ await sb.insert('perfiles',{id,email,nombre:email,rol:'lectura'}); }catch(e){} }catch(e){}
   return {rol:'lectura',nombre:email};
 }
@@ -614,7 +617,7 @@ function applyAuth(){
   if(!AUTH_ON){ const ov=gs('loginOverlay'); if(ov) ov.style.display='none'; goHome(); return; }
   const s=getSession();
   if(!s||!s.token){ gs('loginOverlay').style.display='flex'; return; }
-  currentUser=s.user; currentRol=s.rol||'lectura'; authToken=s.token;
+  currentUser=s.user; currentRol=s.rol||'lectura'; currentAccesos=s.accesos||null; authToken=s.token;
   gs('loginOverlay').style.display='none';
   const chip=gs('userChip'); if(chip){ chip.textContent='👤 '+(s.nombre||s.user.email)+' · '+rolLabel(currentRol); chip.style.display=''; }
   const lo=gs('logoutBtn'); if(lo) lo.style.display='';
@@ -1198,6 +1201,16 @@ function openUsuarios(){
   if(currentRol!=='gerente'){ showToast('Solo el gerente gestiona usuarios'); return; }
   showScreen('sUsuarios','Usuarios','Accesos y roles',true); renderUsuarios();
 }
+let _usrCache={}, _usrAccOpen=new Set();
+function toggleAcc(id){ if(_usrAccOpen.has(id)) _usrAccOpen.delete(id); else _usrAccOpen.add(id); const p=gs('usrAcc_'+id); if(p) p.style.display=_usrAccOpen.has(id)?'block':'none'; }
+async function setAcceso(id, mod, checked){
+  const u=_usrCache[id]; if(!u) return; const acc=Object.assign({}, u.accesos||{});
+  const def=(ROL_MODULOS[u.rol]||[]).includes(mod);
+  if(checked===def) delete acc[mod]; else acc[mod]=checked;
+  u.accesos=acc;
+  try{ await sb.update('perfiles',{id},{accesos:acc}); showToast('✓ Acceso actualizado'); }catch(e){ showToast('No se pudo guardar (¿falta la columna accesos?)'); }
+  renderUsuarios();
+}
 async function renderUsuarios(){
   const list=gs('usrList');
   try{
@@ -1205,8 +1218,12 @@ async function renderUsuarios(){
     if(!Array.isArray(rows)){ list.innerHTML='<div class="empty" style="color:var(--red)">No se pudo leer (¿falta la tabla perfiles?)</div>'; return; }
     gs('usrCount').textContent=rows.length+' usuarios';
     if(!rows.length){ list.innerHTML='<div class="empty">Sin usuarios aún</div>'; return; }
+    _usrCache={};
     list.innerHTML=rows.slice().sort((a,b)=>String(a.nombre||'').localeCompare(String(b.nombre||''))).map(u=>{
+      if(typeof u.accesos==='string'){ try{ u.accesos=JSON.parse(u.accesos); }catch{ u.accesos=null; } }
+      _usrCache[u.id]=u;
       const activo=u.activo!==false; const nom=String(u.nombre||'').replace(/'/g,"\\'");
+      const accGrid=MODULOS_LBL.map(([m,lbl])=>{ const eff=accesoEfectivo(u.rol,u.accesos,m); const ov=u.accesos&&Object.prototype.hasOwnProperty.call(u.accesos,m); return `<label style="display:flex;align-items:center;gap:8px;padding:5px 2px;font-size:12px;cursor:pointer;border-bottom:1px solid var(--gray-200)"><input type="checkbox" ${eff?'checked':''} onchange="setAcceso('${u.id}','${m}',this.checked)" style="width:16px;height:16px"> ${lbl}${ov?' <span style="color:var(--green)" title="cambio manual">●</span>':''}</label>`; }).join('');
       return `<div style="padding:10px 14px;border-bottom:1px solid var(--gray-200);${activo?'':'opacity:.55'}">
         <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start">
           <div style="min-width:0"><div class="li-t">${esc(u.nombre||'(sin nombre)')} ${activo?'':'<span style="font-size:9px;color:var(--red);font-weight:700">● INACTIVO</span>'}</div><div class="li-s">${esc(u.email||'')}</div></div>
@@ -1216,6 +1233,11 @@ async function renderUsuarios(){
           <button class="btn btn-sec" style="flex:1;font-size:11px;padding:6px" onclick="editarNombreUsuario('${u.id}','${nom}')">✏ Nombre</button>
           <button class="btn" style="flex:1;font-size:11px;padding:6px;background:${activo?'var(--amber-lt)':'var(--green-lt)'};color:${activo?'var(--amber)':'var(--green)'}" onclick="toggleActivoUsuario('${u.id}',${activo?'false':'true'})">${activo?'⏸ Desactivar':'▶ Activar'}</button>
           <button class="btn" style="font-size:11px;padding:6px 10px;background:var(--red-lt);color:var(--red)" onclick="eliminarUsuario('${u.id}','${nom}')">🗑</button>
+        </div>
+        <button class="btn btn-sec" style="width:100%;font-size:11px;padding:6px;margin-top:6px" onclick="toggleAcc('${u.id}')">⚙ Accesos manuales</button>
+        <div id="usrAcc_${u.id}" style="display:${_usrAccOpen.has(u.id)?'block':'none'};margin-top:8px;background:var(--gray-100);border-radius:8px;padding:8px 10px">
+          <div style="font-size:10px;color:var(--gray-500);margin-bottom:4px">Rol <b>${rolLabel(u.rol)}</b>. Marcá para dar acceso, desmarcá para quitar. El ● indica un cambio manual sobre el rol. Aplica cuando el usuario vuelve a iniciar sesión.</div>
+          ${accGrid}
         </div></div>`;
     }).join('');
   }catch(e){ list.innerHTML='<div class="empty" style="color:var(--red)">Error al cargar usuarios</div>'; }
