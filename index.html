@@ -221,6 +221,8 @@ textarea{resize:vertical;min-height:66px}
           <div><label class="fl">Comercial (opcional)</label><input type="text" id="otComercial" placeholder="Nombre"></div>
         </div>
         <label class="fl">Fecha</label><input type="date" id="otFecha">
+        <label class="fl" style="display:flex;gap:8px;align-items:center;margin-top:12px;font-weight:600;cursor:pointer"><input type="checkbox" id="otSecu" onchange="otSecuToggle()" style="width:17px;height:17px"> ➕ Agregar secuestrante (Zeolítica)</label>
+        <div id="otSecuRow" style="display:none"><label class="fl">Nivel (% sobre la producción)</label><input type="number" id="otSecuPct" value="0.3" step="0.1" inputmode="decimal" oninput="otRecalc()" style="max-width:150px"></div>
       </div>
     </div>
     <div class="card"><div class="card-h"><span>Insumos necesarios</span><span id="otTotalKg" style="font-weight:500;color:var(--gray-400)"></span></div><div id="otInsumos"></div></div>
@@ -453,7 +455,10 @@ const PL_INSUMOS=[
 {c:'INS049',n:'Prymix Bio Leche',prov:'Gilgal',ck:3.29},
 {c:'BIO25-014',n:'CONFIPESO 4 O',prov:'Bioinnova S.A.',ck:0},
 {c:'INS071',n:'Premix confipeso 4 O',prov:'GILGAL',ck:1.84},
+{c:'INS070',n:'Zeolítica',prov:'',ck:0},
 ];
+// Secuestrante temporal que se agrega POR ENCIMA de la fórmula (a las que llevan maíz)
+const SECU={c:'INS070',n:'Zeolítica',pct:0.3};
 const PL_FORMULAS=[
 {c:'BIOSAL02',n:'Bioinnova Cria 90 - 30 kg',kg:30,ins:[{c:'INS047',n:'Prymix Bio micromin',p:4.4,t:'p'},{c:'INS040',n:'Calcareo',p:20.6,t:'p'},{c:'INS007',n:'Sal entrefina yodada animal',p:25,t:'p'},{c:'INS037',n:'Fosfato Dicalcico',p:25,t:'p'},{c:'INS056',n:'Fosfato Dicalcico 18%',p:25,t:'p'},{c:'INS041',n:'Bolsa laminada 49x75 - Linea Mineral',p:0,t:'b'},{c:'INS059',n:'Etiqueta Blanca 10x20',p:0,t:'b'},{c:'INS019',n:'Mano de obra',p:0,t:'m'}]},
 {c:'BIOSAL03',n:'Bioinnova Nutri 80 - 30 kg',kg:30,ins:[{c:'INS047',n:'Prymix Bio micromin',p:3.4,t:'p'},{c:'INS040',n:'Calcareo',p:26.7,t:'p'},{c:'INS007',n:'Sal entrefina yodada animal',p:25,t:'p'},{c:'INS037',n:'Fosfato Dicalcico',p:22.22,t:'p'},{c:'INS056',n:'Fosfato Dicalcico 18%',p:22.22,t:'p'},{c:'INS046',n:'Oxido de Magnesio 52',p:0.22,t:'p'},{c:'INS045',n:'Azufre pec 99%',p:0.24,t:'p'},{c:'INS041',n:'Bolsa laminada 49x75 impresa',p:0,t:'b'},{c:'INS065',n:'Etiqueta Verde 10x20',p:0,t:'b'},{c:'INS019',n:'Mano de obra',p:0,t:'m'}]},
@@ -1240,7 +1245,7 @@ function verFormula(gi){ const f=PL_FORMULAS[gi]; if(!f) return;
   gs('modal').classList.add('show');
 }
 // ══ PLANTA: Órdenes de Trabajo ══
-let editOTId=null;
+let editOTId=null, _otSecuTocado=false;
 function getOTs(){ return getArr('bio:ot'); }
 function saveOTs(a){ setArr('bio:ot',a); }
 function otBase(){ return Number(localStorage.getItem('bio:otbase'))||34; }
@@ -1259,12 +1264,29 @@ function nuevaOT(){ if(!esPlanta()){ showToast('Sin permiso'); return; }
   gs('otKg').value=''; gs('otBolsas').value=''; gs('otLote').value=''; gs('otCliente').value='';
   gs('otComercial').value=(getSession()&&getSession().nombre)||'';
   gs('otFecha').value=hoy(); gs('otNum').value=otNextNum(); gs('otInsumos').innerHTML=''; gs('otTotalKg').textContent='';
+  gs('otSecu').checked=false; gs('otSecuRow').style.display='none'; gs('otSecuPct').value=String(SECU.pct); _otSecuTocado=false;
   editOTId=null;
 }
 function nuevaOTde(gi){ nuevaOT(); gs('otProducto').value=gi; otRecalc(); }
+function formulaTieneMaiz(f){ return (f.ins||[]).some(i=>i.c==='INS001' || /ma[ií]z/i.test(i.n)); }
+// Cálculo de OT + secuestrante opcional (Zeolítica) por encima de la fórmula
+function otCalcularFull(f, kgProd, secuPct){
+  const base=otCalcular(f, kgProd);
+  if(!(secuPct>0)) return base;
+  const secu={ c:SECU.c, n:SECU.n, p:secuPct, t:'p', cant:Math.round(kgProd*(secuPct/100)*100)/100, secu:true };
+  const lineas=[]; let ins=false;
+  base.lineas.forEach(l=>{ if(!ins && l.t!=='p'){ lineas.push(secu); ins=true; } lineas.push(l); });
+  if(!ins) lineas.push(secu);
+  return { bolsas:base.bolsas, lineas };
+}
+function otSecuToggle(){ _otSecuTocado=true; gs('otSecuRow').style.display=gs('otSecu').checked?'':'none'; otRecalc(); }
 function otRecalc(){
   const idx=gs('otProducto').value; if(idx===''){ gs('otBolsas').value=''; gs('otInsumos').innerHTML=''; gs('otTotalKg').textContent=''; return; }
-  const f=PL_FORMULAS[Number(idx)]; const kg=num(gs('otKg').value)||0; const r=otCalcular(f, kg);
+  const f=PL_FORMULAS[Number(idx)]; const kg=num(gs('otKg').value)||0;
+  if(!_otSecuTocado) gs('otSecu').checked=formulaTieneMaiz(f);   // auto: fórmulas con maíz
+  gs('otSecuRow').style.display=gs('otSecu').checked?'':'none';
+  const secuPct=gs('otSecu').checked?(num(gs('otSecuPct').value)||0):0;
+  const r=otCalcularFull(f, kg, secuPct);
   gs('otBolsas').value=r.bolsas;
   if(!gs('otLote').value.trim()){ const pref=(f.c||f.n.slice(0,2)).toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,3); const d=new Date(); gs('otLote').value=pref+String(d.getMonth()+1).padStart(2,'0')+d.getFullYear()+String(gs('otNum').value).padStart(4,'0'); }
   const nf=n=>Number(n).toLocaleString('es-PY',{maximumFractionDigits:2});
@@ -1278,7 +1300,7 @@ function guardarOT(imprimir){
   if(!esPlanta()){ showToast('Sin permiso'); return; }
   const idx=gs('otProducto').value; if(idx===''){ showToast('Elegí el producto'); return; }
   const kg=num(gs('otKg').value); if(!kg){ showToast('Ingresá los kg a producir'); return; }
-  const f=PL_FORMULAS[Number(idx)]; const r=otCalcular(f, kg);
+  const f=PL_FORMULAS[Number(idx)]; const secuPct=gs('otSecu').checked?(num(gs('otSecuPct').value)||0):0; const r=otCalcularFull(f, kg, secuPct);
   const o={ id: editOTId||('OT-'+Date.now()), num: Number(gs('otNum').value)||otNextNum(),
     fecha:gs('otFecha').value||hoy(), producto_cod:f.c||'', producto_nom:f.n, kg_bolsa:plKgBolsa(f),
     kg, bolsas:r.bolsas, lote:gs('otLote').value.trim(), cliente:gs('otCliente').value.trim(), comercial:gs('otComercial').value.trim(),
@@ -1306,6 +1328,7 @@ function verOT(id){ const o=getOTs().find(x=>x.id===id); if(!o) return;
 function editarOT(id){ const o=getOTs().find(x=>x.id===id); if(!o)return; cerrarModal(); nuevaOT(); editOTId=id;
   const idx=PL_FORMULAS.findIndex(f=>(o.producto_cod&&f.c===o.producto_cod)||f.n===o.producto_nom); gs('otProducto').value=idx>=0?idx:'';
   gs('otKg').value=o.kg; gs('otNum').value=o.num; gs('otLote').value=o.lote||''; gs('otCliente').value=o.cliente||''; gs('otComercial').value=o.comercial||''; gs('otFecha').value=o.fecha;
+  const sl=(o.insumos||[]).find(l=>l.secu || l.c===SECU.c); _otSecuTocado=true; gs('otSecu').checked=!!sl; gs('otSecuRow').style.display=sl?'':'none'; gs('otSecuPct').value=sl?String(sl.p):String(SECU.pct);
   otRecalc(); showScreen('sOTNueva','Editar OT','',true);
 }
 function borrarOT(id){ if(!esPlanta())return; if(!confirm('¿Borrar esta OT?'))return;
