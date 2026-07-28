@@ -1409,7 +1409,7 @@ function lunesSemana(){ const d=new Date(); const off=(d.getDay()+6)%7; d.setDat
 function viernesSemana(){ const d=new Date(); const off=(d.getDay()+6)%7; d.setDate(d.getDate()-off+4); return d.toISOString().split('T')[0]; }
 function viatEstadoLbl(e){ return ({abierta:'● abierta',rendida:'● rendida',liquidada:'✓ liquidada'})[e]||e; }
 
-function openViaticos(){ if(!verViat()){ showToast('Sin permiso'); return; } _viatFCom=''; showScreen('sViaticos','Viáticos','Rendición de comerciales',true); renderViatList(); }
+function openViaticos(){ if(!verViat()){ showToast('Sin permiso'); return; } _viatFCom=''; showScreen('sViaticos','Viáticos','Rendición de comerciales',true); gs('btnNuevaRend').style.display=esGerente()?'':'none'; renderViatList(); }
 function misRend(){ const all=getRend(); if(esGerente()) return all; const nom=String(nombrePropio()).toLowerCase(); return all.filter(r=>String(r.comercial||'').toLowerCase()===nom); }
 function viatSetCom(c){ _viatFCom=c; renderViatList(); }
 function renderViatList(){
@@ -1423,18 +1423,26 @@ function renderViatList(){
   gs('viatList').innerHTML=rs.length? rs.map(r=>{ const tot=viatTotal(r), sal=viatSaldo(r);
     const salTxt=Math.abs(sal)<1?'saldo 0':(sal>0?'devuelve '+gsFmt(sal):'a acreditar '+gsFmt(-sal));
     return `<div class="li" onclick="viatAbrir('${r.id}')"><div style="min-width:0"><div class="li-t">${esc(r.comercial)} <span style="font-size:11px;color:var(--gray-400)">· ${viatEstadoLbl(r.estado)}</span></div><div class="li-s">${fmtFecha(r.desde)}–${fmtFecha(r.hasta)} · anticipo ${gsFmt(r.anticipo)} · gastó ${gsFmt(tot)}</div><div class="li-s" style="color:${sal<0?'var(--red)':'var(--gray-600)'}">${salTxt}</div></div><div class="li-chev">›</div></div>`;
-  }).join('') : '<div class="empty">Sin rendiciones. Tocá ＋ Nueva rendición.</div>';
+  }).join('') : (esGerente()?'<div class="empty">Sin rendiciones. Tocá ＋ Nueva rendición.</div>':'<div class="empty">Sin rendiciones a tu nombre. El gerente carga tu anticipo y después vos agregás los gastos.</div>');
 }
-function viatNueva(){ if(!verViat()) return; const esGer=esGerente(); const nom=nombrePropio();
+function viatNueva(){ if(!esGerente()){ showToast('Solo el gerente carga el anticipo'); return; }
   gs('modalBox').innerHTML=`<h3>Nueva rendición</h3>
-   <label class="fl">Comercial</label><input id="rvCom" value="${esc(nom)}" ${esGer?'placeholder="Nombre del comercial"':'readonly style="background:var(--gray-100)"'}>
+   <label class="fl">Comercial</label><input id="rvCom" list="rvComList" placeholder="Nombre del comercial" autocomplete="off"><datalist id="rvComList"></datalist>
+   <div style="font-size:10px;color:var(--gray-400);margin-top:-4px">El nombre debe coincidir con el del comercial en Usuarios, así lo ve en su celular.</div>
    <div class="row2"><div><label class="fl">Semana desde</label><input type="date" id="rvDesde" value="${lunesSemana()}"></div><div><label class="fl">hasta</label><input type="date" id="rvHasta" value="${viernesSemana()}"></div></div>
    <div class="row2"><div><label class="fl">Anticipo recibido (₲)</label><input type="number" id="rvAnt" inputmode="numeric" placeholder="0"></div><div><label class="fl">Fecha</label><input type="date" id="rvAntF" value="${hoy()}"></div></div>
    <label class="fl">Referencia de la transferencia <span style="color:var(--gray-400)">(opcional)</span></label><input id="rvAntRef" placeholder="N° o comprobante">
    <div class="row2" style="margin-top:12px"><button class="btn btn-sec" onclick="cerrarModal()">Cancelar</button><button class="btn btn-primary" onclick="viatCrear()">Crear</button></div>`;
-  gs('modal').classList.add('show');
+  gs('modal').classList.add('show'); fillComercialesDatalist();
 }
-function viatCrear(){ const com=(gs('rvCom').value||'').trim(); if(!com){ showToast('Poné el comercial'); return; }
+// Llena el datalist con los nombres de los comerciales (perfiles rol tecnico) + los ya usados
+async function fillComercialesDatalist(){
+  const dl=gs('rvComList'); if(!dl) return;
+  const nombres=new Set(getRend().map(r=>r.comercial).filter(Boolean));
+  try{ const rows=await sb.query('perfiles'); if(Array.isArray(rows)) rows.forEach(u=>{ if(u.rol==='tecnico'&&u.nombre) nombres.add(u.nombre); }); }catch(e){}
+  dl.innerHTML=[...nombres].sort().map(n=>`<option value="${esc(n)}">`).join('');
+}
+function viatCrear(){ if(!esGerente()){ showToast('Solo el gerente'); return; } const com=(gs('rvCom').value||'').trim(); if(!com){ showToast('Poné el comercial'); return; }
   const r={ id:'RV-'+Date.now(), comercial:com, desde:gs('rvDesde').value||hoy(), hasta:gs('rvHasta').value||hoy(),
     anticipo:num(gs('rvAnt').value)||0, anticipo_fecha:gs('rvAntF').value||hoy(), anticipo_ref:(gs('rvAntRef').value||'').trim(),
     gastos:[], estado:'abierta', liq_fecha:'', liq_ref:'', por:nombrePropio(), ts:new Date().toISOString(), pending:true };
@@ -1446,7 +1454,7 @@ function renderViatDet(){
   const tot=viatTotal(r), sal=viatSaldo(r); const editable=(r.estado!=='liquidada')&&verViatEdit(r);
   gs('viatHdr').innerHTML=`<div style="display:flex;justify-content:space-between;align-items:baseline"><div style="font-weight:700">${esc(r.comercial)}</div><div style="font-size:11px;color:${r.estado==='liquidada'?'var(--green)':'var(--gray-500)'}">${viatEstadoLbl(r.estado)}</div></div>
     <div style="font-size:12px;color:var(--gray-600);margin-top:2px">Semana ${fmtFecha(r.desde)} – ${fmtFecha(r.hasta)}</div>
-    <div style="font-size:12px;color:var(--gray-600);margin-top:4px">Anticipo <b>${gsFmt(r.anticipo)}</b> · ${fmtFecha(r.anticipo_fecha)}${r.anticipo_ref?' · '+esc(r.anticipo_ref):''} ${editable?`<span onclick="viatEditHdr()" style="color:var(--green);cursor:pointer">✎</span>`:''}</div>`;
+    <div style="font-size:12px;color:var(--gray-600);margin-top:4px">Anticipo <b>${gsFmt(r.anticipo)}</b> · ${fmtFecha(r.anticipo_fecha)}${r.anticipo_ref?' · '+esc(r.anticipo_ref):''} ${(esGerente()&&r.estado!=='liquidada')?`<span onclick="viatEditHdr()" style="color:var(--green);cursor:pointer">✎</span>`:''}</div>`;
   const gl=(r.gastos||[]).slice().sort((a,b)=>String(a.fecha).localeCompare(String(b.fecha)));
   gs('viatGCount').textContent=gl.length?gl.length+' gastos':'';
   gs('viatGList').innerHTML= gl.length? gl.map(g=>`<div class="li" style="cursor:${editable?'pointer':'default'}" ${editable?`onclick="viatGastoModal('${g.id}')"`:''}><div style="min-width:0"><div class="li-t">${esc(g.concepto||g.categoria||'Gasto')}</div><div class="li-s">${fmtFecha(g.fecha)} · ${esc(g.categoria||'')}${g.proveedor?' · '+esc(g.proveedor):''}${g.factura?' · Fact '+esc(g.factura):''}</div></div><div style="font-weight:700;flex-shrink:0">${gsFmt(g.monto)}</div></div>`).join('') : '<div class="empty">Sin gastos aún.</div>';
@@ -1460,7 +1468,7 @@ function renderViatDet(){
   if(verViatEdit(r) && r.estado==='abierta') acc+=`<button class="btn btn-primary btn-block" style="margin-top:10px" onclick="viatMarcar('rendida')">✓ Cerrar y marcar rendida</button>`;
   if(esGerente() && r.estado==='rendida') acc+=`<button class="btn btn-primary btn-block" style="margin-top:10px" onclick="viatLiquidar()">💳 Registrar liquidación (transferencia)</button>`;
   if(esGerente() && r.estado!=='abierta') acc+=`<button class="btn btn-sec btn-block" style="margin-top:8px" onclick="viatMarcar('abierta')">↩ Reabrir</button>`;
-  if(verViatEdit(r)) acc+=`<button class="btn btn-sec btn-block" style="margin-top:8px;color:var(--red)" onclick="viatBorrar('${r.id}')">Borrar rendición</button>`;
+  if(esGerente()) acc+=`<button class="btn btn-sec btn-block" style="margin-top:8px;color:var(--red)" onclick="viatBorrar('${r.id}')">Borrar rendición</button>`;
   gs('viatAcciones').innerHTML=acc;
 }
 function viatGastoModal(gid){ const r=getRend().find(x=>x.id===curViatId); if(!r||!verViatEdit(r)||r.estado==='liquidada') return; _viatGId=gid||null; const g=gid?(r.gastos||[]).find(x=>x.id===gid):null;
@@ -1489,7 +1497,7 @@ function viatLiquidar(){ const r=getRend().find(x=>x.id===curViatId); if(!r) ret
   gs('modal').classList.add('show');
 }
 function viatLiquidarOk(){ const a=getRend(); const r=a.find(x=>x.id===curViatId); if(!r) return; r.liq_fecha=gs('lqF').value||hoy(); r.liq_ref=(gs('lqRef').value||'').trim(); r.estado='liquidada'; r.ts=new Date().toISOString(); r.pending=true; saveRend(a); cloudPush('viat',r); cerrarModal(); renderViatDet(); }
-function viatEditHdr(){ const r=getRend().find(x=>x.id===curViatId); if(!r) return;
+function viatEditHdr(){ if(!esGerente()){ showToast('Solo el gerente edita el anticipo'); return; } const r=getRend().find(x=>x.id===curViatId); if(!r) return;
   gs('modalBox').innerHTML=`<h3>Editar datos</h3>
    <label class="fl">Comercial</label><input id="rvCom" value="${esc(r.comercial)}" ${esGerente()?'':'readonly style="background:var(--gray-100)"'}>
    <div class="row2"><div><label class="fl">Desde</label><input type="date" id="rvDesde" value="${r.desde}"></div><div><label class="fl">Hasta</label><input type="date" id="rvHasta" value="${r.hasta}"></div></div>
@@ -1502,7 +1510,7 @@ function viatGuardarHdr(){ const a=getRend(); const r=a.find(x=>x.id===curViatId
   r.comercial=(gs('rvCom').value||'').trim()||r.comercial; r.desde=gs('rvDesde').value||r.desde; r.hasta=gs('rvHasta').value||r.hasta;
   r.anticipo=num(gs('rvAnt').value)||0; r.anticipo_fecha=gs('rvAntF').value||r.anticipo_fecha; r.anticipo_ref=(gs('rvAntRef').value||'').trim();
   r.ts=new Date().toISOString(); r.pending=true; saveRend(a); cloudPush('viat',r); cerrarModal(); renderViatDet(); }
-function viatBorrar(id){ if(!confirm('¿Borrar esta rendición completa?')) return; saveRend(getRend().filter(x=>x.id!==id)); cloudDelete('viat',id); openViaticos(); }
+function viatBorrar(id){ if(!esGerente()){ showToast('Solo el gerente'); return; } if(!confirm('¿Borrar esta rendición completa?')) return; saveRend(getRend().filter(x=>x.id!==id)); cloudDelete('viat',id); openViaticos(); }
 function viatPrint(){ const r=getRend().find(x=>x.id===curViatId); if(!r) return; const w=window.open('','_blank'); if(!w){ showToast('Permití las ventanas emergentes'); return; }
   const base=`${location.origin}${location.pathname.replace(/[^/]*$/,'')}logo.jpg`; const tot=viatTotal(r), sal=viatSaldo(r);
   const filas=(r.gastos||[]).slice().sort((a,b)=>String(a.fecha).localeCompare(String(b.fecha))).map(g=>`<tr><td>${fmtFecha(g.fecha)}</td><td>${esc(g.categoria||'')}</td><td>${esc(g.concepto||'')}</td><td>${esc(g.proveedor||'')}</td><td>${esc(g.factura||'')}</td><td class="r">${gsFmt(g.monto)}</td></tr>`).join('');
