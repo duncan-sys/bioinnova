@@ -130,7 +130,10 @@ textarea{resize:vertical;min-height:66px}
     <div class="htxt"><div class="htitle" id="hTitle">BioInnova</div><div class="hsub" id="hSub">Visitas técnicas a campo</div></div>
     <div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px">
       <button class="hback" id="hBack" style="display:none" onclick="goHome()">← Inicio</button>
-      <button id="logoutBtn" onclick="doLogout()" style="display:none;background:rgba(255,255,255,.16);border:none;color:#fff;border-radius:8px;padding:5px 9px;font-size:11px;cursor:pointer;font-family:inherit">⏻ Salir</button>
+      <div style="display:flex;gap:5px">
+        <button id="passBtn" onclick="cambiarPassModal()" style="display:none;background:rgba(255,255,255,.16);border:none;color:#fff;border-radius:8px;padding:5px 9px;font-size:11px;cursor:pointer;font-family:inherit">🔑 Contraseña</button>
+        <button id="logoutBtn" onclick="doLogout()" style="display:none;background:rgba(255,255,255,.16);border:none;color:#fff;border-radius:8px;padding:5px 9px;font-size:11px;cursor:pointer;font-family:inherit">⏻ Salir</button>
+      </div>
     </div>
   </div>
   <div id="userChip" style="display:none;font-size:11px;color:var(--gray-500);padding:6px 16px 0;text-align:right"></div>
@@ -600,10 +603,35 @@ function applyAuth(){
   gs('loginOverlay').style.display='none';
   const chip=gs('userChip'); if(chip){ chip.textContent='👤 '+(s.nombre||s.user.email)+' · '+rolLabel(currentRol); chip.style.display=''; }
   const lo=gs('logoutBtn'); if(lo) lo.style.display='';
+  const pb=gs('passBtn'); if(pb) pb.style.display='';
   goHome();
   startSync();   // baja datos de la nube y arranca la sync periódica
 }
 function doLogout(){ if(syncTimer) clearInterval(syncTimer); clearSession(); location.reload(); }
+function cambiarPassModal(){
+  gs('modalBox').innerHTML=`<h3>🔑 Cambiar contraseña</h3>
+    <div style="font-size:12px;color:var(--gray-500);margin-bottom:6px">De ${esc((getSession()&&(getSession().nombre||getSession().user&&getSession().user.email))||'tu cuenta')}</div>
+    <label class="fl">Nueva contraseña</label><input type="password" id="pw1" autocomplete="new-password" placeholder="mínimo 6 caracteres">
+    <label class="fl">Repetir contraseña</label><input type="password" id="pw2" autocomplete="new-password" placeholder="repetir">
+    <div id="pwErr" style="color:var(--red);font-size:12px;margin-top:6px;display:none"></div>
+    <div class="row2" style="margin-top:12px"><button class="btn btn-sec" onclick="cerrarModal()">Cancelar</button><button class="btn btn-primary" id="pwBtn" onclick="cambiarPass()">Cambiar</button></div>`;
+  gs('modal').classList.add('show');
+}
+async function cambiarPass(){
+  const p1=gs('pw1').value, p2=gs('pw2').value; const err=gs('pwErr');
+  const fail=(m)=>{ err.textContent=m; err.style.display='block'; };
+  if(!p1||p1.length<6) return fail('La contraseña debe tener al menos 6 caracteres.');
+  if(p1!==p2) return fail('Las contraseñas no coinciden.');
+  if(!authToken) return fail('Sesión vencida: cerrá sesión y volvé a entrar.');
+  const btn=gs('pwBtn'); btn.disabled=true; btn.textContent='Cambiando…';
+  try{
+    let r=await fetch(`${SUPABASE_URL}/auth/v1/user`,{method:'PUT',headers:{apikey:SUPABASE_KEY,'Content-Type':'application/json',Authorization:'Bearer '+authToken},body:JSON.stringify({password:p1})});
+    if(r.status===401 && typeof refreshAuth==='function'){ await refreshAuth(); r=await fetch(`${SUPABASE_URL}/auth/v1/user`,{method:'PUT',headers:{apikey:SUPABASE_KEY,'Content-Type':'application/json',Authorization:'Bearer '+authToken},body:JSON.stringify({password:p1})}); }
+    const data=await r.json().catch(()=>({}));
+    if(!r.ok) throw new Error(data.msg||data.error_description||data.error||'No se pudo cambiar');
+    cerrarModal(); showToast('✓ Contraseña actualizada');
+  }catch(e){ btn.disabled=false; btn.textContent='Cambiar'; fail(e.message||'Error al cambiar la contraseña'); }
+}
 function applyRoleUI(){
   const showEl=(id,show)=>{ const el=gs(id); if(el) el.style.display=show?'':'none'; };
   showEl('tileVisita', canEdit() && currentRol!=='planta');
