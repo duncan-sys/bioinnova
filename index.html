@@ -154,6 +154,7 @@ textarea{resize:vertical;min-height:66px}
       <div class="tile" id="tileInv" onclick="openInv()" style="display:none"><div class="ico">📦</div><div class="tlab">Inventario</div><div class="tsub">insumos y materia prima</div></div>
       <div class="tile" id="tileCaja" onclick="openCaja()" style="display:none"><div class="ico">💵</div><div class="tlab">Caja chica</div><div class="tsub">efectivo de planta</div></div>
       <div class="tile" id="tileViat" onclick="openViaticos()" style="display:none"><div class="ico">🧾</div><div class="tlab">Viáticos</div><div class="tsub">rendición de comerciales</div></div>
+      <div class="tile" id="tileCrm" onclick="openCrm()" style="display:none"><div class="ico">🤝</div><div class="tlab">CRM</div><div class="tsub">seguimiento de clientes</div></div>
       <div class="tile" id="tileUsuarios" onclick="openUsuarios()" style="display:none"><div class="ico">👥</div><div class="tlab">Usuarios</div><div class="tsub">accesos y roles</div></div>
     </div>
     <div class="sect-t">Últimas visitas</div>
@@ -269,9 +270,17 @@ textarea{resize:vertical;min-height:66px}
   <!-- CLIENTE DETALLE -->
   <div class="screen" id="sCliente">
     <div class="card"><div class="card-b" id="cliInfo"></div></div>
+    <div class="card"><div class="card-b" id="cliCrm"></div></div>
     <div class="card"><div class="card-h"><span>🏡 Estancias</span><span id="estBtnAgregar" style="color:var(--green);cursor:pointer;font-weight:600" onclick="estanciaModal()">＋ Agregar</span></div><div id="estList"></div></div>
     <button class="btn btn-primary btn-block" id="btnVisitaCliente" style="margin-bottom:10px" onclick="nuevaVisitaCliente()">📋 Nueva visita a este cliente</button>
     <div class="card"><div class="card-h"><span>Visitas</span><span id="cliVisCount" style="font-weight:500;color:var(--gray-400)"></span></div><div id="cliVisList"></div></div>
+  </div>
+
+  <!-- CRM (tablero) -->
+  <div class="screen" id="sCrm">
+    <div style="margin-bottom:8px"><input type="search" id="crmBuscar" placeholder="🔎 Buscar cliente…" oninput="renderCrm()"></div>
+    <div id="crmChips" style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap"></div>
+    <div class="card"><div class="card-h"><span>Clientes</span><span id="crmCount" style="font-weight:500;color:var(--gray-400)"></span></div><div id="crmList"></div></div>
   </div>
 
   <!-- VISITA -->
@@ -606,6 +615,7 @@ function applyRoleUI(){
   showEl('tileInv', verPlanta);
   showEl('tileCaja', verPlanta);
   showEl('tileViat', currentRol==='tecnico' || currentRol==='gerente' || !currentRol);
+  showEl('tileCrm', currentRol==='tecnico' || currentRol==='gerente' || !currentRol);
 }
 
 // ══════════════════════════════════════════════════════════
@@ -613,14 +623,14 @@ function applyRoleUI(){
 //  Guarda SIEMPRE en el equipo; sube/baja de Supabase cuando hay red.
 //  Merge por id: gana el ts más nuevo. Los pendientes se suben al reconectar.
 // ══════════════════════════════════════════════════════════
-function cliRow(c){ return { id:c.id, nombre:c.nombre||'', ruc:c.ruc||'', direccion:c.direccion||'', contacto:c.contacto||'', tel:c.tel||'', email:c.email||'', ubicacion:c.ubicacion||'', obs:c.obs||'', ts:c.ts }; }
-function rowCli(r){ return { id:r.id, nombre:r.nombre||'', ruc:r.ruc||'', direccion:r.direccion||'', contacto:r.contacto||'', tel:r.tel||'', email:r.email||'', ubicacion:r.ubicacion||'', obs:r.obs||'', ts:r.ts }; }
+function cliRow(c){ return { id:c.id, nombre:c.nombre||'', ruc:c.ruc||'', direccion:c.direccion||'', contacto:c.contacto||'', tel:c.tel||'', email:c.email||'', ubicacion:c.ubicacion||'', obs:c.obs||'', estado:c.estado||'', prioridad:c.prioridad||'', comercial:c.comercial||'', prox_fecha:c.prox_fecha||null, prox_nota:c.prox_nota||'', seguimientos:c.seguimientos||[], ts:c.ts }; }
+function rowCli(r){ return { id:r.id, nombre:r.nombre||'', ruc:r.ruc||'', direccion:r.direccion||'', contacto:r.contacto||'', tel:r.tel||'', email:r.email||'', ubicacion:r.ubicacion||'', obs:r.obs||'', estado:r.estado||'', prioridad:r.prioridad||'', comercial:r.comercial||'', prox_fecha:r.prox_fecha||'', prox_nota:r.prox_nota||'', seguimientos:(typeof r.seguimientos==='string'?(()=>{try{return JSON.parse(r.seguimientos)}catch{return[]}})():(r.seguimientos||[])), ts:r.ts }; }
 function estRow(e){ return { id:e.id, cliente_id:e.cliente_id||'', nombre:e.nombre||'', zona:e.zona||'', hato:e.hato||[], lotes:e.lotes||[], obs:e.obs||'', ts:e.ts }; }
 function rowEst(r){ const p=x=>typeof x==='string'?(()=>{try{return JSON.parse(x)}catch{return[]}})():(x||[]); return { id:r.id, cliente_id:r.cliente_id||'', nombre:r.nombre||'', zona:r.zona||'', hato:p(r.hato), lotes:p(r.lotes), obs:r.obs||'', ts:r.ts }; }
 function visRow(v){ return { id:v.id, cliente_id:v.cliente_id||'', estancia_id:v.estancia_id||'', fecha:v.fecha||null, tecnico:v.tecnico||'', evaluaciones:(v.evaluaciones||visitaEvals(v)), diagnostico:v.diagnostico||'', recomendacion:v.recomendacion||'', proxima:v.proxima||null, ts:v.ts }; }
 function rowVis(r){ const p=x=>typeof x==='string'?(()=>{try{return JSON.parse(x)}catch{return[]}})():(x||[]); return { id:r.id, cliente_id:r.cliente_id||'', estancia_id:r.estancia_id||'', fecha:r.fecha||'', tecnico:r.tecnico||'', evaluaciones:p(r.evaluaciones), diagnostico:r.diagnostico||'', recomendacion:r.recomendacion||'', proxima:r.proxima||'', ts:r.ts }; }
 const SYNC_DEFS = {
-  clientes:{ get:getClientes, save:saveClientes, table:'clientes', toRow:cliRow, fromRow:rowCli, toRowSafe:(c)=>{ const r=cliRow(c); delete r.ruc; delete r.direccion; return r; } },
+  clientes:{ get:getClientes, save:saveClientes, table:'clientes', toRow:cliRow, fromRow:rowCli, toRowSafe:(c)=>{ const r=cliRow(c); ['estado','prioridad','comercial','prox_fecha','prox_nota','seguimientos'].forEach(k=>delete r[k]); return r; } },
   estancias:{ get:getEstancias, save:saveEstancias, table:'estancias', toRow:estRow, fromRow:rowEst },
   visitas:{ get:getVisitas, save:saveVisitas, table:'visitas', toRow:visRow, fromRow:rowVis },
   ot:{ get:getOTs, save:saveOTs, table:'bio_ot', toRow:otRow, fromRow:rowOT },
@@ -667,7 +677,8 @@ function refreshVista(){ const act=document.querySelector('.screen.active'); if(
   if(act.id==='sHome') renderHome(); else if(act.id==='sClientes') renderClientes();
   else if(act.id==='sCliente'&&curCliente) abrirCliente(curCliente); else if(act.id==='sHistorial') renderHistorial();
   else if(act.id==='sOT') renderOTList(); else if(act.id==='sInv') renderInv(); else if(act.id==='sCaja') renderCaja();
-  else if(act.id==='sViaticos') renderViatList(); else if(act.id==='sViatDet') renderViatDet(); }
+  else if(act.id==='sViaticos') renderViatList(); else if(act.id==='sViatDet') renderViatDet();
+  else if(act.id==='sCrm') renderCrm(); }
 function startSync(){ if(!AUTH_ON) return; cloudPullAll(); if(syncTimer) clearInterval(syncTimer); syncTimer=setInterval(cloudPullAll, 30000); }
 
 let curCliente=null, editVisitaId=null, curSub='Visitas técnicas a campo', _lotesEdit=[], _evals=[], _estEdit=[];
@@ -711,6 +722,66 @@ function visitaLi(v){
     <div class="li-chev">›</div></div>`;
 }
 
+// ══ CRM (integrado con clientes/visitas) ══
+const CRM_ESTADOS=['Prospecto','Contactado','Negociación','Activo','Inactivo','Perdido'];
+const CRM_TIPOS=['Llamada','WhatsApp','Visita','Reunión','Email','Nota'];
+function crmColor(e){ return {Prospecto:'#a16207',Contactado:'#2563eb','Negociación':'#7c3aed',Activo:'#0a6640',Inactivo:'#6b7280',Perdido:'#b91c1c'}[e]||'#9aa5b1'; }
+function renderCliCrm(c){
+  const el=gs('cliCrm'); if(!el) return; const ed=canEdit(); const col=crmColor(c.estado);
+  const segs=(c.seguimientos||[]).slice().sort((a,b)=>String(b.fecha||'').localeCompare(String(a.fecha||'')));
+  const prox=c.prox_fecha, venc=prox && prox<=hoy();
+  el.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center">
+      <div><span style="display:inline-block;padding:2px 9px;border-radius:12px;background:${col}22;color:${col};font-size:12px;font-weight:700">${esc(c.estado||'Sin etapa')}</span>${c.prioridad?`<span style="font-size:11px;color:var(--gray-500);margin-left:6px">Prioridad ${esc(c.prioridad)}</span>`:''}${c.comercial?`<span style="font-size:11px;color:var(--gray-500);margin-left:6px">· ${esc(c.comercial)}</span>`:''}</div>
+      ${ed?`<span style="color:var(--green);cursor:pointer;font-size:13px;font-weight:600" onclick="crmModal('${c.id}')">✎ CRM</span>`:''}</div>
+    ${prox?`<div style="font-size:12px;margin-top:6px;color:${venc?'var(--red)':'var(--gray-700)'}">📅 Próximo contacto: <b>${fmtFecha(prox)}</b>${venc?' · vencido':''}${c.prox_nota?' — '+esc(c.prox_nota):''}</div>`:''}
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px"><span style="font-size:12px;font-weight:700;color:var(--gray-600)">Seguimientos</span>${ed?`<span style="color:var(--green);cursor:pointer;font-size:12px;font-weight:600" onclick="segModal('${c.id}')">＋ Seguimiento</span>`:''}</div>
+    ${segs.length? segs.map(s=>`<div style="border-top:1px solid var(--gray-100);padding:6px 0;font-size:12px;${ed?'cursor:pointer':''}" ${ed?`onclick="segModal('${c.id}','${s.id}')"`:''}><div style="display:flex;justify-content:space-between"><span><b>${esc(s.tipo||'Nota')}</b> · ${fmtFecha(s.fecha)}</span>${s.por?`<span style="color:var(--gray-400);font-size:11px">${esc(s.por)}</span>`:''}</div>${s.nota?`<div style="color:var(--gray-600);margin-top:1px">${esc(s.nota)}</div>`:''}</div>`).join('') : '<div style="font-size:12px;color:var(--gray-400);padding:6px 0">Sin seguimientos aún.</div>'}`;
+}
+function crmModal(id){ if(!canEdit()){ showToast('Sin permiso'); return; } const c=clienteById(id); if(!c) return;
+  gs('modalBox').innerHTML=`<h3>CRM — ${esc(c.nombre)}</h3>
+   <label class="fl">Etapa</label><select id="crEstado">${['',...CRM_ESTADOS].map(e=>`<option value="${e}" ${c.estado===e?'selected':''}>${e||'— Sin etapa —'}</option>`).join('')}</select>
+   <div class="row2"><div><label class="fl">Prioridad</label><select id="crPrio">${['','Alta','Media','Baja'].map(p=>`<option value="${p}" ${c.prioridad===p?'selected':''}>${p||'—'}</option>`).join('')}</select></div><div><label class="fl">Comercial</label><input id="crCom" value="${esc(c.comercial||(getSession()&&getSession().nombre)||'')}"></div></div>
+   <div class="row2"><div><label class="fl">Próximo contacto</label><input type="date" id="crProxF" value="${c.prox_fecha||''}"></div><div><label class="fl">Nota del próximo</label><input id="crProxN" value="${esc(c.prox_nota||'')}" placeholder="Qué hacer/hablar"></div></div>
+   <div class="row2" style="margin-top:12px"><button class="btn btn-sec" onclick="cerrarModal()">Cancelar</button><button class="btn btn-primary" onclick="crmGuardar('${id}')">Guardar</button></div>`;
+  gs('modal').classList.add('show');
+}
+function crmGuardar(id){ const cl=getClientes(); const c=cl.find(x=>x.id===id); if(!c) return;
+  c.estado=gs('crEstado').value; c.prioridad=gs('crPrio').value; c.comercial=gs('crCom').value.trim(); c.prox_fecha=gs('crProxF').value||''; c.prox_nota=gs('crProxN').value.trim();
+  c.ts=new Date().toISOString(); c.pending=true; saveClientes(cl); cloudPush('clientes',c); cerrarModal(); showToast('✓ CRM actualizado');
+  if(curCliente===id && gs('sCliente').classList.contains('active')) abrirCliente(id); else if(gs('sCrm').classList.contains('active')) renderCrm(); }
+function segModal(cliId, segId){ if(!canEdit()){ showToast('Sin permiso'); return; } const c=clienteById(cliId); if(!c) return; const s=segId?(c.seguimientos||[]).find(x=>x.id===segId):null;
+  gs('modalBox').innerHTML=`<h3>${s?'Editar':'Nuevo'} seguimiento</h3>
+   <div class="row2"><div><label class="fl">Fecha</label><input type="date" id="sgFecha" value="${s?s.fecha:hoy()}"></div><div><label class="fl">Tipo</label><select id="sgTipo">${CRM_TIPOS.map(t=>`<option ${s&&s.tipo===t?'selected':''}>${t}</option>`).join('')}</select></div></div>
+   <label class="fl">Nota</label><textarea id="sgNota" placeholder="Qué se habló / resultado…">${s?esc(s.nota):''}</textarea>
+   <div class="row2" style="margin-top:12px"><button class="btn btn-sec" onclick="${s?`segBorrar('${cliId}','${s.id}')`:'cerrarModal()'}"${s?' style="color:var(--red)"':''}>${s?'Borrar':'Cancelar'}</button><button class="btn btn-primary" onclick="segGuardar('${cliId}'${s?`,'${s.id}'`:''})">Guardar</button></div>`;
+  gs('modal').classList.add('show');
+}
+function segGuardar(cliId, segId){ const cl=getClientes(); const c=cl.find(x=>x.id===cliId); if(!c) return;
+  const s={ id:segId||('SG-'+Date.now()), fecha:gs('sgFecha').value||hoy(), tipo:gs('sgTipo').value, nota:(gs('sgNota').value||'').trim(), por:(getSession()&&getSession().nombre)||'' };
+  c.seguimientos=c.seguimientos||[]; if(segId){ c.seguimientos=c.seguimientos.map(x=>x.id===segId?s:x); } else c.seguimientos.unshift(s);
+  c.ts=new Date().toISOString(); c.pending=true; saveClientes(cl); cloudPush('clientes',c); cerrarModal();
+  if(curCliente===cliId && gs('sCliente').classList.contains('active')) abrirCliente(cliId); else if(gs('sCrm').classList.contains('active')) renderCrm(); }
+function segBorrar(cliId, segId){ if(!confirm('¿Borrar este seguimiento?')) return; const cl=getClientes(); const c=cl.find(x=>x.id===cliId); if(!c) return; c.seguimientos=(c.seguimientos||[]).filter(x=>x.id!==segId); c.ts=new Date().toISOString(); c.pending=true; saveClientes(cl); cloudPush('clientes',c); cerrarModal(); if(curCliente===cliId && gs('sCliente').classList.contains('active')) abrirCliente(cliId); else if(gs('sCrm').classList.contains('active')) renderCrm(); }
+// Tablero CRM
+let _crmFiltro='';
+function openCrm(){ if(!(esGerente()||currentRol==='tecnico'||!currentRol)){ showToast('Sin permiso'); return; } _crmFiltro=''; showScreen('sCrm','CRM','Clientes y seguimiento',true); renderCrm(); }
+function crmSetFiltro(f){ _crmFiltro=f; renderCrm(); }
+function renderCrm(){
+  const hy=hoy(); const q=(gs('crmBuscar').value||'').trim().toLowerCase();
+  let cl=getClientes().slice().sort((a,b)=>{ const pa=a.prox_fecha||'9999-99', pb=b.prox_fecha||'9999-99'; if(pa!==pb) return pa.localeCompare(pb); return String(a.nombre||'').localeCompare(String(b.nombre||'')); });
+  const counts={}; getClientes().forEach(c=>{ const e=c.estado||'Sin etapa'; counts[e]=(counts[e]||0)+1; });
+  const pend=getClientes().filter(c=>c.prox_fecha && c.prox_fecha<=hy).length;
+  const chips=[['','Todos',getClientes().length],['pendientes','📅 Pendientes',pend]].concat(CRM_ESTADOS.map(e=>[e,e,counts[e]||0]));
+  gs('crmChips').innerHTML=chips.map(([v,l,n])=>`<button onclick="crmSetFiltro('${v}')" style="font-size:11px;padding:5px 10px;border:none;border-radius:12px;cursor:pointer;background:${_crmFiltro===v?'var(--green)':'var(--gray-200)'};color:${_crmFiltro===v?'#fff':'var(--gray-600)'}">${l}${n?' '+n:''}</button>`).join('');
+  if(_crmFiltro==='pendientes') cl=cl.filter(c=>c.prox_fecha && c.prox_fecha<=hy);
+  else if(_crmFiltro) cl=cl.filter(c=>(c.estado||'Sin etapa')===_crmFiltro);
+  if(q) cl=cl.filter(c=>[c.nombre,c.comercial,c.contacto,c.ubicacion].some(x=>String(x||'').toLowerCase().includes(q)));
+  gs('crmCount').textContent=cl.length?cl.length+' clientes':'';
+  gs('crmList').innerHTML=cl.length? cl.map(c=>{ const col=crmColor(c.estado); const venc=c.prox_fecha && c.prox_fecha<=hy;
+    const ult=(c.seguimientos||[]).slice().sort((a,b)=>String(b.fecha).localeCompare(String(a.fecha)))[0];
+    return `<div class="li" onclick="abrirCliente('${c.id}')"><div style="min-width:0"><div class="li-t">${esc(c.nombre)} <span style="font-size:10px;color:${col};font-weight:700">● ${esc(c.estado||'Sin etapa')}</span></div><div class="li-s">${c.prox_fecha?`<span style="color:${venc?'var(--red)':'var(--gray-600)'}">📅 ${fmtFecha(c.prox_fecha)}${venc?' vencido':''}${c.prox_nota?' · '+esc(c.prox_nota):''}</span>`:(ult?'último: '+esc(ult.tipo)+' '+fmtFecha(ult.fecha):'sin seguimiento')}</div></div><div class="li-chev">›</div></div>`;
+  }).join('') : '<div class="empty">Sin clientes en este filtro.</div>';
+}
 // ── CLIENTES ──
 function renderClientes(){
   const q=(gs('cliBuscar').value||'').trim().toLowerCase();
@@ -797,6 +868,7 @@ function abrirCliente(id){
     <div style="font-size:12px;color:var(--gray-600);margin-top:3px">${c.ruc?'🧾 RUC '+esc(c.ruc)+'<br>':''}${c.contacto?'👤 '+esc(c.contacto)+'<br>':''}${c.tel?'📞 '+esc(c.tel)+'  ':''}${c.email?'✉ '+esc(c.email):''}${c.direccion?'<br>🏠 '+esc(c.direccion):''}${c.ubicacion?'<br>📍 '+esc(c.ubicacion):''}</div>
     ${c.obs?'<div style="font-size:12px;color:var(--gray-500);margin-top:5px">'+esc(c.obs)+'</div>':''}</div>
     ${ed?`<span style="color:var(--green);cursor:pointer;font-size:13px;font-weight:600" onclick="clienteModal('${c.id}')">✎ Editar</span>`:''}</div>`;
+  renderCliCrm(c);
   const ests=estanciasDe(id);
   gs('estList').innerHTML=ests.length? ests.map(e=>{
     const hato=(e.hato||[]).filter(h=>h.cabezas).map(h=>`${h.categoria} ${h.cabezas}`).join(' · ');

@@ -3,7 +3,7 @@
 // versión cuando hay internet; cae al caché solo si está offline. El resto de
 // los assets, stale-while-revalidate. Así la app se actualiza sola online y
 // sigue funcionando sin señal. Los datos viven en localStorage + Supabase.
-const CACHE = 'bioinnova-v20';
+const CACHE = 'bioinnova-v21';
 const ASSETS = ['./', './index.html', './manifest.webmanifest', './icon.svg', './logo.svg', './logo.jpg'];
 
 self.addEventListener('install', e => {
