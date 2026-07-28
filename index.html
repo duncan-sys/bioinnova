@@ -1371,7 +1371,10 @@ function viatPrint(){ const r=getRend().find(x=>x.id===curViatId); if(!r) return
 }
 
 // ══ CAJA CHICA (efectivo de planta, en guaraníes) ══
-const CAJA_CATS=['Insumos / materia prima','Repuestos','Combustible','Flete / transporte','Mantenimiento','Servicios (luz/agua)','Limpieza','Papelería','Refrigerio','Adelanto / extra personal','Otro'];
+const CAJA_CATS=['Insumos / materia prima','Repuestos','Ferretería','Combustible','Flete / transporte','Mantenimiento','Servicios (luz/agua)','Limpieza','Papelería','Refrigerio','Adelanto / extra personal','Otro'];
+function getCajaCats(){ try{ const v=JSON.parse(localStorage.getItem('bio:cajacats')); return Array.isArray(v)?v:[]; }catch{ return []; } }
+function addCajaCat(val){ val=String(val||'').trim(); if(!val) return; const list=getCajaCats(); const low=val.toLowerCase(); if(!list.some(x=>x.toLowerCase()===low) && !CAJA_CATS.some(x=>x.toLowerCase()===low)){ list.unshift(val); try{ localStorage.setItem('bio:cajacats',JSON.stringify(list.slice(0,80))); }catch{} } }
+function cajaCatDatalistHtml(){ const opts=CAJA_CATS.concat(getCajaCats()); return `<datalist id="cajaCatList">${opts.map(o=>'<option value="'+esc(o)+'">').join('')}</datalist>`; }
 let _cajaMes='', _cajaEditId=null;
 function gsFmt(v){ return '₲ '+Number(v||0).toLocaleString('es-PY',{maximumFractionDigits:0}); }
 function getCaja(){ return getArr('bio:caja'); }
@@ -1412,7 +1415,7 @@ function cajaModal(tipo, editId){
   gs('modalBox').innerHTML=`<h3>${tit}</h3>
     <label class="fl">Monto (₲)</label><input type="number" id="cjMonto" inputmode="numeric" placeholder="0" value="${m?m.monto:''}">
     <label class="fl">Fecha</label><input type="date" id="cjFecha" value="${m?m.fecha:hoy()}">
-    ${esE?`<label class="fl">Categoría</label><select id="cjCat">${CAJA_CATS.map(c=>`<option ${m&&m.categoria===c?'selected':''}>${c}</option>`).join('')}</select>`:''}
+    ${esE?`<label class="fl">Categoría</label>${cajaCatDatalistHtml()}<input id="cjCat" list="cajaCatList" value="${m?esc(m.categoria):''}" placeholder="Elegí o escribí una categoría" autocomplete="off">`:''}
     <label class="fl">${esE?'Concepto / detalle':'Detalle'}</label><input id="cjConcepto" placeholder="${esE?'Ej: compra de repuesto':'Ej: reposición / saldo inicial'}" value="${m?esc(m.concepto):''}">
     ${esE?`<div class="row2"><div><label class="fl">Proveedor</label><input id="cjProv" placeholder="opcional" value="${m?esc(m.proveedor):''}"></div><div><label class="fl">N° factura</label><input id="cjFact" placeholder="opcional" value="${m?esc(m.factura):''}"></div></div>
       <label class="fl">Responsable / recibió</label><input id="cjResp" placeholder="quién gastó o recibió" value="${m?esc(m.responsable):((getSession()&&getSession().nombre)||'')}">`:''}
@@ -1424,9 +1427,10 @@ function cajaModal(tipo, editId){
 function cajaGuardar(tipo){
   const monto=num(gs('cjMonto').value); if(!monto||monto<=0){ showToast('Ingresá el monto'); return; }
   const base={ tipo, monto:Math.abs(monto), fecha:gs('cjFecha').value||hoy(), concepto:(gs('cjConcepto').value||'').trim(),
-    categoria:gs('cjCat')?gs('cjCat').value:'', proveedor:gs('cjProv')?gs('cjProv').value.trim():'', factura:gs('cjFact')?gs('cjFact').value.trim():'',
+    categoria:gs('cjCat')?gs('cjCat').value.trim():'', proveedor:gs('cjProv')?gs('cjProv').value.trim():'', factura:gs('cjFact')?gs('cjFact').value.trim():'',
     responsable:gs('cjResp')?gs('cjResp').value.trim():'', obs:(gs('cjObs').value||'').trim(),
     por:(getSession()&&getSession().nombre)||'', ts:new Date().toISOString(), pending:true };
+  if(tipo==='egreso') addCajaCat(base.categoria);   // recordar categorías nuevas para el datalist
   let a=getCaja(), rec=null;
   if(_cajaEditId){ a=a.map(x=>x.id===_cajaEditId?Object.assign({},x,base):x); rec=a.find(x=>x.id===_cajaEditId); }
   else { rec=Object.assign({id:'CJ-'+Date.now()},base); a.unshift(rec); }
