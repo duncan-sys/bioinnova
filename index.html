@@ -153,6 +153,7 @@ textarea{resize:vertical;min-height:66px}
       <div class="tile" id="tileFormulas" onclick="openFormulas()" style="display:none"><div class="ico">🧪</div><div class="tlab">Formulaciones</div><div class="tsub">recetas</div></div>
       <div class="tile" id="tileInv" onclick="openInv()" style="display:none"><div class="ico">📦</div><div class="tlab">Inventario</div><div class="tsub">insumos y materia prima</div></div>
       <div class="tile" id="tileCaja" onclick="openCaja()" style="display:none"><div class="ico">💵</div><div class="tlab">Caja chica</div><div class="tsub">efectivo de planta</div></div>
+      <div class="tile" id="tileViat" onclick="openViaticos()" style="display:none"><div class="ico">🧾</div><div class="tlab">Viáticos</div><div class="tsub">rendición de comerciales</div></div>
       <div class="tile" id="tileUsuarios" onclick="openUsuarios()" style="display:none"><div class="ico">👥</div><div class="tlab">Usuarios</div><div class="tsub">accesos y roles</div></div>
     </div>
     <div class="sect-t">Últimas visitas</div>
@@ -246,6 +247,23 @@ textarea{resize:vertical;min-height:66px}
     </div></div>
     <div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap" id="cajaMeses"></div>
     <div class="card"><div class="card-h"><span>Movimientos</span><span id="cajaCount" style="font-weight:500;color:var(--gray-400)"></span></div><div id="cajaList"></div></div>
+  </div>
+
+  <!-- VIÁTICOS (lista) -->
+  <div class="screen" id="sViaticos">
+    <button class="btn btn-primary btn-block" id="btnNuevaRend" style="margin-bottom:10px" onclick="viatNueva()">＋ Nueva rendición</button>
+    <div id="viatFiltroCom" style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap"></div>
+    <div class="card"><div class="card-h"><span>Rendiciones</span><span id="viatCount" style="font-weight:500;color:var(--gray-400)"></span></div><div id="viatList"></div></div>
+  </div>
+
+  <!-- VIÁTICOS (detalle) -->
+  <div class="screen" id="sViatDet">
+    <div class="card" style="margin-bottom:10px"><div class="card-b" id="viatHdr"></div></div>
+    <button class="btn btn-primary btn-block" id="btnAddGasto" style="margin-bottom:10px" onclick="viatGastoModal()">＋ Agregar gasto</button>
+    <div class="card"><div class="card-h"><span>Gastos</span><span id="viatGCount" style="font-weight:500;color:var(--gray-400)"></span></div><div id="viatGList"></div></div>
+    <div class="card" style="margin-top:10px"><div class="card-b" id="viatResumen"></div></div>
+    <button class="btn btn-amber btn-block" style="margin-top:10px" onclick="viatPrint()">🖨️ Imprimir resumen</button>
+    <div id="viatAcciones"></div>
   </div>
 
   <!-- CLIENTE DETALLE -->
@@ -587,6 +605,7 @@ function applyRoleUI(){
   showEl('tileFormulas', verPlanta);
   showEl('tileInv', verPlanta);
   showEl('tileCaja', verPlanta);
+  showEl('tileViat', currentRol==='tecnico' || currentRol==='gerente' || !currentRol);
 }
 
 // ══════════════════════════════════════════════════════════
@@ -607,7 +626,10 @@ const SYNC_DEFS = {
   ot:{ get:getOTs, save:saveOTs, table:'bio_ot', toRow:otRow, fromRow:rowOT },
   mov:{ get:getMovs, save:saveMovs, table:'bio_mov', toRow:movRow, fromRow:rowMov },
   caja:{ get:getCaja, save:saveCaja, table:'bio_caja', toRow:cajaRow, fromRow:rowCaja },
+  viat:{ get:getRend, save:saveRend, table:'bio_viat', toRow:viatRow, fromRow:rowViat },
 };
+function viatRow(r){ return { id:r.id, comercial:r.comercial||'', desde:r.desde||null, hasta:r.hasta||null, anticipo:r.anticipo||0, anticipo_fecha:r.anticipo_fecha||null, anticipo_ref:r.anticipo_ref||'', gastos:r.gastos||[], estado:r.estado||'abierta', liq_fecha:r.liq_fecha||null, liq_ref:r.liq_ref||'', por:r.por||'', ts:r.ts||null }; }
+function rowViat(r){ return { id:r.id, comercial:r.comercial||'', desde:r.desde||'', hasta:r.hasta||'', anticipo:Number(r.anticipo)||0, anticipo_fecha:r.anticipo_fecha||'', anticipo_ref:r.anticipo_ref||'', gastos:(typeof r.gastos==='string'?JSON.parse(r.gastos||'[]'):(r.gastos||[])), estado:r.estado||'abierta', liq_fecha:r.liq_fecha||'', liq_ref:r.liq_ref||'', por:r.por||'', ts:r.ts, pending:false }; }
 function cajaRow(m){ return { id:m.id, tipo:m.tipo, monto:m.monto||0, fecha:m.fecha||null, concepto:m.concepto||'', categoria:m.categoria||'', proveedor:m.proveedor||'', factura:m.factura||'', responsable:m.responsable||'', obs:m.obs||'', por:m.por||'', ts:m.ts||null }; }
 function rowCaja(r){ return { id:r.id, tipo:r.tipo, monto:Number(r.monto)||0, fecha:r.fecha||'', concepto:r.concepto||'', categoria:r.categoria||'', proveedor:r.proveedor||'', factura:r.factura||'', responsable:r.responsable||'', obs:r.obs||'', por:r.por||'', ts:r.ts, pending:false }; }
 function otRow(o){ return { id:o.id, num:o.num, fecha:o.fecha||null, producto_cod:o.producto_cod||'', producto_nom:o.producto_nom||'', kg_bolsa:o.kg_bolsa||null, kg:o.kg||null, bolsas:o.bolsas||0, lote:o.lote||'', cliente:o.cliente||'', comercial:o.comercial||'', insumos:o.insumos||[], estado:o.estado||'abierta', ts:o.ts||null }; }
@@ -640,11 +662,12 @@ async function cloudPull(name){
     d.save(Object.values(merged));
   }catch(e){}
 }
-async function cloudPullAll(){ if(!AUTH_ON) return; await cloudPull('clientes'); await cloudPull('estancias'); await cloudPull('visitas'); await cloudPull('ot'); await cloudPull('mov'); await cloudPull('caja'); refreshVista(); }
+async function cloudPullAll(){ if(!AUTH_ON) return; await cloudPull('clientes'); await cloudPull('estancias'); await cloudPull('visitas'); await cloudPull('ot'); await cloudPull('mov'); await cloudPull('caja'); await cloudPull('viat'); refreshVista(); }
 function refreshVista(){ const act=document.querySelector('.screen.active'); if(!act) return;
   if(act.id==='sHome') renderHome(); else if(act.id==='sClientes') renderClientes();
   else if(act.id==='sCliente'&&curCliente) abrirCliente(curCliente); else if(act.id==='sHistorial') renderHistorial();
-  else if(act.id==='sOT') renderOTList(); else if(act.id==='sInv') renderInv(); else if(act.id==='sCaja') renderCaja(); }
+  else if(act.id==='sOT') renderOTList(); else if(act.id==='sInv') renderInv(); else if(act.id==='sCaja') renderCaja();
+  else if(act.id==='sViaticos') renderViatList(); else if(act.id==='sViatDet') renderViatDet(); }
 function startSync(){ if(!AUTH_ON) return; cloudPullAll(); if(syncTimer) clearInterval(syncTimer); syncTimer=setInterval(cloudPullAll, 30000); }
 
 let curCliente=null, editVisitaId=null, curSub='Visitas técnicas a campo', _lotesEdit=[], _evals=[], _estEdit=[];
@@ -1208,6 +1231,141 @@ function otPrint(id){ const o=getOTs().find(x=>x.id===id); if(!o) return;
     <tr class="tot"><td colspan="2">PRODUCTO FINAL — ${esc(o.producto_nom)}</td><td class="r">${(o.kg||0).toLocaleString('es-PY')} kg</td><td class="r">${o.bolsas} bolsas</td></tr></tbody></table>
    <div style="display:flex;justify-content:space-between;margin-top:36px;font-size:12px"><div>Preparado por: ____________</div><div>Controlado por: ____________</div></div>
    <div class="noprint" style="text-align:center;margin-top:16px"><button onclick="window.print()" style="background:#2f7d3b;color:#fff;border:none;padding:10px 22px;border-radius:8px;cursor:pointer">🖨️ Imprimir / Guardar PDF</button></div>
+   </div></body></html>`);
+  w.document.close();
+}
+
+// ══ RENDICIÓN DE VIÁTICOS (comerciales) ══
+const VIAT_CATS=['Combustible','Peaje','Comida','Hospedaje','Estacionamiento','Lavado de vehículo','Mantenimiento vehículo','Insumos','Otro'];
+let _viatFCom='', curViatId=null, _viatGId=null;
+function getRend(){ return getArr('bio:viat'); }
+function saveRend(a){ setArr('bio:viat',a); }
+function viatTotal(r){ return (r.gastos||[]).reduce((a,g)=>a+(Number(g.monto)||0),0); }
+function viatSaldo(r){ return (Number(r.anticipo)||0)-viatTotal(r); }  // >0 sobrante a devolver · <0 a acreditar
+function verViat(){ return !currentRol || currentRol==='gerente' || currentRol==='tecnico'; }
+function verViatEdit(r){ if(esGerente()) return true; return String(r.comercial||'').toLowerCase()===String((getSession()&&getSession().nombre)||'').toLowerCase(); }
+function nombrePropio(){ return (getSession()&&getSession().nombre)||''; }
+function lunesSemana(){ const d=new Date(); const off=(d.getDay()+6)%7; d.setDate(d.getDate()-off); return d.toISOString().split('T')[0]; }
+function viernesSemana(){ const d=new Date(); const off=(d.getDay()+6)%7; d.setDate(d.getDate()-off+4); return d.toISOString().split('T')[0]; }
+function viatEstadoLbl(e){ return ({abierta:'● abierta',rendida:'● rendida',liquidada:'✓ liquidada'})[e]||e; }
+
+function openViaticos(){ if(!verViat()){ showToast('Sin permiso'); return; } _viatFCom=''; showScreen('sViaticos','Viáticos','Rendición de comerciales',true); renderViatList(); }
+function misRend(){ const all=getRend(); if(esGerente()) return all; const nom=String(nombrePropio()).toLowerCase(); return all.filter(r=>String(r.comercial||'').toLowerCase()===nom); }
+function viatSetCom(c){ _viatFCom=c; renderViatList(); }
+function renderViatList(){
+  let rs=misRend().slice().sort((a,b)=>String(b.desde||'').localeCompare(String(a.desde||'')));
+  const fil=gs('viatFiltroCom');
+  if(esGerente()){ const coms=[...new Set(getRend().map(r=>r.comercial).filter(Boolean))].sort();
+    fil.innerHTML=[['','Todos']].concat(coms.map(c=>[c,c])).map(([v,l])=>`<button onclick="viatSetCom('${esc(v).replace(/'/g,"\\'")}')" style="font-size:11px;padding:5px 10px;border:none;border-radius:12px;cursor:pointer;background:${_viatFCom===v?'var(--green)':'var(--gray-200)'};color:${_viatFCom===v?'#fff':'var(--gray-600)'}">${esc(l)}</button>`).join('');
+    if(_viatFCom) rs=rs.filter(r=>r.comercial===_viatFCom);
+  } else fil.innerHTML='';
+  gs('viatCount').textContent=rs.length?rs.length+' rend.':'';
+  gs('viatList').innerHTML=rs.length? rs.map(r=>{ const tot=viatTotal(r), sal=viatSaldo(r);
+    const salTxt=Math.abs(sal)<1?'saldo 0':(sal>0?'devuelve '+gsFmt(sal):'a acreditar '+gsFmt(-sal));
+    return `<div class="li" onclick="viatAbrir('${r.id}')"><div style="min-width:0"><div class="li-t">${esc(r.comercial)} <span style="font-size:11px;color:var(--gray-400)">· ${viatEstadoLbl(r.estado)}</span></div><div class="li-s">${fmtFecha(r.desde)}–${fmtFecha(r.hasta)} · anticipo ${gsFmt(r.anticipo)} · gastó ${gsFmt(tot)}</div><div class="li-s" style="color:${sal<0?'var(--red)':'var(--gray-600)'}">${salTxt}</div></div><div class="li-chev">›</div></div>`;
+  }).join('') : '<div class="empty">Sin rendiciones. Tocá ＋ Nueva rendición.</div>';
+}
+function viatNueva(){ if(!verViat()) return; const esGer=esGerente(); const nom=nombrePropio();
+  gs('modalBox').innerHTML=`<h3>Nueva rendición</h3>
+   <label class="fl">Comercial</label><input id="rvCom" value="${esc(nom)}" ${esGer?'placeholder="Nombre del comercial"':'readonly style="background:var(--gray-100)"'}>
+   <div class="row2"><div><label class="fl">Semana desde</label><input type="date" id="rvDesde" value="${lunesSemana()}"></div><div><label class="fl">hasta</label><input type="date" id="rvHasta" value="${viernesSemana()}"></div></div>
+   <div class="row2"><div><label class="fl">Anticipo recibido (₲)</label><input type="number" id="rvAnt" inputmode="numeric" placeholder="0"></div><div><label class="fl">Fecha</label><input type="date" id="rvAntF" value="${hoy()}"></div></div>
+   <label class="fl">Referencia de la transferencia <span style="color:var(--gray-400)">(opcional)</span></label><input id="rvAntRef" placeholder="N° o comprobante">
+   <div class="row2" style="margin-top:12px"><button class="btn btn-sec" onclick="cerrarModal()">Cancelar</button><button class="btn btn-primary" onclick="viatCrear()">Crear</button></div>`;
+  gs('modal').classList.add('show');
+}
+function viatCrear(){ const com=(gs('rvCom').value||'').trim(); if(!com){ showToast('Poné el comercial'); return; }
+  const r={ id:'RV-'+Date.now(), comercial:com, desde:gs('rvDesde').value||hoy(), hasta:gs('rvHasta').value||hoy(),
+    anticipo:num(gs('rvAnt').value)||0, anticipo_fecha:gs('rvAntF').value||hoy(), anticipo_ref:(gs('rvAntRef').value||'').trim(),
+    gastos:[], estado:'abierta', liq_fecha:'', liq_ref:'', por:nombrePropio(), ts:new Date().toISOString(), pending:true };
+  const a=getRend(); a.unshift(r); saveRend(a); cloudPush('viat',r); cerrarModal(); viatAbrir(r.id);
+}
+function viatAbrir(id){ curViatId=id; if(!getRend().find(x=>x.id===id)) return; showScreen('sViatDet','Rendición','',true); renderViatDet(); }
+function renderViatDet(){
+  const r=getRend().find(x=>x.id===curViatId); if(!r){ openViaticos(); return; }
+  const tot=viatTotal(r), sal=viatSaldo(r); const editable=(r.estado!=='liquidada')&&verViatEdit(r);
+  gs('viatHdr').innerHTML=`<div style="display:flex;justify-content:space-between;align-items:baseline"><div style="font-weight:700">${esc(r.comercial)}</div><div style="font-size:11px;color:${r.estado==='liquidada'?'var(--green)':'var(--gray-500)'}">${viatEstadoLbl(r.estado)}</div></div>
+    <div style="font-size:12px;color:var(--gray-600);margin-top:2px">Semana ${fmtFecha(r.desde)} – ${fmtFecha(r.hasta)}</div>
+    <div style="font-size:12px;color:var(--gray-600);margin-top:4px">Anticipo <b>${gsFmt(r.anticipo)}</b> · ${fmtFecha(r.anticipo_fecha)}${r.anticipo_ref?' · '+esc(r.anticipo_ref):''} ${editable?`<span onclick="viatEditHdr()" style="color:var(--green);cursor:pointer">✎</span>`:''}</div>`;
+  const gl=(r.gastos||[]).slice().sort((a,b)=>String(a.fecha).localeCompare(String(b.fecha)));
+  gs('viatGCount').textContent=gl.length?gl.length+' gastos':'';
+  gs('viatGList').innerHTML= gl.length? gl.map(g=>`<div class="li" style="cursor:${editable?'pointer':'default'}" ${editable?`onclick="viatGastoModal('${g.id}')"`:''}><div style="min-width:0"><div class="li-t">${esc(g.concepto||g.categoria||'Gasto')}</div><div class="li-s">${fmtFecha(g.fecha)} · ${esc(g.categoria||'')}${g.proveedor?' · '+esc(g.proveedor):''}${g.factura?' · Fact '+esc(g.factura):''}</div></div><div style="font-weight:700;flex-shrink:0">${gsFmt(g.monto)}</div></div>`).join('') : '<div class="empty">Sin gastos aún.</div>';
+  gs('btnAddGasto').style.display=editable?'':'none';
+  const salTxt=Math.abs(sal)<1?'Cerró justo (saldo 0)':(sal>0?`Sobrante a devolver: <b style="color:var(--green)">${gsFmt(sal)}</b>`:`A acreditar al comercial: <b style="color:var(--red)">${gsFmt(-sal)}</b>`);
+  gs('viatResumen').innerHTML=`<div style="display:flex;justify-content:space-between"><span>Anticipo</span><b>${gsFmt(r.anticipo)}</b></div>
+    <div style="display:flex;justify-content:space-between;margin-top:3px"><span>Total gastado</span><b>${gsFmt(tot)}</b></div>
+    <hr style="border:none;border-top:1px solid var(--gray-200);margin:7px 0"><div style="font-size:14px">${salTxt}</div>
+    ${r.estado==='liquidada'?`<div style="font-size:11px;color:var(--gray-500);margin-top:6px">Liquidado por transferencia ${fmtFecha(r.liq_fecha)}${r.liq_ref?' · '+esc(r.liq_ref):''}</div>`:''}`;
+  let acc='';
+  if(verViatEdit(r) && r.estado==='abierta') acc+=`<button class="btn btn-primary btn-block" style="margin-top:10px" onclick="viatMarcar('rendida')">✓ Cerrar y marcar rendida</button>`;
+  if(esGerente() && r.estado==='rendida') acc+=`<button class="btn btn-primary btn-block" style="margin-top:10px" onclick="viatLiquidar()">💳 Registrar liquidación (transferencia)</button>`;
+  if(esGerente() && r.estado!=='abierta') acc+=`<button class="btn btn-sec btn-block" style="margin-top:8px" onclick="viatMarcar('abierta')">↩ Reabrir</button>`;
+  if(verViatEdit(r)) acc+=`<button class="btn btn-sec btn-block" style="margin-top:8px;color:var(--red)" onclick="viatBorrar('${r.id}')">Borrar rendición</button>`;
+  gs('viatAcciones').innerHTML=acc;
+}
+function viatGastoModal(gid){ const r=getRend().find(x=>x.id===curViatId); if(!r||!verViatEdit(r)||r.estado==='liquidada') return; _viatGId=gid||null; const g=gid?(r.gastos||[]).find(x=>x.id===gid):null;
+  gs('modalBox').innerHTML=`<h3>${g?'Editar gasto':'Nuevo gasto'}</h3>
+   <div class="row2"><div><label class="fl">Fecha</label><input type="date" id="gvFecha" value="${g?g.fecha:hoy()}"></div><div><label class="fl">Monto (₲)</label><input type="number" id="gvMonto" inputmode="numeric" placeholder="0" value="${g?g.monto:''}"></div></div>
+   <label class="fl">Categoría</label><select id="gvCat">${VIAT_CATS.map(c=>`<option ${g&&g.categoria===c?'selected':''}>${c}</option>`).join('')}</select>
+   <label class="fl">Concepto / detalle</label><input id="gvConcepto" placeholder="Ej: carga de combustible" value="${g?esc(g.concepto):''}">
+   <div class="row2"><div><label class="fl">Proveedor</label><input id="gvProv" value="${g?esc(g.proveedor):''}"></div><div><label class="fl">N° factura</label><input id="gvFact" value="${g?esc(g.factura):''}"></div></div>
+   <div class="row2" style="margin-top:12px"><button class="btn btn-sec" onclick="${g?`viatBorrarGasto('${g.id}')`:'cerrarModal()'}"${g?' style="color:var(--red)"':''}>${g?'Borrar':'Cancelar'}</button><button class="btn btn-primary" onclick="viatGuardarGasto()">Guardar</button></div>`;
+  gs('modal').classList.add('show');
+}
+function viatGuardarGasto(){ const a=getRend(); const r=a.find(x=>x.id===curViatId); if(!r) return;
+  const monto=num(gs('gvMonto').value); if(!monto||monto<=0){ showToast('Ingresá el monto'); return; }
+  const g={ id:_viatGId||('GV-'+Date.now()), fecha:gs('gvFecha').value||hoy(), monto:Math.abs(monto), categoria:gs('gvCat').value, concepto:(gs('gvConcepto').value||'').trim(), proveedor:(gs('gvProv').value||'').trim(), factura:(gs('gvFact').value||'').trim() };
+  r.gastos=r.gastos||[]; if(_viatGId){ r.gastos=r.gastos.map(x=>x.id===_viatGId?g:x); } else r.gastos.push(g);
+  r.ts=new Date().toISOString(); r.pending=true; saveRend(a); cloudPush('viat',r); _viatGId=null; cerrarModal(); renderViatDet();
+}
+function viatBorrarGasto(gid){ const a=getRend(); const r=a.find(x=>x.id===curViatId); if(!r) return; r.gastos=(r.gastos||[]).filter(x=>x.id!==gid); r.ts=new Date().toISOString(); r.pending=true; saveRend(a); cloudPush('viat',r); cerrarModal(); renderViatDet(); }
+function viatMarcar(estado){ const a=getRend(); const r=a.find(x=>x.id===curViatId); if(!r) return; r.estado=estado; r.ts=new Date().toISOString(); r.pending=true; saveRend(a); cloudPush('viat',r); renderViatDet(); }
+function viatLiquidar(){ const r=getRend().find(x=>x.id===curViatId); if(!r) return; const sal=viatSaldo(r);
+  const txt=Math.abs(sal)<1?'Saldo 0 — sin ajuste':(sal>0?'El comercial DEVUELVE '+gsFmt(sal):'La empresa ACREDITA '+gsFmt(-sal));
+  gs('modalBox').innerHTML=`<h3>Liquidación</h3><div style="font-size:13px;margin-bottom:10px">${txt}</div>
+   <label class="fl">Fecha de la transferencia</label><input type="date" id="lqF" value="${hoy()}">
+   <label class="fl">Referencia / comprobante</label><input id="lqRef" placeholder="N° de transferencia">
+   <div class="row2" style="margin-top:12px"><button class="btn btn-sec" onclick="cerrarModal()">Cancelar</button><button class="btn btn-primary" onclick="viatLiquidarOk()">✓ Marcar liquidada</button></div>`;
+  gs('modal').classList.add('show');
+}
+function viatLiquidarOk(){ const a=getRend(); const r=a.find(x=>x.id===curViatId); if(!r) return; r.liq_fecha=gs('lqF').value||hoy(); r.liq_ref=(gs('lqRef').value||'').trim(); r.estado='liquidada'; r.ts=new Date().toISOString(); r.pending=true; saveRend(a); cloudPush('viat',r); cerrarModal(); renderViatDet(); }
+function viatEditHdr(){ const r=getRend().find(x=>x.id===curViatId); if(!r) return;
+  gs('modalBox').innerHTML=`<h3>Editar datos</h3>
+   <label class="fl">Comercial</label><input id="rvCom" value="${esc(r.comercial)}" ${esGerente()?'':'readonly style="background:var(--gray-100)"'}>
+   <div class="row2"><div><label class="fl">Desde</label><input type="date" id="rvDesde" value="${r.desde}"></div><div><label class="fl">Hasta</label><input type="date" id="rvHasta" value="${r.hasta}"></div></div>
+   <div class="row2"><div><label class="fl">Anticipo (₲)</label><input type="number" id="rvAnt" value="${r.anticipo}"></div><div><label class="fl">Fecha anticipo</label><input type="date" id="rvAntF" value="${r.anticipo_fecha}"></div></div>
+   <label class="fl">Referencia transferencia</label><input id="rvAntRef" value="${esc(r.anticipo_ref)}">
+   <div class="row2" style="margin-top:12px"><button class="btn btn-sec" onclick="cerrarModal()">Cancelar</button><button class="btn btn-primary" onclick="viatGuardarHdr()">Guardar</button></div>`;
+  gs('modal').classList.add('show');
+}
+function viatGuardarHdr(){ const a=getRend(); const r=a.find(x=>x.id===curViatId); if(!r) return;
+  r.comercial=(gs('rvCom').value||'').trim()||r.comercial; r.desde=gs('rvDesde').value||r.desde; r.hasta=gs('rvHasta').value||r.hasta;
+  r.anticipo=num(gs('rvAnt').value)||0; r.anticipo_fecha=gs('rvAntF').value||r.anticipo_fecha; r.anticipo_ref=(gs('rvAntRef').value||'').trim();
+  r.ts=new Date().toISOString(); r.pending=true; saveRend(a); cloudPush('viat',r); cerrarModal(); renderViatDet(); }
+function viatBorrar(id){ if(!confirm('¿Borrar esta rendición completa?')) return; saveRend(getRend().filter(x=>x.id!==id)); cloudDelete('viat',id); openViaticos(); }
+function viatPrint(){ const r=getRend().find(x=>x.id===curViatId); if(!r) return; const w=window.open('','_blank'); if(!w){ showToast('Permití las ventanas emergentes'); return; }
+  const base=`${location.origin}${location.pathname.replace(/[^/]*$/,'')}logo.jpg`; const tot=viatTotal(r), sal=viatSaldo(r);
+  const filas=(r.gastos||[]).slice().sort((a,b)=>String(a.fecha).localeCompare(String(b.fecha))).map(g=>`<tr><td>${fmtFecha(g.fecha)}</td><td>${esc(g.categoria||'')}</td><td>${esc(g.concepto||'')}</td><td>${esc(g.proveedor||'')}</td><td>${esc(g.factura||'')}</td><td class="r">${gsFmt(g.monto)}</td></tr>`).join('');
+  const salLbl=Math.abs(sal)<1?'Saldo (cerró justo)':(sal>0?'SOBRANTE A DEVOLVER por el comercial':'A ACREDITAR al comercial');
+  w.document.write(`<html><head><meta charset="utf-8"><title>Rendición viáticos — ${esc(r.comercial)}</title><style>
+   *{box-sizing:border-box} body{font-family:Arial,sans-serif;color:#1a202c;font-size:12px;margin:0} .wrap{max-width:800px;margin:0 auto;padding:24px}
+   .top{text-align:center;border-bottom:2px solid #2f7d3b;padding-bottom:8px;margin-bottom:10px} .top img{height:42px}
+   .hdr td{border:none;padding:2px 6px} .hdr .k{color:#718096;width:110px}
+   table.g{width:100%;border-collapse:collapse;margin-top:8px} table.g td,table.g th{border:1px solid #cbd5e0;padding:5px 7px} table.g th{background:#eef5ef;text-align:left;font-size:11px} .r{text-align:right;white-space:nowrap}
+   .tot td{font-weight:700;background:#f7faf7} .saldo{margin-top:12px;font-size:14px;font-weight:700}
+   .firma{margin-top:52px;display:flex;justify-content:space-around;text-align:center;font-size:12px} .firma div{border-top:1px solid #333;padding-top:5px;width:200px}
+   .nota{margin-top:16px;font-size:11px;color:#666;border:1px dashed #bbb;padding:8px;border-radius:6px}
+   @media print{.wrap{padding:10mm} .noprint{display:none}}</style></head><body><div class="wrap">
+   <div class="top"><img src="${base}"><div style="font-weight:700;margin-top:4px">RENDICIÓN DE VIÁTICOS</div></div>
+   <table class="hdr"><tr><td class="k">Comercial</td><td><b>${esc(r.comercial)}</b></td><td class="k">Semana</td><td>${fmtFecha(r.desde)} – ${fmtFecha(r.hasta)}</td></tr>
+    <tr><td class="k">Anticipo recibido</td><td><b>${gsFmt(r.anticipo)}</b></td><td class="k">Fecha / ref.</td><td>${fmtFecha(r.anticipo_fecha)}${r.anticipo_ref?' · '+esc(r.anticipo_ref):''}</td></tr></table>
+   <table class="g"><thead><tr><th>Fecha</th><th>Categoría</th><th>Concepto</th><th>Proveedor</th><th>N° factura</th><th class="r">Monto</th></tr></thead><tbody>${filas||'<tr><td colspan="6" style="text-align:center;color:#999">Sin gastos</td></tr>'}
+    <tr class="tot"><td colspan="5">TOTAL GASTADO</td><td class="r">${gsFmt(tot)}</td></tr></tbody></table>
+   <div class="saldo">Anticipo ${gsFmt(r.anticipo)} − Gastado ${gsFmt(tot)} = <span style="color:${sal<0?'#b91c1c':'#166534'}">${salLbl}: ${gsFmt(Math.abs(sal))}</span></div>
+   ${r.estado==='liquidada'?`<div style="font-size:12px;margin-top:6px;color:#555">Liquidado por transferencia el ${fmtFecha(r.liq_fecha)}${r.liq_ref?' · '+esc(r.liq_ref):''}</div>`:''}
+   <div class="nota">Adjuntar a este resumen las facturas físicas correspondientes a cada gasto.</div>
+   <div class="firma"><div>Firma del comercial</div><div>Recibido / Aprobado</div></div>
+   <div class="noprint" style="text-align:center;margin-top:18px"><button onclick="window.print()" style="background:#2f7d3b;color:#fff;border:none;padding:10px 22px;border-radius:8px;cursor:pointer">🖨️ Imprimir / Guardar PDF</button></div>
    </div></body></html>`);
   w.document.close();
 }
