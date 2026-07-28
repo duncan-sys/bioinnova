@@ -152,6 +152,7 @@ textarea{resize:vertical;min-height:66px}
       <div class="tile" id="tileOT" onclick="openOTList()" style="display:none"><div class="ico">🏭</div><div class="tlab">Órdenes de Trabajo</div><div class="tsub">producción</div></div>
       <div class="tile" id="tileFormulas" onclick="openFormulas()" style="display:none"><div class="ico">🧪</div><div class="tlab">Formulaciones</div><div class="tsub">recetas</div></div>
       <div class="tile" id="tileInv" onclick="openInv()" style="display:none"><div class="ico">📦</div><div class="tlab">Inventario</div><div class="tsub">insumos y materia prima</div></div>
+      <div class="tile" id="tileCaja" onclick="openCaja()" style="display:none"><div class="ico">💵</div><div class="tlab">Caja chica</div><div class="tsub">efectivo de planta</div></div>
       <div class="tile" id="tileUsuarios" onclick="openUsuarios()" style="display:none"><div class="ico">👥</div><div class="tlab">Usuarios</div><div class="tsub">accesos y roles</div></div>
     </div>
     <div class="sect-t">Últimas visitas</div>
@@ -229,6 +230,22 @@ textarea{resize:vertical;min-height:66px}
   <div class="screen" id="sInv">
     <div style="margin-bottom:10px"><input type="search" id="invBuscar" placeholder="🔎 Buscar insumo…" oninput="renderInv()"></div>
     <div class="card"><div class="card-h"><span>Inventario</span><span id="invCount" style="font-weight:500;color:var(--gray-400)"></span></div><div id="invList"></div></div>
+  </div>
+
+  <!-- CAJA CHICA -->
+  <div class="screen" id="sCaja">
+    <div class="card" style="margin-bottom:10px"><div class="card-b" style="text-align:center">
+      <div style="font-size:12px;color:var(--gray-500)">Saldo en caja</div>
+      <div id="cajaSaldo" style="font-size:30px;font-weight:800">₲ 0</div>
+      <div id="cajaPeriodo" style="font-size:12px;color:var(--gray-500);margin-top:2px"></div>
+      <div class="row2" style="margin-top:12px">
+        <button class="btn btn-primary" onclick="cajaModal('ingreso')">＋ Ingreso</button>
+        <button class="btn btn-amber" onclick="cajaModal('egreso')">− Egreso</button>
+      </div>
+      <button class="btn btn-ghost btn-block" style="margin-top:8px" onclick="cajaResumen()">🖨️ Imprimir resumen</button>
+    </div></div>
+    <div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap" id="cajaMeses"></div>
+    <div class="card"><div class="card-h"><span>Movimientos</span><span id="cajaCount" style="font-weight:500;color:var(--gray-400)"></span></div><div id="cajaList"></div></div>
   </div>
 
   <!-- CLIENTE DETALLE -->
@@ -569,6 +586,7 @@ function applyRoleUI(){
   showEl('tileOT', verPlanta);
   showEl('tileFormulas', verPlanta);
   showEl('tileInv', verPlanta);
+  showEl('tileCaja', verPlanta);
 }
 
 // ══════════════════════════════════════════════════════════
@@ -588,7 +606,10 @@ const SYNC_DEFS = {
   visitas:{ get:getVisitas, save:saveVisitas, table:'visitas', toRow:visRow, fromRow:rowVis },
   ot:{ get:getOTs, save:saveOTs, table:'bio_ot', toRow:otRow, fromRow:rowOT },
   mov:{ get:getMovs, save:saveMovs, table:'bio_mov', toRow:movRow, fromRow:rowMov },
+  caja:{ get:getCaja, save:saveCaja, table:'bio_caja', toRow:cajaRow, fromRow:rowCaja },
 };
+function cajaRow(m){ return { id:m.id, tipo:m.tipo, monto:m.monto||0, fecha:m.fecha||null, concepto:m.concepto||'', categoria:m.categoria||'', proveedor:m.proveedor||'', factura:m.factura||'', responsable:m.responsable||'', obs:m.obs||'', por:m.por||'', ts:m.ts||null }; }
+function rowCaja(r){ return { id:r.id, tipo:r.tipo, monto:Number(r.monto)||0, fecha:r.fecha||'', concepto:r.concepto||'', categoria:r.categoria||'', proveedor:r.proveedor||'', factura:r.factura||'', responsable:r.responsable||'', obs:r.obs||'', por:r.por||'', ts:r.ts, pending:false }; }
 function otRow(o){ return { id:o.id, num:o.num, fecha:o.fecha||null, producto_cod:o.producto_cod||'', producto_nom:o.producto_nom||'', kg_bolsa:o.kg_bolsa||null, kg:o.kg||null, bolsas:o.bolsas||0, lote:o.lote||'', cliente:o.cliente||'', comercial:o.comercial||'', insumos:o.insumos||[], estado:o.estado||'abierta', ts:o.ts||null }; }
 function rowOT(r){ return { id:r.id, num:r.num, fecha:r.fecha, producto_cod:r.producto_cod, producto_nom:r.producto_nom, kg_bolsa:r.kg_bolsa, kg:r.kg, bolsas:r.bolsas, lote:r.lote, cliente:r.cliente, comercial:r.comercial, insumos:(typeof r.insumos==='string'?JSON.parse(r.insumos||'[]'):(r.insumos||[])), estado:r.estado, ts:r.ts, pending:false }; }
 function movRow(m){ return { id:m.id, insumo_c:m.insumo_c||'', insumo_n:m.insumo_n||'', u:m.u||'kg', tipo:m.tipo||'ingreso', cant:m.cant||0, motivo:m.motivo||'', proveedor:m.proveedor||'', costo:m.costo==null?null:m.costo, ot_id:m.ot_id||'', fecha:m.fecha||null, usuario:m.usuario||'', ts:m.ts||null }; }
@@ -619,11 +640,11 @@ async function cloudPull(name){
     d.save(Object.values(merged));
   }catch(e){}
 }
-async function cloudPullAll(){ if(!AUTH_ON) return; await cloudPull('clientes'); await cloudPull('estancias'); await cloudPull('visitas'); await cloudPull('ot'); await cloudPull('mov'); refreshVista(); }
+async function cloudPullAll(){ if(!AUTH_ON) return; await cloudPull('clientes'); await cloudPull('estancias'); await cloudPull('visitas'); await cloudPull('ot'); await cloudPull('mov'); await cloudPull('caja'); refreshVista(); }
 function refreshVista(){ const act=document.querySelector('.screen.active'); if(!act) return;
   if(act.id==='sHome') renderHome(); else if(act.id==='sClientes') renderClientes();
   else if(act.id==='sCliente'&&curCliente) abrirCliente(curCliente); else if(act.id==='sHistorial') renderHistorial();
-  else if(act.id==='sOT') renderOTList(); else if(act.id==='sInv') renderInv(); }
+  else if(act.id==='sOT') renderOTList(); else if(act.id==='sInv') renderInv(); else if(act.id==='sCaja') renderCaja(); }
 function startSync(){ if(!AUTH_ON) return; cloudPullAll(); if(syncTimer) clearInterval(syncTimer); syncTimer=setInterval(cloudPullAll, 30000); }
 
 let curCliente=null, editVisitaId=null, curSub='Visitas técnicas a campo', _lotesEdit=[], _evals=[], _estEdit=[];
@@ -1186,6 +1207,124 @@ function otPrint(id){ const o=getOTs().find(x=>x.id===id); if(!o) return;
    <table><thead><tr><th>Código</th><th>Concepto</th><th class="r">Cantidad</th><th class="r">%</th></tr></thead><tbody>${filas}
     <tr class="tot"><td colspan="2">PRODUCTO FINAL — ${esc(o.producto_nom)}</td><td class="r">${(o.kg||0).toLocaleString('es-PY')} kg</td><td class="r">${o.bolsas} bolsas</td></tr></tbody></table>
    <div style="display:flex;justify-content:space-between;margin-top:36px;font-size:12px"><div>Preparado por: ____________</div><div>Controlado por: ____________</div></div>
+   <div class="noprint" style="text-align:center;margin-top:16px"><button onclick="window.print()" style="background:#2f7d3b;color:#fff;border:none;padding:10px 22px;border-radius:8px;cursor:pointer">🖨️ Imprimir / Guardar PDF</button></div>
+   </div></body></html>`);
+  w.document.close();
+}
+
+// ══ CAJA CHICA (efectivo de planta, en guaraníes) ══
+const CAJA_CATS=['Insumos / materia prima','Repuestos','Combustible','Flete / transporte','Mantenimiento','Servicios (luz/agua)','Limpieza','Papelería','Refrigerio','Adelanto / extra personal','Otro'];
+let _cajaMes='', _cajaEditId=null;
+function gsFmt(v){ return '₲ '+Number(v||0).toLocaleString('es-PY',{maximumFractionDigits:0}); }
+function getCaja(){ return getArr('bio:caja'); }
+function saveCaja(a){ setArr('bio:caja',a); }
+function cajaSaldoTotal(){ let s=0; getCaja().forEach(m=>{ s+=(m.tipo==='ingreso'?1:-1)*(Number(m.monto)||0); }); return s; }
+function mesKey(f){ return String(f||'').slice(0,7); }
+function mesLabel(k){ const nm=['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Set','Oct','Nov','Dic']; const p=String(k).split('-'); return p.length===2?nm[Number(p[1])]+' '+p[0]:k; }
+function openCaja(){ if(!esPlanta()){ showToast('Sin permiso'); return; } _cajaMes=''; showScreen('sCaja','Caja chica','Efectivo de planta',true); renderCaja(); }
+function renderCaja(){
+  const all=getCaja(); const saldo=cajaSaldoTotal();
+  gs('cajaSaldo').textContent=gsFmt(saldo); gs('cajaSaldo').style.color=saldo<0?'var(--red)':'var(--gray-900)';
+  const hoyMes=mesKey(hoy());
+  const meses=[...new Set(all.map(m=>mesKey(m.fecha)))].filter(Boolean).sort().reverse();
+  const chips=[['','Este mes'],['todos','Todos']].concat(meses.filter(k=>k!==hoyMes).map(k=>[k,mesLabel(k)]));
+  gs('cajaMeses').innerHTML=chips.map(([v,l])=>`<button onclick="cajaSetMes('${v}')" style="font-size:11px;padding:5px 10px;border:none;border-radius:12px;cursor:pointer;background:${(_cajaMes===v)?'var(--green)':'var(--gray-200)'};color:${(_cajaMes===v)?'#fff':'var(--gray-600)'}">${l}</button>`).join('');
+  let mvs=all.slice();
+  if(_cajaMes!=='todos'){ const k=_cajaMes||hoyMes; mvs=mvs.filter(m=>mesKey(m.fecha)===k); }
+  const ing=mvs.filter(m=>m.tipo==='ingreso').reduce((a,m)=>a+(Number(m.monto)||0),0);
+  const egr=mvs.filter(m=>m.tipo==='egreso').reduce((a,m)=>a+(Number(m.monto)||0),0);
+  const perLbl=_cajaMes==='todos'?'Histórico':mesLabel(_cajaMes||hoyMes);
+  gs('cajaPeriodo').innerHTML=`${perLbl}: <span style="color:var(--green)">+${gsFmt(ing)}</span> · <span style="color:var(--red)">−${gsFmt(egr)}</span>`;
+  gs('cajaCount').textContent=mvs.length?mvs.length+' movim.':'';
+  mvs.sort((a,b)=>String(b.ts||'').localeCompare(String(a.ts||'')));
+  gs('cajaList').innerHTML=mvs.length? mvs.map(m=>{ const inn=m.tipo==='ingreso';
+    const det=[m.categoria,m.proveedor,m.responsable,(m.factura?'Fact '+m.factura:''),(m.por?'· '+String(m.por).split('@')[0]:'')].filter(Boolean).join(' · ');
+    return `<div class="li" style="cursor:default"><div style="min-width:0;flex:1"><div class="li-t">${esc(m.concepto||(inn?'Ingreso':'Egreso'))}</div><div class="li-s">${fmtFecha(m.fecha)}${det?' · '+esc(det):''}</div></div>
+      <div style="text-align:right;flex-shrink:0"><div style="font-weight:700;color:${inn?'var(--green)':'var(--red)'};white-space:nowrap">${inn?'+':'−'}${gsFmt(m.monto)}</div>
+      ${esPlanta()?`<div style="margin-top:3px;white-space:nowrap"><span onclick="cajaEdit('${m.id}')" title="Editar" style="cursor:pointer;color:var(--gray-500);font-size:13px;padding:0 4px">✎</span>${m.tipo==='egreso'?`<span onclick="cajaRecibo('${m.id}')" title="Comprobante" style="cursor:pointer;font-size:13px;padding:0 4px">🧾</span>`:''}<span onclick="cajaBorrar('${m.id}')" title="Anular" style="cursor:pointer;color:var(--red);font-size:13px;padding:0 4px">🗑</span></div>`:''}</div></div>`;
+  }).join('') : '<div class="empty">Sin movimientos en este período.</div>';
+}
+function cajaSetMes(v){ _cajaMes=v; renderCaja(); }
+function cajaEdit(id){ cajaModal(null,id); }
+function cajaModal(tipo, editId){
+  if(!esPlanta()){ showToast('Sin permiso'); return; }
+  _cajaEditId=editId||null;
+  const m=editId?getCaja().find(x=>x.id===editId):null; const t=m?m.tipo:tipo; const esE=(t==='egreso');
+  const tit=(t==='ingreso'?'＋ Ingreso a caja':'− Egreso de caja');
+  gs('modalBox').innerHTML=`<h3>${tit}</h3>
+    <label class="fl">Monto (₲)</label><input type="number" id="cjMonto" inputmode="numeric" placeholder="0" value="${m?m.monto:''}">
+    <label class="fl">Fecha</label><input type="date" id="cjFecha" value="${m?m.fecha:hoy()}">
+    ${esE?`<label class="fl">Categoría</label><select id="cjCat">${CAJA_CATS.map(c=>`<option ${m&&m.categoria===c?'selected':''}>${c}</option>`).join('')}</select>`:''}
+    <label class="fl">${esE?'Concepto / detalle':'Detalle'}</label><input id="cjConcepto" placeholder="${esE?'Ej: compra de repuesto':'Ej: reposición / saldo inicial'}" value="${m?esc(m.concepto):''}">
+    ${esE?`<div class="row2"><div><label class="fl">Proveedor</label><input id="cjProv" placeholder="opcional" value="${m?esc(m.proveedor):''}"></div><div><label class="fl">N° factura</label><input id="cjFact" placeholder="opcional" value="${m?esc(m.factura):''}"></div></div>
+      <label class="fl">Responsable / recibió</label><input id="cjResp" placeholder="quién gastó o recibió" value="${m?esc(m.responsable):((getSession()&&getSession().nombre)||'')}">`:''}
+    <label class="fl">Observaciones</label><input id="cjObs" value="${m?esc(m.obs):''}">
+    ${esE&&!m?`<label class="fl" style="display:flex;gap:7px;align-items:center;margin-top:8px;font-weight:400"><input type="checkbox" id="cjRecibo" checked style="width:16px;height:16px"> 🧾 Imprimir comprobante al guardar</label>`:''}
+    <div class="row2" style="margin-top:12px"><button class="btn btn-sec" onclick="cerrarModal()">Cancelar</button><button class="btn btn-primary" onclick="cajaGuardar('${t}')">✓ Registrar</button></div>`;
+  gs('modal').classList.add('show');
+}
+function cajaGuardar(tipo){
+  const monto=num(gs('cjMonto').value); if(!monto||monto<=0){ showToast('Ingresá el monto'); return; }
+  const base={ tipo, monto:Math.abs(monto), fecha:gs('cjFecha').value||hoy(), concepto:(gs('cjConcepto').value||'').trim(),
+    categoria:gs('cjCat')?gs('cjCat').value:'', proveedor:gs('cjProv')?gs('cjProv').value.trim():'', factura:gs('cjFact')?gs('cjFact').value.trim():'',
+    responsable:gs('cjResp')?gs('cjResp').value.trim():'', obs:(gs('cjObs').value||'').trim(),
+    por:(getSession()&&getSession().nombre)||'', ts:new Date().toISOString(), pending:true };
+  let a=getCaja(), rec=null;
+  if(_cajaEditId){ a=a.map(x=>x.id===_cajaEditId?Object.assign({},x,base):x); rec=a.find(x=>x.id===_cajaEditId); }
+  else { rec=Object.assign({id:'CJ-'+Date.now()},base); a.unshift(rec); }
+  saveCaja(a); cloudPush('caja',rec); const doPrint=(gs('cjRecibo')&&gs('cjRecibo').checked);
+  _cajaEditId=null; cerrarModal(); showToast('✓ Guardado'); renderCaja();
+  if(doPrint && rec.tipo==='egreso') cajaRecibo(rec.id);
+}
+function cajaBorrar(id){ if(!esPlanta())return; if(!confirm('¿Anular este movimiento de caja?'))return; saveCaja(getCaja().filter(x=>x.id!==id)); cloudDelete('caja',id); renderCaja(); }
+function cajaRecibo(id){ const m=getCaja().find(x=>x.id===id); if(!m) return; const w=window.open('','_blank'); if(!w){ showToast('Permití las ventanas emergentes'); return; }
+  const base=`${location.origin}${location.pathname.replace(/[^/]*$/,'')}logo.jpg`;
+  w.document.write(`<html><head><meta charset="utf-8"><title>Comprobante egreso — ${gsFmt(m.monto)}</title><style>
+   *{box-sizing:border-box} body{font-family:Arial,sans-serif;color:#1a202c;font-size:13px;margin:0} .wrap{max-width:520px;margin:0 auto;padding:26px}
+   .top{text-align:center;border-bottom:2px solid #2f7d3b;padding-bottom:8px;margin-bottom:14px} .top img{height:42px}
+   h2{font-size:15px;margin:6px 0} .monto{font-size:26px;font-weight:800;text-align:center;margin:14px 0;color:#111}
+   table{width:100%;border-collapse:collapse;font-size:13px} td{padding:5px 4px;vertical-align:top} .k{color:#718096;width:130px}
+   .firma{margin-top:48px;display:flex;justify-content:space-around;text-align:center;font-size:12px} .firma div{border-top:1px solid #333;padding-top:5px;width:180px}
+   @media print{.wrap{padding:12mm} .noprint{display:none}}</style></head><body><div class="wrap">
+   <div class="top"><img src="${base}"><div style="font-weight:700;font-size:13px;margin-top:4px">COMPROBANTE DE EGRESO · CAJA CHICA</div></div>
+   <div class="monto">${gsFmt(m.monto)}</div>
+   <table>
+    <tr><td class="k">Fecha</td><td>${fmtFecha(m.fecha)}</td></tr>
+    <tr><td class="k">Concepto</td><td><b>${esc(m.concepto||'—')}</b></td></tr>
+    <tr><td class="k">Categoría</td><td>${esc(m.categoria||'—')}</td></tr>
+    ${m.proveedor?`<tr><td class="k">Proveedor</td><td>${esc(m.proveedor)}</td></tr>`:''}
+    ${m.factura?`<tr><td class="k">N° factura</td><td>${esc(m.factura)}</td></tr>`:''}
+    <tr><td class="k">Responsable</td><td>${esc(m.responsable||'—')}</td></tr>
+    ${m.obs?`<tr><td class="k">Observaciones</td><td>${esc(m.obs)}</td></tr>`:''}
+    <tr><td class="k">Registró</td><td>${esc(m.por||'—')}</td></tr>
+   </table>
+   <div class="firma"><div>Recibí conforme</div><div>Autorizó</div></div>
+   <div class="noprint" style="text-align:center;margin-top:18px"><button onclick="window.print()" style="background:#2f7d3b;color:#fff;border:none;padding:10px 22px;border-radius:8px;cursor:pointer">🖨️ Imprimir / Guardar PDF</button></div>
+   </div></body></html>`);
+  w.document.close();
+}
+function cajaResumen(){
+  const all=getCaja(); const hoyMes=mesKey(hoy());
+  let mvs=all.slice(); let perLbl='Histórico';
+  if(_cajaMes!=='todos'){ const k=_cajaMes||hoyMes; mvs=mvs.filter(m=>mesKey(m.fecha)===k); perLbl=mesLabel(k); }
+  mvs.sort((a,b)=>String(a.fecha||'').localeCompare(String(b.fecha||''))||String(a.ts||'').localeCompare(String(b.ts||'')));
+  const ing=mvs.filter(m=>m.tipo==='ingreso').reduce((a,m)=>a+(Number(m.monto)||0),0);
+  const egr=mvs.filter(m=>m.tipo==='egreso').reduce((a,m)=>a+(Number(m.monto)||0),0);
+  const w=window.open('','_blank'); if(!w){ showToast('Permití las ventanas emergentes'); return; }
+  const base=`${location.origin}${location.pathname.replace(/[^/]*$/,'')}logo.jpg`;
+  const filas=mvs.map(m=>`<tr><td>${fmtFecha(m.fecha)}</td><td>${esc(m.concepto||(m.tipo==='ingreso'?'Ingreso':'Egreso'))}${m.categoria?'<br><span style="color:#888;font-size:10px">'+esc(m.categoria)+'</span>':''}</td><td>${esc(m.responsable||m.proveedor||'')}</td><td class="r" style="color:#2f7d3b">${m.tipo==='ingreso'?gsFmt(m.monto):''}</td><td class="r" style="color:#b91c1c">${m.tipo==='egreso'?gsFmt(m.monto):''}</td></tr>`).join('');
+  w.document.write(`<html><head><meta charset="utf-8"><title>Caja chica — ${perLbl}</title><style>
+   *{box-sizing:border-box} body{font-family:Arial,sans-serif;color:#1a202c;font-size:12px;margin:0} .wrap{max-width:800px;margin:0 auto;padding:24px}
+   .top{text-align:center;border-bottom:2px solid #2f7d3b;padding-bottom:8px;margin-bottom:8px} .top img{height:40px}
+   table{width:100%;border-collapse:collapse} td,th{border:1px solid #cbd5e0;padding:5px 7px} th{background:#eef5ef;text-align:left;font-size:11px} .r{text-align:right;white-space:nowrap}
+   .tot td{font-weight:700;background:#f7faf7}
+   @media print{.wrap{padding:10mm} .noprint{display:none}}</style></head><body><div class="wrap">
+   <div class="top"><img src="${base}"><div style="font-weight:700;margin-top:4px">CAJA CHICA · ${esc(perLbl)}</div></div>
+   <div style="display:flex;gap:16px;justify-content:center;margin:8px 0 12px;font-size:13px">
+     <div>Ingresos: <b style="color:#2f7d3b">${gsFmt(ing)}</b></div><div>Egresos: <b style="color:#b91c1c">${gsFmt(egr)}</b></div><div>Saldo del período: <b>${gsFmt(ing-egr)}</b></div><div>Saldo actual en caja: <b>${gsFmt(cajaSaldoTotal())}</b></div>
+   </div>
+   <table><thead><tr><th>Fecha</th><th>Concepto</th><th>Resp./Prov.</th><th class="r">Ingreso</th><th class="r">Egreso</th></tr></thead><tbody>${filas||'<tr><td colspan="5" style="text-align:center;color:#999">Sin movimientos</td></tr>'}
+    <tr class="tot"><td colspan="3">TOTALES</td><td class="r" style="color:#2f7d3b">${gsFmt(ing)}</td><td class="r" style="color:#b91c1c">${gsFmt(egr)}</td></tr></tbody></table>
    <div class="noprint" style="text-align:center;margin-top:16px"><button onclick="window.print()" style="background:#2f7d3b;color:#fff;border:none;padding:10px 22px;border-radius:8px;cursor:pointer">🖨️ Imprimir / Guardar PDF</button></div>
    </div></body></html>`);
   w.document.close();
