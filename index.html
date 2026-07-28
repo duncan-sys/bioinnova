@@ -623,14 +623,14 @@ function applyRoleUI(){
 //  Guarda SIEMPRE en el equipo; sube/baja de Supabase cuando hay red.
 //  Merge por id: gana el ts más nuevo. Los pendientes se suben al reconectar.
 // ══════════════════════════════════════════════════════════
-function cliRow(c){ return { id:c.id, nombre:c.nombre||'', ruc:c.ruc||'', direccion:c.direccion||'', contacto:c.contacto||'', tel:c.tel||'', email:c.email||'', ubicacion:c.ubicacion||'', obs:c.obs||'', estado:c.estado||'', prioridad:c.prioridad||'', comercial:c.comercial||'', prox_fecha:c.prox_fecha||null, prox_nota:c.prox_nota||'', seguimientos:c.seguimientos||[], ts:c.ts }; }
-function rowCli(r){ return { id:r.id, nombre:r.nombre||'', ruc:r.ruc||'', direccion:r.direccion||'', contacto:r.contacto||'', tel:r.tel||'', email:r.email||'', ubicacion:r.ubicacion||'', obs:r.obs||'', estado:r.estado||'', prioridad:r.prioridad||'', comercial:r.comercial||'', prox_fecha:r.prox_fecha||'', prox_nota:r.prox_nota||'', seguimientos:(typeof r.seguimientos==='string'?(()=>{try{return JSON.parse(r.seguimientos)}catch{return[]}})():(r.seguimientos||[])), ts:r.ts }; }
+function cliRow(c){ return { id:c.id, nombre:c.nombre||'', codigo:c.codigo||'', ruc:c.ruc||'', direccion:c.direccion||'', contacto:c.contacto||'', tel:c.tel||'', email:c.email||'', ubicacion:c.ubicacion||'', obs:c.obs||'', estado:c.estado||'', prioridad:c.prioridad||'', comercial:c.comercial||'', prox_fecha:c.prox_fecha||null, prox_nota:c.prox_nota||'', seguimientos:c.seguimientos||[], ts:c.ts }; }
+function rowCli(r){ return { id:r.id, nombre:r.nombre||'', codigo:r.codigo||'', ruc:r.ruc||'', direccion:r.direccion||'', contacto:r.contacto||'', tel:r.tel||'', email:r.email||'', ubicacion:r.ubicacion||'', obs:r.obs||'', estado:r.estado||'', prioridad:r.prioridad||'', comercial:r.comercial||'', prox_fecha:r.prox_fecha||'', prox_nota:r.prox_nota||'', seguimientos:(typeof r.seguimientos==='string'?(()=>{try{return JSON.parse(r.seguimientos)}catch{return[]}})():(r.seguimientos||[])), ts:r.ts }; }
 function estRow(e){ return { id:e.id, cliente_id:e.cliente_id||'', nombre:e.nombre||'', zona:e.zona||'', hato:e.hato||[], lotes:e.lotes||[], obs:e.obs||'', ts:e.ts }; }
 function rowEst(r){ const p=x=>typeof x==='string'?(()=>{try{return JSON.parse(x)}catch{return[]}})():(x||[]); return { id:r.id, cliente_id:r.cliente_id||'', nombre:r.nombre||'', zona:r.zona||'', hato:p(r.hato), lotes:p(r.lotes), obs:r.obs||'', ts:r.ts }; }
 function visRow(v){ return { id:v.id, cliente_id:v.cliente_id||'', estancia_id:v.estancia_id||'', fecha:v.fecha||null, tecnico:v.tecnico||'', evaluaciones:(v.evaluaciones||visitaEvals(v)), diagnostico:v.diagnostico||'', recomendacion:v.recomendacion||'', proxima:v.proxima||null, ts:v.ts }; }
 function rowVis(r){ const p=x=>typeof x==='string'?(()=>{try{return JSON.parse(x)}catch{return[]}})():(x||[]); return { id:r.id, cliente_id:r.cliente_id||'', estancia_id:r.estancia_id||'', fecha:r.fecha||'', tecnico:r.tecnico||'', evaluaciones:p(r.evaluaciones), diagnostico:r.diagnostico||'', recomendacion:r.recomendacion||'', proxima:r.proxima||'', ts:r.ts }; }
 const SYNC_DEFS = {
-  clientes:{ get:getClientes, save:saveClientes, table:'clientes', toRow:cliRow, fromRow:rowCli, toRowSafe:(c)=>{ const r=cliRow(c); ['estado','prioridad','comercial','prox_fecha','prox_nota','seguimientos'].forEach(k=>delete r[k]); return r; } },
+  clientes:{ get:getClientes, save:saveClientes, table:'clientes', toRow:cliRow, fromRow:rowCli, toRowSafe:(c)=>{ const r=cliRow(c); ['codigo','estado','prioridad','comercial','prox_fecha','prox_nota','seguimientos'].forEach(k=>delete r[k]); return r; } },
   estancias:{ get:getEstancias, save:saveEstancias, table:'estancias', toRow:estRow, fromRow:rowEst },
   visitas:{ get:getVisitas, save:saveVisitas, table:'visitas', toRow:visRow, fromRow:rowVis },
   ot:{ get:getOTs, save:saveOTs, table:'bio_ot', toRow:otRow, fromRow:rowOT },
@@ -786,7 +786,7 @@ function renderCrm(){
 function renderClientes(){
   const q=(gs('cliBuscar').value||'').trim().toLowerCase();
   let cl=getClientes().slice().sort((a,b)=>String(a.nombre||'').localeCompare(String(b.nombre||'')));
-  if(q) cl=cl.filter(c=>[c.nombre,c.contacto,c.ubicacion].some(x=>String(x||'').toLowerCase().includes(q)));
+  if(q) cl=cl.filter(c=>[c.nombre,c.codigo,c.ruc,c.contacto,c.ubicacion].some(x=>String(x||'').toLowerCase().includes(q)));
   gs('cliCount').textContent=cl.length?cl.length+' clientes':'';
   gs('cliList').innerHTML = cl.length? cl.map(c=>{
     const ne=estanciasDe(c.id).length, nv=visitasDe(c.id).length;
@@ -798,8 +798,9 @@ function clienteModal(id){
   const c=id?clienteById(id):null;
   gs('modalBox').innerHTML=`<h3>${c?'Editar':'Nuevo'} cliente</h3>
     <label class="fl">Nombre / Razón social</label><input id="mNombre" value="${esc(c&&c.nombre)}" placeholder="Ej: Estancia La Rosita S.A.">
-    <div class="row2"><div><label class="fl">RUC</label><input id="mRuc" value="${esc(c&&c.ruc)}" placeholder="Ej: 80012345-6"></div><div><label class="fl">Contacto</label><input id="mContacto" value="${esc(c&&c.contacto)}" placeholder="Persona"></div></div>
-    <div class="row2"><div><label class="fl">Teléfono</label><input id="mTel" value="${esc(c&&c.tel)}"></div><div><label class="fl">Email</label><input id="mEmail" value="${esc(c&&c.email)}"></div></div>
+    <div class="row2"><div><label class="fl">RUC</label><input id="mRuc" value="${esc(c&&c.ruc)}" placeholder="Ej: 80012345-6"></div><div><label class="fl">Código SAP</label><input id="mCodigo" value="${esc(c&&c.codigo)}" placeholder="Ej: CL0230"></div></div>
+    <div class="row2"><div><label class="fl">Contacto</label><input id="mContacto" value="${esc(c&&c.contacto)}" placeholder="Persona"></div><div><label class="fl">Teléfono</label><input id="mTel" value="${esc(c&&c.tel)}"></div></div>
+    <label class="fl">Email</label><input id="mEmail" value="${esc(c&&c.email)}">
     <label class="fl">Dirección (para la factura)</label><input id="mDireccion" value="${esc(c&&c.direccion)}" placeholder="Calle, ciudad…">
     <label class="fl">Zona / Ubicación</label><input id="mUbic" value="${esc(c&&c.ubicacion)}" placeholder="Ej: Chaco, Concepción…">
     <label class="fl">Observaciones</label><textarea id="mObs">${esc(c&&c.obs)}</textarea>
@@ -828,7 +829,7 @@ function guardarCliente(id){
   if(!canEdit()){ showToast('Sin permiso'); return; }
   const nombre=gs('mNombre').value.trim(); if(!nombre){ showToast('Ingresá el nombre'); return; }
   let cl=getClientes(); let c=id?cl.find(x=>x.id===id):null;
-  const data={nombre,ruc:gs('mRuc').value.trim(),direccion:gs('mDireccion').value.trim(),contacto:gs('mContacto').value.trim(),tel:gs('mTel').value.trim(),email:gs('mEmail').value.trim(),ubicacion:gs('mUbic').value.trim(),obs:gs('mObs').value.trim()};
+  const data={nombre,codigo:gs('mCodigo')?gs('mCodigo').value.trim():'',ruc:gs('mRuc').value.trim(),direccion:gs('mDireccion').value.trim(),contacto:gs('mContacto').value.trim(),tel:gs('mTel').value.trim(),email:gs('mEmail').value.trim(),ubicacion:gs('mUbic').value.trim(),obs:gs('mObs').value.trim()};
   if(c){ Object.assign(c,data); c.ts=new Date().toISOString(); c.pending=true; } else { cl.push({id:'CL-'+Date.now(),...data,ts:new Date().toISOString(),pending:true}); }
   let openId=id;
   if(!c){ openId=cl[cl.length-1].id; }
@@ -865,7 +866,7 @@ function abrirCliente(id){
   gs('estBtnAgregar').style.display=ed?'':'none';
   gs('btnVisitaCliente').style.display=ed?'':'none';
   gs('cliInfo').innerHTML=`<div style="display:flex;justify-content:space-between;align-items:start"><div><div style="font-size:16px;font-weight:700">${esc(c.nombre)}</div>
-    <div style="font-size:12px;color:var(--gray-600);margin-top:3px">${c.ruc?'🧾 RUC '+esc(c.ruc)+'<br>':''}${c.contacto?'👤 '+esc(c.contacto)+'<br>':''}${c.tel?'📞 '+esc(c.tel)+'  ':''}${c.email?'✉ '+esc(c.email):''}${c.direccion?'<br>🏠 '+esc(c.direccion):''}${c.ubicacion?'<br>📍 '+esc(c.ubicacion):''}</div>
+    <div style="font-size:12px;color:var(--gray-600);margin-top:3px">${c.codigo?'🏷️ '+esc(c.codigo)+(c.ruc?' · ':'<br>'):''}${c.ruc?'🧾 RUC '+esc(c.ruc)+'<br>':''}${c.contacto?'👤 '+esc(c.contacto)+'<br>':''}${c.tel?'📞 '+esc(c.tel)+'  ':''}${c.email?'✉ '+esc(c.email):''}${c.direccion?'<br>🏠 '+esc(c.direccion):''}${c.ubicacion?'<br>📍 '+esc(c.ubicacion):''}</div>
     ${c.obs?'<div style="font-size:12px;color:var(--gray-500);margin-top:5px">'+esc(c.obs)+'</div>':''}</div>
     ${ed?`<span style="color:var(--green);cursor:pointer;font-size:13px;font-weight:600" onclick="clienteModal('${c.id}')">✎ Editar</span>`:''}</div>`;
   renderCliCrm(c);
