@@ -317,9 +317,17 @@ textarea{resize:vertical;min-height:66px}
 
   <!-- LISTA DE PRECIOS (editor, gerente) -->
   <div class="screen" id="sPrecios">
-    <button class="btn btn-primary btn-block" style="margin-bottom:8px" onclick="precioModal()">＋ Nuevo producto</button>
+    <div class="row2" style="margin-bottom:8px"><button class="btn btn-sec" onclick="openInsPrec()">🧪 Precios de insumos</button><button class="btn btn-sec" onclick="cfgCosteoModal()">⚙ Parámetros</button></div>
+    <button class="btn btn-primary btn-block" style="margin-bottom:8px" onclick="precioModal()">＋ Producto manual</button>
     <div style="margin-bottom:8px"><input type="search" id="precBuscar" placeholder="🔎 Buscar producto…" oninput="renderPrecios()"></div>
     <div class="card"><div class="card-h"><span>Lista de precios (₲/kg)</span><span id="precCount" style="font-weight:500;color:var(--gray-400)"></span></div><div id="precList"></div></div>
+  </div>
+
+  <!-- PRECIOS DE INSUMOS (Guillermo) -->
+  <div class="screen" id="sInsPrec">
+    <div style="font-size:12px;color:var(--gray-500);margin-bottom:8px">Actualizá el precio por kg de cada insumo. Los productos se recalculan solos.</div>
+    <div style="margin-bottom:8px"><input type="search" id="insPrecBuscar" placeholder="🔎 Buscar insumo…" oninput="renderInsPrec()"></div>
+    <div class="card"><div class="card-h"><span>Insumos (₲/kg)</span><span id="insPrecCount" style="font-weight:500;color:var(--gray-400)"></span></div><div id="insPrecList"></div></div>
   </div>
 
   <!-- VISITA -->
@@ -529,8 +537,8 @@ const PL_FORMULAS=[
 function plKgBolsa(f){ return (f&&f.kg)||30; }
 function plInsumo(cod){ return PL_INSUMOS.find(x=>x.c===cod); }
 function plFormula(cod){ return PL_FORMULAS.find(x=>x.c===cod); }
-// ── Lista de precios (base sembrada del Excel; editable por el gerente) ──
-const PL_PRECIOS=[
+// ── Lista de precios: respaldo manual para productos SIN fórmula (los que tienen fórmula se calculan) ──
+const PL_PRECIOS_MANUAL=[
 {c:'BIO25-008',n:'Desmamante Campo 18% CL - 40kg',kg:40,p0:2116,p30:2138,p60:2159,p90:2180},
 {c:'BIO25-005',n:'Desmamante Campo 18% - 40kg',kg:40,p0:2085,p30:2106,p60:2127,p90:2147},
 {c:'TERM001',n:'Terminacion 4 - 40kg',kg:40,p0:1935,p30:1954,p60:1974,p90:1993},
@@ -578,7 +586,38 @@ const COND_ORDER=['p0','p30','p60','p90'];
 function getPreciosOv(){ return getArr('bio:precios'); }        // ediciones/altas del gerente (sync)
 function savePreciosOv(a){ setArr('bio:precios',a); }
 function precioKey(x){ return (x.c&&String(x.c).trim())?String(x.c).trim().toUpperCase():('N:'+String(x.n||'').trim().toUpperCase()); }
-function precioList(){ const m={}; PL_PRECIOS.forEach(p=>{ m[precioKey(p)]=Object.assign({},p); }); getPreciosOv().forEach(o=>{ if(o&&o.borrado){ delete m[precioKey(o)]; return; } m[precioKey(o)]=Object.assign({},m[precioKey(o)]||{},o); }); return Object.values(m).filter(p=>!p.borrado).sort((a,b)=>String(a.n||'').localeCompare(String(b.n||''))); }
+// ── MOTOR DE COSTEO ──────────────────────────────────────────
+// Precio base ₲/kg de cada insumo (lo actualiza Guillermo). Base sembrada del Excel.
+const PL_INSPREC={
+'INS003':863.64,'INS015':5358.55,'INS045':5581.82,'INS002':1339.64,'INS040':292.82,'INS058':948.91,
+'BIO25-003':2241.64,'BIO25-002':2858.43,'BIO25-001':2350.49,'INS037':7535.45,'INS008':1842,'INS027':10818.18,
+'INS001':1263.64,'INS046':3349.09,'INS048':10047.27,'INS038':11721.82,'INS039':19536.36,'INS047':13508,
+'INS007':1345.45,'INS014':4688.73,'INS056':7535.45,'BIO25-004':2901.97,'INS049':20206.18,'BIO25-014':1221.51,'INS071':11275.27
+};
+// Parámetros de costeo (globales, editables por el gerente)
+const PL_COSTCFG={ merma:0.03, mano_obra:100, bolsa:90, etiqueta_bolsa:450, gastos_adm:0.04, comision:0.04, margen:0.25, plazo_mes:0.01, iva:0, dolar:6140 };
+const PL_MARGEN={ BIOSAL02:0.15, BIOSAL03:0.15, BIOSAL04:0.15, BIOSAL05:0.15 };   // Sal Mineral 15% (override por producto)
+function getInsPrecOv(){ return getArr('bio:insprec'); }
+function saveInsPrecOv(a){ setArr('bio:insprec',a); }
+function insPrecio(c){ const o=getInsPrecOv().find(x=>x.c===c); if(o) return Number(o.gskg)||0; return PL_INSPREC[c]||0; }
+function getCostCfg(){ let o={}; try{ o=JSON.parse(localStorage.getItem('bio:costcfg'))||{}; }catch{} return Object.assign({},PL_COSTCFG,o); }
+function saveCostCfg(o){ try{ localStorage.setItem('bio:costcfg',JSON.stringify(o)); }catch{} if(typeof pushPricingCfg==='function') pushPricingCfg(); }
+function getMargenOv(){ let o={}; try{ o=JSON.parse(localStorage.getItem('bio:margen'))||{}; }catch{} return o; }
+function setMargenOv(cod,pct){ const o=getMargenOv(); if(pct==null||pct==='') delete o[cod]; else o[cod]=Number(pct); try{ localStorage.setItem('bio:margen',JSON.stringify(o)); }catch{} if(typeof pushPricingCfg==='function') pushPricingCfg(); }
+function margenDe(cod){ const ov=getMargenOv(); if(cod&&ov[cod]!=null) return Number(ov[cod]); if(cod&&PL_MARGEN[cod]!=null) return PL_MARGEN[cod]; return getCostCfg().margen; }
+function costoBaseFormula(f){ return (f.ins||[]).filter(i=>i.t==='p').reduce((a,i)=>a+(Number(i.p)/100)*insPrecio(i.c),0); }
+function precioProducto(f){ const cfg=getCostCfg(); const base=costoBaseFormula(f); const kg=plKgBolsa(f);
+  const conMerma=base*(1+cfg.merma);
+  const conAdic=conMerma + cfg.mano_obra + cfg.bolsa + (kg?cfg.etiqueta_bolsa/kg:0);
+  const conGA=conAdic*(1+cfg.gastos_adm);
+  const contado=conGA*(1+margenDe(f.c)+cfg.comision)*(1+(cfg.iva||0)); const R=Math.round;
+  return { c:f.c||'', n:f.n, kg, base:R(base), p0:R(contado), p30:R(contado*(1+cfg.plazo_mes)), p60:R(contado*(1+2*cfg.plazo_mes)), p90:R(contado*(1+3*cfg.plazo_mes)), calc:true }; }
+// Lista efectiva: productos con fórmula = calculados; sin fórmula = manual (respaldo) + altas/ediciones del gerente
+function precioList(){ const m={};
+  PL_FORMULAS.forEach(f=>{ const p=precioProducto(f); m[precioKey(p)]=p; });
+  PL_PRECIOS_MANUAL.forEach(p=>{ const k=precioKey(p); if(!m[k]) m[k]=Object.assign({calc:false},p); });
+  getPreciosOv().forEach(o=>{ if(o&&o.borrado){ delete m[precioKey(o)]; return; } const k=precioKey(o); m[k]=Object.assign({},m[k]||{},o,{calc:false}); });
+  return Object.values(m).filter(p=>!p.borrado).sort((a,b)=>String(a.n||'').localeCompare(String(b.n||''))); }
 function getCotiz(){ return getArr('bio:cotiz'); }
 function saveCotiz(a){ setArr('bio:cotiz',a); }
 function cotizDolar(){ return Number(localStorage.getItem('bio:dolar'))||6450; }
@@ -776,7 +815,13 @@ const SYNC_DEFS = {
   insumo:{ get:getInsumosExtra, save:saveInsumosExtra, table:'bio_insumos', toRow:insuRow, fromRow:rowInsu },
   precio:{ get:getPreciosOv, save:savePreciosOv, table:'bio_precios', toRow:precRow, fromRow:rowPrec },
   cotiz:{ get:getCotiz, save:saveCotiz, table:'bio_cotiz', toRow:cotizRow, fromRow:rowCotiz },
+  insprec:{ get:getInsPrecOv, save:saveInsPrecOv, table:'bio_insprec', toRow:insprecRow, fromRow:rowInsprec },
 };
+function insprecRow(o){ return { id:o.id||('IP-'+o.c), c:o.c||'', gskg:Number(o.gskg)||0, ts:o.ts||null }; }
+function rowInsprec(r){ return { id:r.id, c:r.c||'', gskg:Number(r.gskg)||0, ts:r.ts, pending:false }; }
+// Parámetros de costeo (costcfg + margen) — fila única en bio_config
+async function pullPricingCfg(){ if(!AUTH_ON) return; try{ const rows=await sb.query('bio_config',{id:'pricing'}); if(rows&&rows[0]&&rows[0].data){ const d=(typeof rows[0].data==='string')?JSON.parse(rows[0].data):rows[0].data; if(d.costcfg) localStorage.setItem('bio:costcfg',JSON.stringify(d.costcfg)); if(d.margen) localStorage.setItem('bio:margen',JSON.stringify(d.margen)); } }catch(e){} }
+async function pushPricingCfg(){ if(!AUTH_ON) return; try{ await sb.upsert('bio_config',{id:'pricing',data:{costcfg:getCostCfg(),margen:getMargenOv()},ts:new Date().toISOString()},'id'); }catch(e){} }
 function precRow(p){ return { id:p.id, c:p.c||'', n:p.n||'', kg:p.kg||null, p0:p.p0||0, p30:p.p30||0, p60:p.p60||0, p90:p.p90||0, borrado:!!p.borrado, ts:p.ts||null }; }
 function rowPrec(r){ return { id:r.id, c:r.c||'', n:r.n||'', kg:Number(r.kg)||0, p0:Number(r.p0)||0, p30:Number(r.p30)||0, p60:Number(r.p60)||0, p90:Number(r.p90)||0, borrado:!!r.borrado, ts:r.ts, pending:false }; }
 function cotizRow(c){ return { id:c.id, num:c.num, fecha:c.fecha||null, cliente:c.cliente||'', cliente_id:c.cliente_id||'', condicion:c.condicion||'p0', moneda:c.moneda||'PYG', dolar:c.dolar||null, validez:c.validez||7, vendedor:c.vendedor||'', items:c.items||[], total:c.total||0, obs:c.obs||'', por:c.por||'', ts:c.ts||null }; }
@@ -817,14 +862,14 @@ async function cloudPull(name){
     d.save(Object.values(merged));
   }catch(e){}
 }
-async function cloudPullAll(){ if(!AUTH_ON) return; await cloudPull('clientes'); await cloudPull('estancias'); await cloudPull('visitas'); await cloudPull('ot'); await cloudPull('mov'); await cloudPull('caja'); await cloudPull('viat'); await cloudPull('insumo'); await cloudPull('precio'); await cloudPull('cotiz'); refreshVista(); }
+async function cloudPullAll(){ if(!AUTH_ON) return; await cloudPull('clientes'); await cloudPull('estancias'); await cloudPull('visitas'); await cloudPull('ot'); await cloudPull('mov'); await cloudPull('caja'); await cloudPull('viat'); await cloudPull('insumo'); await cloudPull('precio'); await cloudPull('cotiz'); await cloudPull('insprec'); await pullPricingCfg(); refreshVista(); }
 function refreshVista(){ const act=document.querySelector('.screen.active'); if(!act) return;
   if(act.id==='sHome') renderHome(); else if(act.id==='sClientes') renderClientes();
   else if(act.id==='sCliente'&&curCliente) abrirCliente(curCliente); else if(act.id==='sHistorial') renderHistorial();
   else if(act.id==='sOT') renderOTList(); else if(act.id==='sInv') renderInv(); else if(act.id==='sCaja') renderCaja();
   else if(act.id==='sViaticos') renderViatList(); else if(act.id==='sViatDet') renderViatDet();
   else if(act.id==='sCrm') renderCrm();
-  else if(act.id==='sCotiz') renderCotizList(); else if(act.id==='sPrecios') renderPrecios(); }
+  else if(act.id==='sCotiz') renderCotizList(); else if(act.id==='sPrecios') renderPrecios(); else if(act.id==='sInsPrec') renderInsPrec(); }
 function startSync(){ if(!AUTH_ON) return; cloudPullAll(); if(syncTimer) clearInterval(syncTimer); syncTimer=setInterval(cloudPullAll, 30000); }
 
 let curCliente=null, editVisitaId=null, curSub='Visitas técnicas a campo', _lotesEdit=[], _evals=[], _estEdit=[];
@@ -1592,10 +1637,18 @@ function cotizPrint(id){ const c=getCotiz().find(x=>x.id===id); if(!c) return; c
 // ── Lista de precios (editor, gerente) ──
 function openPrecios(){ if(!esGerente()){ showToast('Solo el gerente'); return; } showScreen('sPrecios','Lista de precios','₲ por kg',true); renderPrecios(); }
 function renderPrecios(){ const q=(gs('precBuscar').value||'').trim().toLowerCase(); let ls=precioList(); if(q) ls=ls.filter(p=>((p.n||'')+' '+(p.c||'')).toLowerCase().includes(q)); gs('precCount').textContent=ls.length+' productos';
-  gs('precList').innerHTML=ls.map(p=>`<div class="li" onclick="precioModal('${encodeURIComponent(precioKey(p))}')"><div style="min-width:0"><div class="li-t">${esc(p.n)}</div><div class="li-s">${p.c?esc(p.c)+' · ':''}${p.kg}kg · Contado ${gsFmt(p.p0)}/kg · C90 ${gsFmt(p.p90)}</div></div><div class="li-chev">✎</div></div>`).join('') || '<div class="empty">Sin productos.</div>';
+  gs('precList').innerHTML=ls.map(p=>`<div class="li" onclick="precioModal('${encodeURIComponent(precioKey(p))}')"><div style="min-width:0"><div class="li-t">${esc(p.n)} ${p.calc?'<span style="font-size:10px;color:var(--green)">calc</span>':'<span style="font-size:10px;color:var(--gray-400)">manual</span>'}</div><div class="li-s">${p.c?esc(p.c)+' · ':''}${p.kg}kg · Contado ${gsFmt(p.p0)}/kg · C90 ${gsFmt(p.p90)}</div></div><div class="li-chev">✎</div></div>`).join('') || '<div class="empty">Sin productos.</div>';
 }
 function precioModal(keyEnc){ if(!esGerente()) return; const key=keyEnc?decodeURIComponent(keyEnc):null; const p=key?precioList().find(x=>precioKey(x)===key):null;
-  gs('modalBox').innerHTML=`<h3>${p?'Editar':'Nuevo'} producto</h3>
+  if(p&&p.calc){ const f=PL_FORMULAS.find(x=>precioKey(x)===key); const base=f?costoBaseFormula(f):0;
+    gs('modalBox').innerHTML=`<h3>${esc(p.n)} <span style="font-size:11px;color:var(--green)">calculado</span></h3><div style="font-size:12px;color:var(--gray-500);margin-bottom:8px">${p.c?esc(p.c)+' · ':''}${p.kg}kg/bolsa</div>
+     <div style="font-size:13px;line-height:1.8">Costo base insumos: <b>${gsFmt(base)}/kg</b><br>Contado: <b>${gsFmt(p.p0)}/kg</b> · <span style="color:var(--gray-500)">${gsFmt(p.p0*p.kg)}/bolsa</span><br>Crédito 90: <b>${gsFmt(p.p90)}/kg</b></div>
+     <label class="fl" style="margin-top:10px">Margen de este producto %</label><input type="number" step="0.1" id="prMargen" value="${(margenDe(p.c)*100).toFixed(1)}">
+     <div style="font-size:11px;color:var(--gray-400);margin-top:4px">El precio se calcula desde los insumos. Para ajustarlo, cambiá el margen (acá) o los precios de insumos (🧪).</div>
+     <div class="row2" style="margin-top:12px"><button class="btn btn-sec" onclick="cerrarModal()">Cerrar</button><button class="btn btn-primary" onclick="precioMargenGuardar('${esc(p.c||'')}')">Guardar margen</button></div>`;
+    gs('modal').classList.add('show'); return;
+  }
+  gs('modalBox').innerHTML=`<h3>${p?'Editar':'Nuevo'} producto manual</h3>
    <div class="row2"><div><label class="fl">Código</label><input id="prC" value="${p?esc(p.c):''}"></div><div><label class="fl">Kg/bolsa</label><input type="number" id="prKg" value="${p?p.kg:'30'}"></div></div>
    <label class="fl">Nombre</label><input id="prN" value="${p?esc(p.n):''}">
    <div class="row2"><div><label class="fl">Contado ₲/kg</label><input type="number" id="prP0" value="${p?p.p0:''}"></div><div><label class="fl">Crédito 30</label><input type="number" id="prP30" value="${p?p.p30:''}"></div></div>
@@ -1603,6 +1656,7 @@ function precioModal(keyEnc){ if(!esGerente()) return; const key=keyEnc?decodeUR
    <div class="row2" style="margin-top:12px"><button class="btn btn-sec" onclick="${p?`precioBorrar('${keyEnc}')`:'cerrarModal()'}"${p?' style="color:var(--red)"':''}>${p?'Borrar':'Cancelar'}</button><button class="btn btn-primary" onclick="precioGuardar()">Guardar</button></div>`;
   gs('modal').classList.add('show');
 }
+function precioMargenGuardar(cod){ if(!esGerente()) return; setMargenOv(cod, num(gs('prMargen').value)/100); cerrarModal(); showToast('✓ Margen actualizado'); renderPrecios(); }
 function precioGuardar(){ if(!esGerente()) return; const n=(gs('prN').value||'').trim(); if(!n){ showToast('Ingresá el nombre'); return; }
   const rec={ id:'PR-'+Date.now(), c:(gs('prC').value||'').trim(), n, kg:num(gs('prKg').value)||30, p0:num(gs('prP0').value)||0, p30:num(gs('prP30').value)||0, p60:num(gs('prP60').value)||0, p90:num(gs('prP90').value)||0, ts:new Date().toISOString(), pending:true };
   const key=precioKey(rec); const ov=getPreciosOv(); const ex=ov.find(o=>precioKey(o)===key); let out;
@@ -1610,11 +1664,43 @@ function precioGuardar(){ if(!esGerente()) return; const n=(gs('prN').value||'')
   savePreciosOv(out); cloudPush('precio',rec); cerrarModal(); showToast('✓ Precio guardado'); renderPrecios();
 }
 function precioBorrar(keyEnc){ if(!esGerente()) return; const key=decodeURIComponent(keyEnc); if(!confirm('¿Quitar este producto de la lista?')) return;
-  const ov=getPreciosOv(); const ex=ov.find(o=>precioKey(o)===key); const base=PL_PRECIOS.find(p=>precioKey(p)===key);
+  const ov=getPreciosOv(); const ex=ov.find(o=>precioKey(o)===key); const base=PL_PRECIOS_MANUAL.find(p=>precioKey(p)===key);
   if(base){ const rec=Object.assign({},base,{id:ex?ex.id:('PR-'+Date.now()),borrado:true,ts:new Date().toISOString(),pending:true}); const out=ex?ov.map(o=>precioKey(o)===key?rec:o):[rec,...ov]; savePreciosOv(out); cloudPush('precio',rec); }
   else if(ex){ savePreciosOv(ov.filter(o=>o.id!==ex.id)); cloudDelete('precio',ex.id); }
   cerrarModal(); renderPrecios();
 }
+// ── Editor de precios de insumos (Guillermo) ──
+function insumoCatalogoPrecios(){ const m={};
+  Object.keys(PL_INSPREC).forEach(c=>{ const it=PL_INSUMOS.find(x=>x.c===c); m[c]={c,n:it?it.n:c}; });
+  PL_FORMULAS.forEach(f=>(f.ins||[]).forEach(i=>{ if(i.t!=='p') return; if(!m[i.c]) m[i.c]={c:i.c,n:i.n}; }));
+  getInsPrecOv().forEach(o=>{ if(!m[o.c]) m[o.c]={c:o.c,n:o.c}; });
+  return Object.values(m).sort((a,b)=>String(a.n).localeCompare(String(b.n))); }
+function openInsPrec(){ if(!esGerente()){ showToast('Solo el gerente'); return; } showScreen('sInsPrec','Precios de insumos','₲ por kg',true); renderInsPrec(); }
+function renderInsPrec(){ const q=(gs('insPrecBuscar').value||'').trim().toLowerCase(); let ls=insumoCatalogoPrecios(); if(q) ls=ls.filter(i=>((i.n||'')+' '+i.c).toLowerCase().includes(q)); gs('insPrecCount').textContent=ls.length+' insumos';
+  gs('insPrecList').innerHTML=ls.map(i=>{ const pr=insPrecio(i.c); const ov=getInsPrecOv().some(x=>x.c===i.c); return `<div class="li" onclick="insPrecModal('${esc(i.c)}')"><div style="min-width:0"><div class="li-t">${esc(i.n)}</div><div class="li-s">${esc(i.c)}${ov?' · <span style="color:var(--green)">editado</span>':''}</div></div><div style="text-align:right;font-weight:700;white-space:nowrap">${gsFmt(pr)}/kg</div></div>`; }).join('') || '<div class="empty">Sin insumos.</div>'; }
+function insPrecModal(c){ if(!esGerente()) return; const it=insumoCatalogoPrecios().find(x=>x.c===c); if(!it) return; const pr=insPrecio(c);
+  gs('modalBox').innerHTML=`<h3>${esc(it.n)}</h3><div style="font-size:12px;color:var(--gray-500);margin-bottom:8px">${esc(c)}</div>
+   <label class="fl">Precio ₲/kg</label><input type="number" id="ipVal" inputmode="numeric" value="${pr}">
+   <div style="font-size:11px;color:var(--gray-400);margin-top:4px">Al guardar, todos los productos que usan este insumo se recalculan solos.</div>
+   <div class="row2" style="margin-top:12px"><button class="btn btn-sec" onclick="cerrarModal()">Cancelar</button><button class="btn btn-primary" onclick="insPrecGuardar('${esc(c)}')">Guardar</button></div>`;
+  gs('modal').classList.add('show'); }
+function insPrecGuardar(c){ if(!esGerente()) return; const v=num(gs('ipVal').value); if(v==null||v<0){ showToast('Ingresá el precio'); return; }
+  const a=getInsPrecOv(); const ex=a.find(x=>x.c===c); const rec={ id:ex?ex.id:('IP-'+c), c:c, gskg:v, ts:new Date().toISOString(), pending:true };
+  const out=ex?a.map(x=>x.c===c?rec:x):[rec,...a]; saveInsPrecOv(out); cloudPush('insprec',rec); cerrarModal(); showToast('✓ Precio actualizado'); renderInsPrec(); }
+// ── Parámetros de costeo (gerente) ──
+function cfgCosteoModal(){ if(!esGerente()) return; const c=getCostCfg();
+  gs('modalBox').innerHTML=`<h3>⚙ Parámetros de costeo</h3>
+   <div class="row2"><div><label class="fl">Merma %</label><input type="number" step="0.1" id="cfMerma" value="${c.merma*100}"></div><div><label class="fl">Gastos adm %</label><input type="number" step="0.1" id="cfGA" value="${c.gastos_adm*100}"></div></div>
+   <div class="row2"><div><label class="fl">Comisión %</label><input type="number" step="0.1" id="cfCom" value="${c.comision*100}"></div><div><label class="fl">Margen general %</label><input type="number" step="0.1" id="cfMargen" value="${c.margen*100}"></div></div>
+   <div class="row2"><div><label class="fl">Mano de obra ₲/kg</label><input type="number" id="cfMO" value="${c.mano_obra}"></div><div><label class="fl">Bolsa ₲/kg</label><input type="number" id="cfBolsa" value="${c.bolsa}"></div></div>
+   <div class="row2"><div><label class="fl">Etiqueta ₲/bolsa</label><input type="number" id="cfEtiq" value="${c.etiqueta_bolsa}"></div><div><label class="fl">Recargo por mes %</label><input type="number" step="0.1" id="cfPlazo" value="${c.plazo_mes*100}"></div></div>
+   <div class="row2"><div><label class="fl">IVA % (0 = sin IVA)</label><input type="number" step="0.1" id="cfIva" value="${c.iva*100}"></div><div><label class="fl">Dólar ₲</label><input type="number" id="cfDolar" value="${c.dolar}"></div></div>
+   <div class="row2" style="margin-top:12px"><button class="btn btn-sec" onclick="cerrarModal()">Cancelar</button><button class="btn btn-primary" onclick="cfgCosteoGuardar()">Guardar</button></div>`;
+  gs('modal').classList.add('show'); }
+function cfgCosteoGuardar(){ if(!esGerente()) return; const g=id=>num(gs(id).value)||0;
+  saveCostCfg({ merma:g('cfMerma')/100, gastos_adm:g('cfGA')/100, comision:g('cfCom')/100, margen:g('cfMargen')/100, mano_obra:g('cfMO'), bolsa:g('cfBolsa'), etiqueta_bolsa:g('cfEtiq'), plazo_mes:g('cfPlazo')/100, iva:g('cfIva')/100, dolar:g('cfDolar')||6140 });
+  try{ localStorage.setItem('bio:dolar', String(num(gs('cfDolar').value)||6140)); }catch{}
+  cerrarModal(); showToast('✓ Parámetros guardados'); if(gs('sPrecios').classList.contains('active')) renderPrecios(); }
 
 // ══ RENDICIÓN DE VIÁTICOS (comerciales) ══
 const VIAT_CATS=['Combustible','Peaje','Comida','Hospedaje','Estacionamiento','Lavado de vehículo','Mantenimiento vehículo','Insumos','Otro'];
