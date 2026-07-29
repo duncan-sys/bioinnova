@@ -31,7 +31,9 @@ create table if not exists public.bio_cotiz (
   validez    integer,
   vendedor   text,
   items      jsonb default '[]'::jsonb,  -- [{key,nombre,kg_bolsa,precio_kg,unidad,cantidad,kg,subtotal}]
-  total      numeric,
+  subtotal   numeric,       -- suma de productos (sin flete)
+  flete      numeric,       -- flete del pedido (editable por cotización)
+  total      numeric,       -- subtotal + flete
   obs        text,
   por        text,
   ts         timestamptz, created_at timestamptz default now()
