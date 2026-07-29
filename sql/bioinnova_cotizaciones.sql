@@ -30,10 +30,11 @@ create table if not exists public.bio_cotiz (
   dolar      numeric,
   validez    integer,
   vendedor   text,
-  items      jsonb default '[]'::jsonb,  -- [{key,nombre,kg_bolsa,precio_kg,unidad,cantidad,kg,subtotal}]
-  subtotal   numeric,       -- suma de productos (sin flete)
-  flete_kg   numeric,       -- flete ₲/kg (editable por cotización)
-  flete      numeric,       -- flete total = flete_kg × kg del pedido
+  items      jsonb default '[]'::jsonb,  -- [{key,nombre,kg_bolsa,precio_base,precio_kg,unidad,cantidad,kg,subtotal}]
+  margen     numeric,       -- % de margen de esta cotización (input, no se imprime)
+  subtotal   numeric,
+  flete_kg   numeric,       -- flete ₲/kg (input, no se imprime; ya incluido en precio_kg)
+  flete      numeric,
   total      numeric,       -- subtotal + flete
   obs        text,
   por        text,
