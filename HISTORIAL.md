@@ -47,7 +47,9 @@ Tres formas (cualquiera sirve):
 
 ## 3. Cómo respaldar los DATOS (Supabase)
 
-Entrar a https://supabase.com → proyecto BioInnova → **Table Editor** → cada tabla → botón **Export** (CSV), o desde **SQL Editor** con `select * from <tabla>`.
+**Forma fácil (automática):** doble clic en **`backup-datos.bat`** (en esta carpeta). Baja todas las tablas a CSV en `Escritorio\bioinnova-backups\datos-AAAA-MM-DD\` y abre la carpeta al terminar. Los CSV se abren con Excel (acentos incluidos).
+
+**Forma manual:** entrar a https://supabase.com → proyecto BioInnova → **Table Editor** → cada tabla → botón **Export** (CSV).
 
 Tablas con datos:
 `clientes`, `estancias`, `visitas`, `perfiles`, `bio_ot`, `bio_mov`, `bio_caja`, `bio_viat`, `bio_insumos`.
