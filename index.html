@@ -158,6 +158,7 @@ textarea{resize:vertical;min-height:66px}
       <div class="tile" id="tileCaja" onclick="openCaja()" style="display:none"><div class="ico">💵</div><div class="tlab">Caja chica</div><div class="tsub">efectivo de planta</div></div>
       <div class="tile" id="tileViat" onclick="openViaticos()" style="display:none"><div class="ico">🧾</div><div class="tlab">Viáticos</div><div class="tsub">rendición de comerciales</div></div>
       <div class="tile" id="tileCrm" onclick="openCrm()" style="display:none"><div class="ico">🤝</div><div class="tlab">CRM</div><div class="tsub">seguimiento de clientes</div></div>
+      <div class="tile" id="tileCotiz" onclick="openCotiz()" style="display:none"><div class="ico">🧮</div><div class="tlab">Cotizaciones</div><div class="tsub">precios y pedidos</div></div>
       <div class="tile" id="tileUsuarios" onclick="openUsuarios()" style="display:none"><div class="ico">👥</div><div class="tlab">Usuarios</div><div class="tsub">accesos y roles</div></div>
     </div>
     <div class="sect-t">Últimas visitas</div>
@@ -287,6 +288,38 @@ textarea{resize:vertical;min-height:66px}
     <div style="margin-bottom:8px"><input type="search" id="crmBuscar" placeholder="🔎 Buscar cliente…" oninput="renderCrm()"></div>
     <div id="crmChips" style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap"></div>
     <div class="card"><div class="card-h"><span>Clientes</span><span id="crmCount" style="font-weight:500;color:var(--gray-400)"></span></div><div id="crmList"></div></div>
+  </div>
+
+  <!-- COTIZACIONES (lista) -->
+  <div class="screen" id="sCotiz">
+    <button class="btn btn-primary btn-block" style="margin-bottom:8px" onclick="cotizNueva()">＋ Nueva cotización</button>
+    <button class="btn btn-sec btn-block" id="btnListaPrecios" style="margin-bottom:10px;display:none" onclick="openPrecios()">⚙ Lista de precios</button>
+    <div style="margin-bottom:8px"><input type="search" id="cotizBuscar" placeholder="🔎 Buscar cliente / producto…" oninput="renderCotizList()"></div>
+    <div class="card"><div class="card-h"><span>Cotizaciones</span><span id="cotizCount" style="font-weight:500;color:var(--gray-400)"></span></div><div id="cotizList"></div></div>
+  </div>
+
+  <!-- COTIZACIÓN (armador) -->
+  <div class="screen" id="sCotizNueva">
+    <div class="card"><div class="card-h">Datos de la cotización</div><div class="card-b">
+      <label class="fl">Cliente</label><input id="czCliente" list="czClienteList" placeholder="Nombre del cliente" autocomplete="off"><datalist id="czClienteList"></datalist>
+      <div class="row2"><div><label class="fl">Condición de pago</label><select id="czCond" onchange="cotizCondChange()"></select></div><div><label class="fl">Fecha</label><input type="date" id="czFecha"></div></div>
+      <div class="row2"><div><label class="fl">Validez (días)</label><input type="number" id="czValidez" value="7" inputmode="numeric"></div><div><label class="fl">Vendedor</label><input id="czVendedor"></div></div>
+      <label class="fl" style="display:flex;gap:8px;align-items:center;margin-top:10px;font-weight:600;cursor:pointer"><input type="checkbox" id="czUsd" onchange="cotizRecalc()" style="width:16px;height:16px"> Mostrar también en US$</label>
+      <div id="czDolarRow" style="display:none"><label class="fl">Cotización del dólar (₲)</label><input type="number" id="czDolar" inputmode="numeric" oninput="cotizRecalc()"></div>
+    </div></div>
+    <button class="btn btn-primary btn-block" style="margin-bottom:10px" onclick="cotizAddLinea()">＋ Agregar producto</button>
+    <div class="card"><div class="card-h"><span>Productos</span><span id="czCount" style="font-weight:500;color:var(--gray-400)"></span></div><div id="czLineas"></div></div>
+    <div class="card" style="margin-top:10px"><div class="card-b" id="czResumen"></div></div>
+    <label class="fl">Observaciones</label><textarea id="czObs" placeholder="Condiciones, entrega, etc."></textarea>
+    <div class="row2" style="margin-top:10px"><button class="btn btn-sec" onclick="openCotiz()">Cancelar</button><button class="btn btn-primary" onclick="cotizGuardar(false)">✓ Guardar</button></div>
+    <button class="btn btn-amber btn-block" style="margin-top:8px" onclick="cotizGuardar(true)">✓ Guardar e imprimir</button>
+  </div>
+
+  <!-- LISTA DE PRECIOS (editor, gerente) -->
+  <div class="screen" id="sPrecios">
+    <button class="btn btn-primary btn-block" style="margin-bottom:8px" onclick="precioModal()">＋ Nuevo producto</button>
+    <div style="margin-bottom:8px"><input type="search" id="precBuscar" placeholder="🔎 Buscar producto…" oninput="renderPrecios()"></div>
+    <div class="card"><div class="card-h"><span>Lista de precios (₲/kg)</span><span id="precCount" style="font-weight:500;color:var(--gray-400)"></span></div><div id="precList"></div></div>
   </div>
 
   <!-- VISITA -->
@@ -496,6 +529,59 @@ const PL_FORMULAS=[
 function plKgBolsa(f){ return (f&&f.kg)||30; }
 function plInsumo(cod){ return PL_INSUMOS.find(x=>x.c===cod); }
 function plFormula(cod){ return PL_FORMULAS.find(x=>x.c===cod); }
+// ── Lista de precios (base sembrada del Excel; editable por el gerente) ──
+const PL_PRECIOS=[
+{c:'BIO25-008',n:'Desmamante Campo 18% CL - 40kg',kg:40,p0:2116,p30:2138,p60:2159,p90:2180},
+{c:'BIO25-005',n:'Desmamante Campo 18% - 40kg',kg:40,p0:2085,p30:2106,p60:2127,p90:2147},
+{c:'TERM001',n:'Terminacion 4 - 40kg',kg:40,p0:1935,p30:1954,p60:1974,p90:1993},
+{c:'BIO25-007',n:'Desmamantes Precoz 22% CL - 40kg',kg:40,p0:2092,p30:2113,p60:2134,p90:2155},
+{c:'',n:'Bioinnova Terminacion 18% - 40kg',kg:40,p0:1984,p30:2003,p60:2023,p90:2043},
+{c:'MINN011',n:'Bioinnova Reproductor 19% - 40kg',kg:40,p0:2081,p30:2102,p60:2123,p90:2143},
+{c:'MINN027',n:'Bioinnova Ovinos - 40kg',kg:40,p0:2030,p30:2051,p60:2071,p90:2091},
+{c:'MINN003',n:'Bioinnova Confi 40 - 40kg',kg:40,p0:3096,p30:3127,p60:3158,p90:3189},
+{c:'MINN002',n:'Bioinnova Confi 10 - 40kg',kg:40,p0:4298,p30:4341,p60:4384,p90:4427},
+{c:'MINN018',n:'Bioinnova Alta Fibra 40% - 40kg',kg:40,p0:1931,p30:1950,p60:1970,p90:1989},
+{c:'DBIO-002',n:'Bioinnova Engorde 18% - 40kg',kg:40,p0:1857,p30:1876,p60:1894,p90:1913},
+{c:'DBIO-001',n:'Bioinnova Engorde 16% - 40kg',kg:40,p0:1861,p30:1879,p60:1898,p90:1916},
+{c:'DBIO-010',n:'BIO CONFI 40 NORTE - 40kg',kg:40,p0:2300,p30:2323,p60:2346,p90:2369},
+{c:'INS002',n:'Burlanda - 40kg',kg:40,p0:1768,p30:1786,p60:1803,p90:1821},
+{c:'BIO25-004',n:'Bioinnova Confi 4 Lechera - 25kg',kg:25,p0:4187,p30:4229,p60:4271,p90:4313},
+{c:'BIO25-001',n:'Bioinnova Confi 4 SL - 25kg',kg:25,p0:3455,p30:3489,p60:3524,p90:3558},
+{c:'BIO25-002',n:'Bioinnova Confi 4 CL - 25kg',kg:25,p0:4130,p30:4171,p60:4212,p90:4253},
+{c:'BIO25-003',n:'Bioinnova Confi 4 AS - 25kg',kg:25,p0:3310,p30:3343,p60:3376,p90:3410},
+{c:'BIO25-013',n:'Secas Chaco Extras - 30kg',kg:30,p0:2410,p30:2434,p60:2458,p90:2482},
+{c:'MINN004',n:'Bioinnova Secas Extra - 30kg',kg:30,p0:2576,p30:2601,p60:2627,p90:2653},
+{c:'MINN010',n:'Bioinnova Secas Chaco - 30kg',kg:30,p0:2639,p30:2665,p60:2691,p90:2718},
+{c:'MINN007',n:'Bioinnova Secas - 30kg',kg:30,p0:3012,p30:3042,p60:3072,p90:3102},
+{c:'MINN025',n:'Bioinnova Engorda 0.5% PE - 30kg',kg:30,p0:3058,p30:3088,p60:3119,p90:3150},
+{c:'BIO25-006',n:'Bioinnova Creep Feeding - 30kg',kg:30,p0:3042,p30:3072,p60:3103,p90:3133},
+{c:'MINN014',n:'Bioinnova Aguas Chaco - 30kg',kg:30,p0:2418,p30:2442,p60:2466,p90:2490},
+{c:'MINN006',n:'Bioinnova Aguas - 30kg',kg:30,p0:2631,p30:2657,p60:2683,p90:2710},
+{c:'MINN012',n:'Bioinnova Aguas Extras - 30kg',kg:30,p0:2443,p30:2467,p60:2492,p90:2516},
+{c:'DBIO-004',n:'Bioinnova Proteica 1g - 30kg',kg:30,p0:2832,p30:2860,p60:2889,p90:2917},
+{c:'DBIO-005',n:'Bioinnova Enerpro 3g - 30kg',kg:30,p0:2333,p30:2356,p60:2379,p90:2403},
+{c:'DBIO-009',n:'Bio Hacienda General - 30kg',kg:30,p0:1769,p30:1787,p60:1804,p90:1822},
+{c:'DBIO-006',n:'Bio Hacienda Campo - 30kg',kg:30,p0:2086,p30:2107,p60:2127,p90:2148},
+{c:'DBIO-012',n:'Bio Hacienda 80 - 30kg',kg:30,p0:5009,p30:5060,p60:5110,p90:5160},
+{c:'DBIO-011',n:'Bio Hacienda 65 - 30kg',kg:30,p0:4310,p30:4353,p60:4396,p90:4439},
+{c:'DBIO-007',n:'Bio Hacienda 40 - 30kg',kg:30,p0:2969,p30:2999,p60:3029,p90:3058},
+{c:'',n:'Bioinnova Reproduccion 100 - 30kg',kg:30,p0:7185,p30:7257,p60:7329,p90:7401},
+{c:'BIOSAL04',n:'Bioinnova Recria 65 - 30kg',kg:30,p0:4756,p30:4804,p60:4851,p90:4899},
+{c:'MINN026',n:'Bioinnova Recria 0.5% - 30kg',kg:30,p0:3103,p30:3134,p60:3165,p90:3196},
+{c:'BIOSAL03',n:'Bioinnova Nutri 80 - 30kg',kg:30,p0:5663,p30:5719,p60:5776,p90:5833},
+{c:'BIOSAL05',n:'Bioinnova Engorda 40 - 30kg',kg:30,p0:3475,p30:3510,p60:3544,p90:3579},
+{c:'BIOSAL02',n:'Bioinnova Cria 90 - 30kg',kg:30,p0:6320,p30:6383,p60:6446,p90:6509},
+{c:'',n:'Biosal Ureada - 30kg',kg:30,p0:4348,p30:4392,p60:4435,p90:4478},
+];
+const COND_LBL={p0:'Contado',p30:'Crédito 30 días',p60:'Crédito 60 días',p90:'Crédito 90 días'};
+const COND_ORDER=['p0','p30','p60','p90'];
+function getPreciosOv(){ return getArr('bio:precios'); }        // ediciones/altas del gerente (sync)
+function savePreciosOv(a){ setArr('bio:precios',a); }
+function precioKey(x){ return (x.c&&String(x.c).trim())?String(x.c).trim().toUpperCase():('N:'+String(x.n||'').trim().toUpperCase()); }
+function precioList(){ const m={}; PL_PRECIOS.forEach(p=>{ m[precioKey(p)]=Object.assign({},p); }); getPreciosOv().forEach(o=>{ if(o&&o.borrado){ delete m[precioKey(o)]; return; } m[precioKey(o)]=Object.assign({},m[precioKey(o)]||{},o); }); return Object.values(m).filter(p=>!p.borrado).sort((a,b)=>String(a.n||'').localeCompare(String(b.n||''))); }
+function getCotiz(){ return getArr('bio:cotiz'); }
+function saveCotiz(a){ setArr('bio:cotiz',a); }
+function cotizDolar(){ return Number(localStorage.getItem('bio:dolar'))||6450; }
 // Calcula las cantidades de insumos para producir kgProd de una fórmula
 function otCalcular(f, kgProd){
   const kgB=plKgBolsa(f); const bolsas = kgB? Math.round(kgProd/kgB) : 0;
@@ -577,8 +663,8 @@ const sb = {
 const ROLES = { gerente:{label:'Gerente',editar:true}, tecnico:{label:'Comercial',editar:true}, supervisor:{label:'Supervisor de planta',editar:true}, planta:{label:'Planta',editar:false}, lectura:{label:'Solo lectura',editar:false} };
 // Qué módulos ve cada rol. Editar acá para ajustar accesos.
 const ROL_MODULOS = {
-  gerente:    ['visita','clientes','historial','crm','viaticos','ot','formulas','inventario','caja','usuarios'],
-  tecnico:    ['visita','clientes','historial','crm','viaticos'],
+  gerente:    ['visita','clientes','historial','crm','viaticos','cotizaciones','ot','formulas','inventario','caja','usuarios'],
+  tecnico:    ['visita','clientes','historial','crm','viaticos','cotizaciones'],
   supervisor: ['ot','formulas','inventario','caja'],
   planta:     ['inventario','caja'],
   lectura:    ['clientes','historial','crm']
@@ -586,7 +672,7 @@ const ROL_MODULOS = {
 function puedeVer(mod){ if(!currentRol) return true; if(currentAccesos&&Object.prototype.hasOwnProperty.call(currentAccesos,mod)) return !!currentAccesos[mod]; return (ROL_MODULOS[currentRol]||[]).includes(mod); }
 // Acceso efectivo de un usuario dado (rol + overrides) — para el cuadro de Usuarios
 function accesoEfectivo(rol, accesos, mod){ if(accesos&&Object.prototype.hasOwnProperty.call(accesos,mod)) return !!accesos[mod]; return (ROL_MODULOS[rol]||[]).includes(mod); }
-const MODULOS_LBL=[['visita','Visitas'],['clientes','Clientes'],['historial','Historial'],['crm','CRM'],['viaticos','Viáticos'],['ot','OT'],['formulas','Formulaciones'],['inventario','Inventario'],['caja','Caja chica'],['usuarios','Usuarios']];
+const MODULOS_LBL=[['visita','Visitas'],['clientes','Clientes'],['historial','Historial'],['crm','CRM'],['viaticos','Viáticos'],['cotizaciones','Cotizaciones'],['ot','OT'],['formulas','Formulaciones'],['inventario','Inventario'],['caja','Caja chica'],['usuarios','Usuarios']];
 function esPlanta(){ return puedeVer('ot'); }   // compat (usado por funciones de OT)
 let currentUser=null, currentRol=null, currentAccesos=null;   // accesos = overrides por-usuario {mod:true|false}
 function rolLabel(r){ return (ROLES[r]&&ROLES[r].label)||r; }
@@ -659,6 +745,7 @@ function applyRoleUI(){
   showEl('tileHistorial', puedeVer('historial'));
   showEl('tileCrm', puedeVer('crm'));
   showEl('tileViat', puedeVer('viaticos'));
+  showEl('tileCotiz', puedeVer('cotizaciones'));
   showEl('tileOT', puedeVer('ot'));
   showEl('tileFormulas', puedeVer('formulas'));
   showEl('tileInv', puedeVer('inventario'));
@@ -687,7 +774,13 @@ const SYNC_DEFS = {
   caja:{ get:getCaja, save:saveCaja, table:'bio_caja', toRow:cajaRow, fromRow:rowCaja },
   viat:{ get:getRend, save:saveRend, table:'bio_viat', toRow:viatRow, fromRow:rowViat },
   insumo:{ get:getInsumosExtra, save:saveInsumosExtra, table:'bio_insumos', toRow:insuRow, fromRow:rowInsu },
+  precio:{ get:getPreciosOv, save:savePreciosOv, table:'bio_precios', toRow:precRow, fromRow:rowPrec },
+  cotiz:{ get:getCotiz, save:saveCotiz, table:'bio_cotiz', toRow:cotizRow, fromRow:rowCotiz },
 };
+function precRow(p){ return { id:p.id, c:p.c||'', n:p.n||'', kg:p.kg||null, p0:p.p0||0, p30:p.p30||0, p60:p.p60||0, p90:p.p90||0, borrado:!!p.borrado, ts:p.ts||null }; }
+function rowPrec(r){ return { id:r.id, c:r.c||'', n:r.n||'', kg:Number(r.kg)||0, p0:Number(r.p0)||0, p30:Number(r.p30)||0, p60:Number(r.p60)||0, p90:Number(r.p90)||0, borrado:!!r.borrado, ts:r.ts, pending:false }; }
+function cotizRow(c){ return { id:c.id, num:c.num, fecha:c.fecha||null, cliente:c.cliente||'', cliente_id:c.cliente_id||'', condicion:c.condicion||'p0', moneda:c.moneda||'PYG', dolar:c.dolar||null, validez:c.validez||7, vendedor:c.vendedor||'', items:c.items||[], total:c.total||0, obs:c.obs||'', por:c.por||'', ts:c.ts||null }; }
+function rowCotiz(r){ return { id:r.id, num:r.num, fecha:r.fecha||'', cliente:r.cliente||'', cliente_id:r.cliente_id||'', condicion:r.condicion||'p0', moneda:r.moneda||'PYG', dolar:r.dolar, validez:r.validez||7, vendedor:r.vendedor||'', items:(typeof r.items==='string'?(()=>{try{return JSON.parse(r.items)}catch{return[]}})():(r.items||[])), total:Number(r.total)||0, obs:r.obs||'', por:r.por||'', ts:r.ts, pending:false }; }
 function insuRow(i){ return { id:i.id, c:i.c||'', n:i.n||'', prov:i.prov||'', u:i.u||'kg', cat:i.cat||'Otro', ts:i.ts||null }; }
 function rowInsu(r){ return { id:r.id, c:r.c||'', n:r.n||'', prov:r.prov||'', u:r.u||'kg', cat:r.cat||'Otro', ts:r.ts, pending:false }; }
 function viatRow(r){ return { id:r.id, comercial:r.comercial||'', desde:r.desde||null, hasta:r.hasta||null, anticipo:r.anticipo||0, anticipo_fecha:r.anticipo_fecha||null, anticipo_ref:r.anticipo_ref||'', gastos:r.gastos||[], estado:r.estado||'abierta', liq_fecha:r.liq_fecha||null, liq_ref:r.liq_ref||'', por:r.por||'', ts:r.ts||null }; }
@@ -724,13 +817,14 @@ async function cloudPull(name){
     d.save(Object.values(merged));
   }catch(e){}
 }
-async function cloudPullAll(){ if(!AUTH_ON) return; await cloudPull('clientes'); await cloudPull('estancias'); await cloudPull('visitas'); await cloudPull('ot'); await cloudPull('mov'); await cloudPull('caja'); await cloudPull('viat'); await cloudPull('insumo'); refreshVista(); }
+async function cloudPullAll(){ if(!AUTH_ON) return; await cloudPull('clientes'); await cloudPull('estancias'); await cloudPull('visitas'); await cloudPull('ot'); await cloudPull('mov'); await cloudPull('caja'); await cloudPull('viat'); await cloudPull('insumo'); await cloudPull('precio'); await cloudPull('cotiz'); refreshVista(); }
 function refreshVista(){ const act=document.querySelector('.screen.active'); if(!act) return;
   if(act.id==='sHome') renderHome(); else if(act.id==='sClientes') renderClientes();
   else if(act.id==='sCliente'&&curCliente) abrirCliente(curCliente); else if(act.id==='sHistorial') renderHistorial();
   else if(act.id==='sOT') renderOTList(); else if(act.id==='sInv') renderInv(); else if(act.id==='sCaja') renderCaja();
   else if(act.id==='sViaticos') renderViatList(); else if(act.id==='sViatDet') renderViatDet();
-  else if(act.id==='sCrm') renderCrm(); }
+  else if(act.id==='sCrm') renderCrm();
+  else if(act.id==='sCotiz') renderCotizList(); else if(act.id==='sPrecios') renderPrecios(); }
 function startSync(){ if(!AUTH_ON) return; cloudPullAll(); if(syncTimer) clearInterval(syncTimer); syncTimer=setInterval(cloudPullAll, 30000); }
 
 let curCliente=null, editVisitaId=null, curSub='Visitas técnicas a campo', _lotesEdit=[], _evals=[], _estEdit=[];
@@ -1395,6 +1489,131 @@ function otPrint(id){ const o=getOTs().find(x=>x.id===id); if(!o) return;
    <div class="noprint" style="text-align:center;margin-top:16px"><button onclick="window.print()" style="background:#2f7d3b;color:#fff;border:none;padding:10px 22px;border-radius:8px;cursor:pointer">🖨️ Imprimir / Guardar PDF</button></div>
    </div></body></html>`);
   w.document.close();
+}
+
+// ══ COTIZACIONES ══
+let _cotizLineas=[], curCotizId=null, _czEditIdx=null;
+function cotizNextNum(){ const nums=getCotiz().map(c=>Number(c.num)||0); const mx=nums.length?Math.max.apply(null,nums):0; return Math.max(1,mx+1); }
+function miCotiz(){ const all=getCotiz(); if(esGerente()) return all; const nom=String((getSession()&&getSession().nombre)||'').toLowerCase(); return all.filter(c=>String(c.vendedor||'').toLowerCase()===nom); }
+function openCotiz(){ if(!puedeVer('cotizaciones')){ showToast('Sin permiso'); return; } showScreen('sCotiz','Cotizaciones','Precios y pedidos',true); gs('btnListaPrecios').style.display=esGerente()?'':'none'; renderCotizList(); }
+function renderCotizList(){
+  const q=(gs('cotizBuscar').value||'').trim().toLowerCase();
+  let cs=miCotiz().slice().sort((a,b)=>String(b.ts||'').localeCompare(String(a.ts||'')));
+  if(q) cs=cs.filter(c=>((c.cliente||'')+' '+(c.items||[]).map(i=>i.nombre).join(' ')+' '+c.num).toLowerCase().includes(q));
+  gs('cotizCount').textContent=cs.length?cs.length+' cotiz.':'';
+  gs('cotizList').innerHTML=cs.length? cs.map(c=>`<div class="li" onclick="cotizVer('${c.id}')"><div style="min-width:0"><div class="li-t">N° ${c.num} · ${esc(c.cliente||'—')}</div><div class="li-s">${fmtFecha(c.fecha)} · ${(c.items||[]).length} ítem(s) · ${COND_LBL[c.condicion]||''}${c.vendedor?' · '+esc(c.vendedor):''}</div></div><div style="text-align:right;flex-shrink:0;font-weight:700">${gsFmt(c.total)}</div></div>`).join('') : '<div class="empty">Sin cotizaciones. Tocá ＋ Nueva cotización.</div>';
+}
+function fillClientesDatalist(){ const dl=gs('czClienteList'); if(!dl) return; dl.innerHTML=getClientes().slice().sort((a,b)=>String(a.nombre||'').localeCompare(String(b.nombre||''))).map(c=>`<option value="${esc(c.nombre)}">`).join(''); }
+function cotizNueva(){ if(!puedeVer('cotizaciones')) return; curCotizId=null; _cotizLineas=[];
+  showScreen('sCotizNueva','Nueva cotización','',true);
+  gs('czCond').innerHTML=COND_ORDER.map(k=>`<option value="${k}">${COND_LBL[k]}</option>`).join('');
+  gs('czCliente').value=''; gs('czFecha').value=hoy(); gs('czValidez').value='7'; gs('czVendedor').value=(getSession()&&getSession().nombre)||''; gs('czUsd').checked=false; gs('czDolarRow').style.display='none'; gs('czDolar').value=cotizDolar(); gs('czObs').value='';
+  fillClientesDatalist(); cotizRecalc();
+}
+function cotizCondChange(){ const cond=gs('czCond').value; _cotizLineas.forEach(ln=>{ const p=precioList().find(x=>x.n===ln.nombre); if(p) ln.precio_kg=p[cond]||p.p0; }); cotizRecalc(); }
+function cotizAddLinea(idx){ _czEditIdx=(idx!=null)?idx:null; const ln=_czEditIdx!=null?_cotizLineas[_czEditIdx]:null; const cond=gs('czCond').value||'p0';
+  gs('modalBox').innerHTML=`<h3>${ln?'Editar':'Agregar'} producto</h3>
+   <label class="fl">Producto</label><input id="lnProd" list="lnProdList" placeholder="Elegí un producto" autocomplete="off" value="${ln?esc(ln.nombre):''}" oninput="lnPrecioAuto()"><datalist id="lnProdList">${precioList().map(p=>`<option value="${esc(p.n)}">`).join('')}</datalist>
+   <div class="row2"><div><label class="fl">Cantidad</label><input type="number" id="lnCant" inputmode="decimal" value="${ln?ln.cantidad:''}" placeholder="0"></div><div><label class="fl">Unidad</label><select id="lnUnidad"><option value="bolsa" ${!ln||ln.unidad==='bolsa'?'selected':''}>bolsas</option><option value="kg" ${ln&&ln.unidad==='kg'?'selected':''}>kg</option></select></div></div>
+   <div class="row2"><div><label class="fl">Precio ₲/kg</label><input type="number" id="lnPKg" inputmode="numeric" value="${ln?ln.precio_kg:''}"></div><div><label class="fl">Kg/bolsa</label><input type="number" id="lnKgB" value="${ln?ln.kg_bolsa:''}"></div></div>
+   <div style="font-size:11px;color:var(--gray-400)">El precio se autocompleta según la condición (${COND_LBL[cond]}); podés ajustarlo.</div>
+   <div class="row2" style="margin-top:12px"><button class="btn btn-sec" onclick="${ln?`cotizDelLinea(${_czEditIdx})`:'cerrarModal()'}"${ln?' style="color:var(--red)"':''}>${ln?'Quitar':'Cancelar'}</button><button class="btn btn-primary" onclick="cotizSaveLinea()">Guardar</button></div>`;
+  gs('modal').classList.add('show');
+}
+function lnPrecioAuto(){ const nom=gs('lnProd').value; const p=precioList().find(x=>x.n===nom); if(p){ const cond=gs('czCond').value||'p0'; gs('lnPKg').value=p[cond]||p.p0; gs('lnKgB').value=p.kg; } }
+function cotizSaveLinea(){ const nom=(gs('lnProd').value||'').trim(); if(!nom){ showToast('Elegí el producto'); return; } const cant=num(gs('lnCant').value); if(!cant||cant<=0){ showToast('Ingresá la cantidad'); return; }
+  const p=precioList().find(x=>x.n===nom);
+  const ln={ key:p?precioKey(p):('N:'+nom.toUpperCase()), nombre:nom, kg_bolsa:num(gs('lnKgB').value)||(p?p.kg:0)||0, precio_kg:num(gs('lnPKg').value)||0, unidad:gs('lnUnidad').value, cantidad:cant };
+  if(_czEditIdx!=null) _cotizLineas[_czEditIdx]=ln; else _cotizLineas.push(ln);
+  _czEditIdx=null; cerrarModal(); cotizRecalc();
+}
+function cotizDelLinea(i){ _cotizLineas.splice(i,1); _czEditIdx=null; cerrarModal(); cotizRecalc(); }
+function cotizRecalc(){
+  gs('czDolarRow').style.display=gs('czUsd').checked?'':'none';
+  const usd=gs('czUsd').checked; const dol=num(gs('czDolar').value)||cotizDolar(); let total=0;
+  gs('czCount').textContent=_cotizLineas.length?_cotizLineas.length+' ítem(s)':'';
+  gs('czLineas').innerHTML=_cotizLineas.length? _cotizLineas.map((ln,i)=>{ const kg=ln.unidad==='bolsa'?ln.cantidad*ln.kg_bolsa:ln.cantidad; const sub=kg*ln.precio_kg; total+=sub;
+    return `<div class="li" onclick="cotizAddLinea(${i})"><div style="min-width:0"><div class="li-t">${esc(ln.nombre)}</div><div class="li-s">${ln.cantidad} ${ln.unidad==='bolsa'?'bolsa(s) × '+ln.kg_bolsa+'kg':'kg'} · ${gsFmt(ln.precio_kg)}/kg</div></div><div style="text-align:right;flex-shrink:0;font-weight:700">${gsFmt(sub)}</div></div>`;
+  }).join('') : '<div class="empty">Sin productos. Tocá ＋ Agregar producto.</div>';
+  gs('czResumen').innerHTML=`<div style="display:flex;justify-content:space-between;font-size:15px"><span>Total · ${COND_LBL[gs('czCond').value]||''}</span><b>${gsFmt(total)}</b></div>${usd?`<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--gray-500);margin-top:3px"><span>En dólares (₲ ${dol.toLocaleString('es-PY')}/US$)</span><b>US$ ${(total/dol).toLocaleString('es-PY',{maximumFractionDigits:2})}</b></div>`:''}`;
+}
+function cotizGuardar(imprimir){ if(!puedeVer('cotizaciones')) return;
+  const cliente=(gs('czCliente').value||'').trim(); if(!cliente){ showToast('Poné el cliente'); return; }
+  if(!_cotizLineas.length){ showToast('Agregá al menos un producto'); return; }
+  const cond=gs('czCond').value; const usd=gs('czUsd').checked; const dol=num(gs('czDolar').value)||cotizDolar();
+  const cli=getClientes().find(x=>String(x.nombre||'').toLowerCase()===cliente.toLowerCase());
+  const items=_cotizLineas.map(ln=>{ const kg=ln.unidad==='bolsa'?ln.cantidad*ln.kg_bolsa:ln.cantidad; return { key:ln.key, nombre:ln.nombre, kg_bolsa:ln.kg_bolsa, precio_kg:ln.precio_kg, unidad:ln.unidad, cantidad:ln.cantidad, kg:Math.round(kg*100)/100, subtotal:Math.round(kg*ln.precio_kg) }; });
+  const total=items.reduce((a,i)=>a+i.subtotal,0);
+  const prev=curCotizId?getCotiz().find(x=>x.id===curCotizId):null;
+  const c={ id:curCotizId||('CZ-'+Date.now()), num:prev?prev.num:cotizNextNum(), fecha:gs('czFecha').value||hoy(), cliente, cliente_id:cli?cli.id:'', condicion:cond, moneda:usd?'USD':'PYG', dolar:dol, validez:num(gs('czValidez').value)||7, vendedor:gs('czVendedor').value.trim(), items, total, obs:gs('czObs').value.trim(), por:(getSession()&&getSession().nombre)||'', ts:new Date().toISOString(), pending:true };
+  let a=getCotiz(); if(curCotizId){ a=a.map(x=>x.id===curCotizId?c:x); } else a.unshift(c);
+  saveCotiz(a); cloudPush('cotiz',c); curCotizId=null; showToast('✓ Cotización guardada'); if(imprimir) cotizPrint(c.id); openCotiz();
+}
+function cotizVer(id){ const c=getCotiz().find(x=>x.id===id); if(!c) return;
+  const filas=(c.items||[]).map(i=>`<tr><td>${esc(i.nombre)}</td><td style="text-align:right">${i.cantidad} ${i.unidad==='bolsa'?'bl':'kg'}</td><td style="text-align:right;font-weight:600">${gsFmt(i.subtotal)}</td></tr>`).join('');
+  gs('modalBox').innerHTML=`<h3>Cotización N° ${c.num}</h3><div style="font-size:12px;color:var(--gray-600);margin-bottom:6px">${esc(c.cliente)} · ${fmtFecha(c.fecha)} · ${COND_LBL[c.condicion]||''}${c.vendedor?'<br>Vendedor: '+esc(c.vendedor):''}</div>
+   <table style="width:100%;border-collapse:collapse;font-size:12px"><tbody>${filas}<tr style="border-top:2px solid var(--gray-300)"><td><b>Total</b></td><td></td><td style="text-align:right"><b>${gsFmt(c.total)}</b></td></tr></tbody></table>
+   <div class="row2" style="margin-top:12px"><button class="btn btn-sec" onclick="cotizEditar('${c.id}')">✎ Editar</button><button class="btn btn-amber" onclick="cotizPrint('${c.id}')">🖨️ Imprimir</button></div>
+   <button class="btn btn-sec btn-block" style="margin-top:8px;color:var(--red)" onclick="cotizBorrar('${c.id}')">Borrar</button>
+   <button class="btn btn-ghost btn-block" style="margin-top:8px" onclick="cerrarModal()">Cerrar</button>`;
+  gs('modal').classList.add('show');
+}
+function cotizEditar(id){ const c=getCotiz().find(x=>x.id===id); if(!c) return; cerrarModal(); cotizNueva(); curCotizId=id;
+  gs('czCliente').value=c.cliente||''; gs('czCond').value=c.condicion||'p0'; gs('czFecha').value=c.fecha; gs('czValidez').value=c.validez||7; gs('czVendedor').value=c.vendedor||''; gs('czObs').value=c.obs||''; gs('czUsd').checked=c.moneda==='USD'; gs('czDolar').value=c.dolar||cotizDolar();
+  _cotizLineas=(c.items||[]).map(i=>({ key:i.key, nombre:i.nombre, kg_bolsa:i.kg_bolsa, precio_kg:i.precio_kg, unidad:i.unidad, cantidad:i.cantidad }));
+  showScreen('sCotizNueva','Editar cotización','',true); cotizRecalc();
+}
+function cotizBorrar(id){ if(!confirm('¿Borrar esta cotización?')) return; saveCotiz(getCotiz().filter(x=>x.id!==id)); cloudDelete('cotiz',id); cerrarModal(); openCotiz(); }
+function cotizPrint(id){ const c=getCotiz().find(x=>x.id===id); if(!c) return; const w=window.open('','_blank'); if(!w){ showToast('Permití las ventanas emergentes'); return; }
+  const base=`${location.origin}${location.pathname.replace(/[^/]*$/,'')}logo.jpg`; const usd=c.moneda==='USD'; const dol=c.dolar||cotizDolar();
+  const filas=(c.items||[]).map(i=>{ const pb=Math.round(i.precio_kg*(i.kg_bolsa||0)); return `<tr><td>${esc(i.nombre)}</td><td class="r">${i.cantidad} ${i.unidad==='bolsa'?'bolsa(s)':'kg'}</td><td class="r">${gsFmt(i.precio_kg)}</td><td class="r">${pb?gsFmt(pb):'—'}</td><td class="r">${gsFmt(i.subtotal)}</td></tr>`; }).join('');
+  w.document.write(`<html><head><meta charset="utf-8"><title>Cotización ${c.num} — ${esc(c.cliente)}</title><style>
+   *{box-sizing:border-box} body{font-family:Arial,sans-serif;color:#1a202c;font-size:12.5px;margin:0} .wrap{max-width:780px;margin:0 auto;padding:24px}
+   .top{display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #2f7d3b;padding-bottom:8px;margin-bottom:12px} .top img{height:46px}
+   .top .t{text-align:right} .top .t b{font-size:15px;color:#2f7d3b}
+   .hdr td{border:none;padding:3px 6px;font-size:12px} .hdr .k{color:#718096;width:110px}
+   table.g{width:100%;border-collapse:collapse;margin-top:10px} table.g td,table.g th{border:1px solid #cbd5e0;padding:6px 8px} table.g th{background:#eef5ef;text-align:left;font-size:11px} .r{text-align:right;white-space:nowrap}
+   .tot td{background:#eef5ef;font-weight:700;font-size:14px}
+   .obs{margin-top:10px;font-size:11px;color:#555} .firma{margin-top:40px;font-size:12px;color:#555}
+   @media print{.wrap{padding:10mm} .noprint{display:none}}</style></head><body><div class="wrap">
+   <div class="top"><img src="${base}"><div class="t"><b>COTIZACIÓN</b><br>N° ${c.num} · ${fmtFecha(c.fecha)}</div></div>
+   <table class="hdr"><tr><td class="k">Cliente</td><td><b>${esc(c.cliente)}</b></td><td class="k">Condición</td><td>${COND_LBL[c.condicion]||''}</td></tr>
+    <tr><td class="k">Vendedor</td><td>${esc(c.vendedor||'—')}</td><td class="k">Validez</td><td>${c.validez||7} días</td></tr></table>
+   <table class="g"><thead><tr><th>Producto</th><th class="r">Cantidad</th><th class="r">₲/kg</th><th class="r">₲/bolsa</th><th class="r">Subtotal ₲</th></tr></thead><tbody>${filas}
+    <tr class="tot"><td colspan="4">TOTAL (${COND_LBL[c.condicion]||''})</td><td class="r">${gsFmt(c.total)}</td></tr>
+    ${usd?`<tr><td colspan="4" style="text-align:right;color:#718096">Total en dólares (₲ ${dol.toLocaleString('es-PY')}/US$)</td><td class="r">US$ ${(c.total/dol).toLocaleString('es-PY',{maximumFractionDigits:2})}</td></tr>`:''}</tbody></table>
+   ${c.obs?`<div class="obs"><b>Observaciones:</b> ${esc(c.obs)}</div>`:''}
+   <div class="obs">Precios en guaraníes${usd?' (con equivalencia en dólares)':''}. Cotización válida por ${c.validez||7} días. Sujeta a disponibilidad.</div>
+   <div class="firma">_____________________________<br>${esc(c.vendedor||'BioInnova')} — BioInnova S.A.</div>
+   <div class="noprint" style="text-align:center;margin-top:16px"><button onclick="window.print()" style="background:#2f7d3b;color:#fff;border:none;padding:10px 22px;border-radius:8px;cursor:pointer">🖨️ Imprimir / Guardar PDF</button></div>
+   </div></body></html>`);
+  w.document.close();
+}
+// ── Lista de precios (editor, gerente) ──
+function openPrecios(){ if(!esGerente()){ showToast('Solo el gerente'); return; } showScreen('sPrecios','Lista de precios','₲ por kg',true); renderPrecios(); }
+function renderPrecios(){ const q=(gs('precBuscar').value||'').trim().toLowerCase(); let ls=precioList(); if(q) ls=ls.filter(p=>((p.n||'')+' '+(p.c||'')).toLowerCase().includes(q)); gs('precCount').textContent=ls.length+' productos';
+  gs('precList').innerHTML=ls.map(p=>`<div class="li" onclick="precioModal('${encodeURIComponent(precioKey(p))}')"><div style="min-width:0"><div class="li-t">${esc(p.n)}</div><div class="li-s">${p.c?esc(p.c)+' · ':''}${p.kg}kg · Contado ${gsFmt(p.p0)}/kg · C90 ${gsFmt(p.p90)}</div></div><div class="li-chev">✎</div></div>`).join('') || '<div class="empty">Sin productos.</div>';
+}
+function precioModal(keyEnc){ if(!esGerente()) return; const key=keyEnc?decodeURIComponent(keyEnc):null; const p=key?precioList().find(x=>precioKey(x)===key):null;
+  gs('modalBox').innerHTML=`<h3>${p?'Editar':'Nuevo'} producto</h3>
+   <div class="row2"><div><label class="fl">Código</label><input id="prC" value="${p?esc(p.c):''}"></div><div><label class="fl">Kg/bolsa</label><input type="number" id="prKg" value="${p?p.kg:'30'}"></div></div>
+   <label class="fl">Nombre</label><input id="prN" value="${p?esc(p.n):''}">
+   <div class="row2"><div><label class="fl">Contado ₲/kg</label><input type="number" id="prP0" value="${p?p.p0:''}"></div><div><label class="fl">Crédito 30</label><input type="number" id="prP30" value="${p?p.p30:''}"></div></div>
+   <div class="row2"><div><label class="fl">Crédito 60</label><input type="number" id="prP60" value="${p?p.p60:''}"></div><div><label class="fl">Crédito 90</label><input type="number" id="prP90" value="${p?p.p90:''}"></div></div>
+   <div class="row2" style="margin-top:12px"><button class="btn btn-sec" onclick="${p?`precioBorrar('${keyEnc}')`:'cerrarModal()'}"${p?' style="color:var(--red)"':''}>${p?'Borrar':'Cancelar'}</button><button class="btn btn-primary" onclick="precioGuardar()">Guardar</button></div>`;
+  gs('modal').classList.add('show');
+}
+function precioGuardar(){ if(!esGerente()) return; const n=(gs('prN').value||'').trim(); if(!n){ showToast('Ingresá el nombre'); return; }
+  const rec={ id:'PR-'+Date.now(), c:(gs('prC').value||'').trim(), n, kg:num(gs('prKg').value)||30, p0:num(gs('prP0').value)||0, p30:num(gs('prP30').value)||0, p60:num(gs('prP60').value)||0, p90:num(gs('prP90').value)||0, ts:new Date().toISOString(), pending:true };
+  const key=precioKey(rec); const ov=getPreciosOv(); const ex=ov.find(o=>precioKey(o)===key); let out;
+  if(ex){ rec.id=ex.id; out=ov.map(o=>precioKey(o)===key?rec:o); } else out=[rec,...ov];
+  savePreciosOv(out); cloudPush('precio',rec); cerrarModal(); showToast('✓ Precio guardado'); renderPrecios();
+}
+function precioBorrar(keyEnc){ if(!esGerente()) return; const key=decodeURIComponent(keyEnc); if(!confirm('¿Quitar este producto de la lista?')) return;
+  const ov=getPreciosOv(); const ex=ov.find(o=>precioKey(o)===key); const base=PL_PRECIOS.find(p=>precioKey(p)===key);
+  if(base){ const rec=Object.assign({},base,{id:ex?ex.id:('PR-'+Date.now()),borrado:true,ts:new Date().toISOString(),pending:true}); const out=ex?ov.map(o=>precioKey(o)===key?rec:o):[rec,...ov]; savePreciosOv(out); cloudPush('precio',rec); }
+  else if(ex){ savePreciosOv(ov.filter(o=>o.id!==ex.id)); cloudDelete('precio',ex.id); }
+  cerrarModal(); renderPrecios();
 }
 
 // ══ RENDICIÓN DE VIÁTICOS (comerciales) ══
