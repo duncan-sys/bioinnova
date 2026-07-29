@@ -32,7 +32,8 @@ create table if not exists public.bio_cotiz (
   vendedor   text,
   items      jsonb default '[]'::jsonb,  -- [{key,nombre,kg_bolsa,precio_kg,unidad,cantidad,kg,subtotal}]
   subtotal   numeric,       -- suma de productos (sin flete)
-  flete      numeric,       -- flete del pedido (editable por cotización)
+  flete_kg   numeric,       -- flete ₲/kg (editable por cotización)
+  flete      numeric,       -- flete total = flete_kg × kg del pedido
   total      numeric,       -- subtotal + flete
   obs        text,
   por        text,

@@ -304,7 +304,7 @@ textarea{resize:vertical;min-height:66px}
       <label class="fl">Cliente</label><input id="czCliente" list="czClienteList" placeholder="Nombre del cliente" autocomplete="off"><datalist id="czClienteList"></datalist>
       <div class="row2"><div><label class="fl">Condición de pago</label><select id="czCond" onchange="cotizCondChange()"></select></div><div><label class="fl">Fecha</label><input type="date" id="czFecha"></div></div>
       <div class="row2"><div><label class="fl">Validez (días)</label><input type="number" id="czValidez" value="7" inputmode="numeric"></div><div><label class="fl">Vendedor</label><input id="czVendedor"></div></div>
-      <label class="fl">Flete (₲, total del pedido — opcional)</label><input type="number" id="czFlete" inputmode="numeric" placeholder="0" oninput="cotizRecalc()">
+      <label class="fl">Flete (₲/kg — opcional, según destino)</label><input type="number" id="czFlete" inputmode="numeric" placeholder="0" oninput="cotizRecalc()">
       <label class="fl" style="display:flex;gap:8px;align-items:center;margin-top:10px;font-weight:600;cursor:pointer"><input type="checkbox" id="czUsd" onchange="cotizRecalc()" style="width:16px;height:16px"> Mostrar también en US$</label>
       <div id="czDolarRow" style="display:none"><label class="fl">Cotización del dólar (₲)</label><input type="number" id="czDolar" inputmode="numeric" oninput="cotizRecalc()"></div>
     </div></div>
@@ -596,8 +596,8 @@ const PL_INSPREC={
 'INS007':1345.45,'INS014':4688.73,'INS056':7535.45,'BIO25-004':2901.97,'INS049':20206.18,'BIO25-014':1221.51,'INS071':11275.27
 };
 // Parámetros de costeo (globales, editables por el gerente)
-const PL_COSTCFG={ merma:0.03, mano_obra:100, bolsa:90, etiqueta_bolsa:450, gastos_adm:0.04, comision:0.04, margen:0.25, plazo_mes:0.01, iva:0, dolar:6140 };
-const PL_MARGEN={ BIOSAL02:0.15, BIOSAL03:0.15, BIOSAL04:0.15, BIOSAL05:0.15 };   // Sal Mineral 15% (override por producto)
+const PL_COSTCFG={ merma:0, mano_obra:100, bolsa:90, etiqueta_bolsa:450, gastos_adm:0.04, comision:0.04, margen:0.20, plazo_mes:0.01, iva:0.10, flete_kg:0, dolar:6100 };
+const PL_MARGEN={};   // margen por producto (override); default = cfg.margen
 function getInsPrecOv(){ return getArr('bio:insprec'); }
 function saveInsPrecOv(a){ setArr('bio:insprec',a); }
 function insPrecio(c){ const o=getInsPrecOv().find(x=>x.c===c); if(o) return Number(o.gskg)||0; return PL_INSPREC[c]||0; }
@@ -608,11 +608,11 @@ function setMargenOv(cod,pct){ const o=getMargenOv(); if(pct==null||pct==='') de
 function margenDe(cod){ const ov=getMargenOv(); if(cod&&ov[cod]!=null) return Number(ov[cod]); if(cod&&PL_MARGEN[cod]!=null) return PL_MARGEN[cod]; return getCostCfg().margen; }
 function costoBaseFormula(f){ return (f.ins||[]).filter(i=>i.t==='p').reduce((a,i)=>a+(Number(i.p)/100)*insPrecio(i.c),0); }
 function precioProducto(f){ const cfg=getCostCfg(); const base=costoBaseFormula(f); const kg=plKgBolsa(f);
-  const conMerma=base*(1+cfg.merma);
-  const conAdic=conMerma + cfg.mano_obra + cfg.bolsa + (kg?cfg.etiqueta_bolsa/kg:0);
-  const conGA=conAdic*(1+cfg.gastos_adm);
-  const contado=conGA*(1+margenDe(f.c)+cfg.comision)*(1+(cfg.iva||0)); const R=Math.round;
-  return { c:f.c||'', n:f.n, kg, base:R(base), p0:R(contado), p30:R(contado*(1+cfg.plazo_mes)), p60:R(contado*(1+2*cfg.plazo_mes)), p90:R(contado*(1+3*cfg.plazo_mes)), calc:true }; }
+  const bruto = base*(1+(cfg.merma||0)) + cfg.mano_obra + cfg.bolsa + (kg?cfg.etiqueta_bolsa/kg:0);     // TOTAL BRUTO
+  const conCom = bruto*(1+cfg.gastos_adm)*(1+margenDe(f.c))*(1+cfg.comision);                          // × gastos adm × margen × comisión
+  const iva=(cfg.iva||0), fk=(cfg.flete_kg||0), pm=(cfg.plazo_mes||0), R=Math.round;
+  const P=t=> R( conCom*(1+t*pm)*(1+iva) + fk );                                                       // × plazo × IVA + flete/kg
+  return { c:f.c||'', n:f.n, kg, base:R(base), p0:P(0), p30:P(1), p60:P(2), p90:P(3), calc:true }; }
 // Lista efectiva: productos con fórmula = calculados; sin fórmula = manual (respaldo) + altas/ediciones del gerente
 function precioList(){ const m={};
   PL_FORMULAS.forEach(f=>{ const p=precioProducto(f); m[precioKey(p)]=p; });
@@ -815,7 +815,7 @@ const SYNC_DEFS = {
   viat:{ get:getRend, save:saveRend, table:'bio_viat', toRow:viatRow, fromRow:rowViat },
   insumo:{ get:getInsumosExtra, save:saveInsumosExtra, table:'bio_insumos', toRow:insuRow, fromRow:rowInsu },
   precio:{ get:getPreciosOv, save:savePreciosOv, table:'bio_precios', toRow:precRow, fromRow:rowPrec },
-  cotiz:{ get:getCotiz, save:saveCotiz, table:'bio_cotiz', toRow:cotizRow, fromRow:rowCotiz, toRowSafe:(c)=>{ const r=cotizRow(c); delete r.subtotal; delete r.flete; return r; } },
+  cotiz:{ get:getCotiz, save:saveCotiz, table:'bio_cotiz', toRow:cotizRow, fromRow:rowCotiz, toRowSafe:(c)=>{ const r=cotizRow(c); delete r.subtotal; delete r.flete; delete r.flete_kg; return r; } },
   insprec:{ get:getInsPrecOv, save:saveInsPrecOv, table:'bio_insprec', toRow:insprecRow, fromRow:rowInsprec },
 };
 function insprecRow(o){ return { id:o.id||('IP-'+o.c), c:o.c||'', gskg:Number(o.gskg)||0, ts:o.ts||null }; }
@@ -825,8 +825,8 @@ async function pullPricingCfg(){ if(!AUTH_ON) return; try{ const rows=await sb.q
 async function pushPricingCfg(){ if(!AUTH_ON) return; try{ await sb.upsert('bio_config',{id:'pricing',data:{costcfg:getCostCfg(),margen:getMargenOv()},ts:new Date().toISOString()},'id'); }catch(e){} }
 function precRow(p){ return { id:p.id, c:p.c||'', n:p.n||'', kg:p.kg||null, p0:p.p0||0, p30:p.p30||0, p60:p.p60||0, p90:p.p90||0, borrado:!!p.borrado, ts:p.ts||null }; }
 function rowPrec(r){ return { id:r.id, c:r.c||'', n:r.n||'', kg:Number(r.kg)||0, p0:Number(r.p0)||0, p30:Number(r.p30)||0, p60:Number(r.p60)||0, p90:Number(r.p90)||0, borrado:!!r.borrado, ts:r.ts, pending:false }; }
-function cotizRow(c){ return { id:c.id, num:c.num, fecha:c.fecha||null, cliente:c.cliente||'', cliente_id:c.cliente_id||'', condicion:c.condicion||'p0', moneda:c.moneda||'PYG', dolar:c.dolar||null, validez:c.validez||7, vendedor:c.vendedor||'', items:c.items||[], subtotal:c.subtotal||0, flete:c.flete||0, total:c.total||0, obs:c.obs||'', por:c.por||'', ts:c.ts||null }; }
-function rowCotiz(r){ return { id:r.id, num:r.num, fecha:r.fecha||'', cliente:r.cliente||'', cliente_id:r.cliente_id||'', condicion:r.condicion||'p0', moneda:r.moneda||'PYG', dolar:r.dolar, validez:r.validez||7, vendedor:r.vendedor||'', items:(typeof r.items==='string'?(()=>{try{return JSON.parse(r.items)}catch{return[]}})():(r.items||[])), subtotal:Number(r.subtotal)||0, flete:Number(r.flete)||0, total:Number(r.total)||0, obs:r.obs||'', por:r.por||'', ts:r.ts, pending:false }; }
+function cotizRow(c){ return { id:c.id, num:c.num, fecha:c.fecha||null, cliente:c.cliente||'', cliente_id:c.cliente_id||'', condicion:c.condicion||'p0', moneda:c.moneda||'PYG', dolar:c.dolar||null, validez:c.validez||7, vendedor:c.vendedor||'', items:c.items||[], subtotal:c.subtotal||0, flete_kg:c.flete_kg||0, flete:c.flete||0, total:c.total||0, obs:c.obs||'', por:c.por||'', ts:c.ts||null }; }
+function rowCotiz(r){ return { id:r.id, num:r.num, fecha:r.fecha||'', cliente:r.cliente||'', cliente_id:r.cliente_id||'', condicion:r.condicion||'p0', moneda:r.moneda||'PYG', dolar:r.dolar, validez:r.validez||7, vendedor:r.vendedor||'', items:(typeof r.items==='string'?(()=>{try{return JSON.parse(r.items)}catch{return[]}})():(r.items||[])), subtotal:Number(r.subtotal)||0, flete_kg:Number(r.flete_kg)||0, flete:Number(r.flete)||0, total:Number(r.total)||0, obs:r.obs||'', por:r.por||'', ts:r.ts, pending:false }; }
 function insuRow(i){ return { id:i.id, c:i.c||'', n:i.n||'', prov:i.prov||'', u:i.u||'kg', cat:i.cat||'Otro', ts:i.ts||null }; }
 function rowInsu(r){ return { id:r.id, c:r.c||'', n:r.n||'', prov:r.prov||'', u:r.u||'kg', cat:r.cat||'Otro', ts:r.ts, pending:false }; }
 function viatRow(r){ return { id:r.id, comercial:r.comercial||'', desde:r.desde||null, hasta:r.hasta||null, anticipo:r.anticipo||0, anticipo_fecha:r.anticipo_fecha||null, anticipo_ref:r.anticipo_ref||'', gastos:r.gastos||[], estado:r.estado||'abierta', liq_fecha:r.liq_fecha||null, liq_ref:r.liq_ref||'', por:r.por||'', ts:r.ts||null }; }
@@ -1581,8 +1581,8 @@ function cotizRecalc(){
   gs('czLineas').innerHTML=_cotizLineas.length? _cotizLineas.map((ln,i)=>{ const kg=ln.unidad==='bolsa'?ln.cantidad*ln.kg_bolsa:ln.cantidad; const sub=kg*ln.precio_kg; total+=sub;
     return `<div class="li" onclick="cotizAddLinea(${i})"><div style="min-width:0"><div class="li-t">${esc(ln.nombre)}</div><div class="li-s">${ln.cantidad} ${ln.unidad==='bolsa'?'bolsa(s) × '+ln.kg_bolsa+'kg':'kg'} · ${gsFmt(ln.precio_kg)}/kg</div></div><div style="text-align:right;flex-shrink:0;font-weight:700">${gsFmt(sub)}</div></div>`;
   }).join('') : '<div class="empty">Sin productos. Tocá ＋ Agregar producto.</div>';
-  const flete=num(gs('czFlete').value)||0; const grand=total+flete;
-  gs('czResumen').innerHTML=`<div style="display:flex;justify-content:space-between"><span>Productos</span><b>${gsFmt(total)}</b></div>${flete?`<div style="display:flex;justify-content:space-between;margin-top:3px"><span>Flete</span><b>${gsFmt(flete)}</b></div>`:''}<hr style="border:none;border-top:1px solid var(--gray-200);margin:7px 0"><div style="display:flex;justify-content:space-between;font-size:15px"><span>Total · ${COND_LBL[gs('czCond').value]||''}</span><b>${gsFmt(grand)}</b></div>${usd?`<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--gray-500);margin-top:3px"><span>En dólares (₲ ${dol.toLocaleString('es-PY')}/US$)</span><b>US$ ${(grand/dol).toLocaleString('es-PY',{maximumFractionDigits:2})}</b></div>`:''}`;
+  const fleteKg=num(gs('czFlete').value)||0; const totalKg=_cotizLineas.reduce((a,ln)=>a+(ln.unidad==='bolsa'?ln.cantidad*ln.kg_bolsa:ln.cantidad),0); const flete=Math.round(fleteKg*totalKg); const grand=total+flete;
+  gs('czResumen').innerHTML=`<div style="display:flex;justify-content:space-between"><span>Productos</span><b>${gsFmt(total)}</b></div>${flete?`<div style="display:flex;justify-content:space-between;margin-top:3px"><span>Flete (${gsFmt(fleteKg)}/kg × ${totalKg.toLocaleString('es-PY')} kg)</span><b>${gsFmt(flete)}</b></div>`:''}<hr style="border:none;border-top:1px solid var(--gray-200);margin:7px 0"><div style="display:flex;justify-content:space-between;font-size:15px"><span>Total · ${COND_LBL[gs('czCond').value]||''}</span><b>${gsFmt(grand)}</b></div>${usd?`<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--gray-500);margin-top:3px"><span>En dólares (₲ ${dol.toLocaleString('es-PY')}/US$)</span><b>US$ ${(grand/dol).toLocaleString('es-PY',{maximumFractionDigits:2})}</b></div>`:''}`;
 }
 function cotizGuardar(imprimir){ if(!puedeVer('cotizaciones')) return;
   const cliente=(gs('czCliente').value||'').trim(); if(!cliente){ showToast('Poné el cliente'); return; }
@@ -1590,9 +1590,9 @@ function cotizGuardar(imprimir){ if(!puedeVer('cotizaciones')) return;
   const cond=gs('czCond').value; const usd=gs('czUsd').checked; const dol=num(gs('czDolar').value)||cotizDolar();
   const cli=getClientes().find(x=>String(x.nombre||'').toLowerCase()===cliente.toLowerCase());
   const items=_cotizLineas.map(ln=>{ const kg=ln.unidad==='bolsa'?ln.cantidad*ln.kg_bolsa:ln.cantidad; return { key:ln.key, nombre:ln.nombre, kg_bolsa:ln.kg_bolsa, precio_kg:ln.precio_kg, unidad:ln.unidad, cantidad:ln.cantidad, kg:Math.round(kg*100)/100, subtotal:Math.round(kg*ln.precio_kg) }; });
-  const subtotal=items.reduce((a,i)=>a+i.subtotal,0); const flete=num(gs('czFlete').value)||0; const total=subtotal+flete;
+  const subtotal=items.reduce((a,i)=>a+i.subtotal,0); const fleteKg=num(gs('czFlete').value)||0; const totalKg=items.reduce((a,i)=>a+(Number(i.kg)||0),0); const flete=Math.round(fleteKg*totalKg); const total=subtotal+flete;
   const prev=curCotizId?getCotiz().find(x=>x.id===curCotizId):null;
-  const c={ id:curCotizId||('CZ-'+Date.now()), num:prev?prev.num:cotizNextNum(), fecha:gs('czFecha').value||hoy(), cliente, cliente_id:cli?cli.id:'', condicion:cond, moneda:usd?'USD':'PYG', dolar:dol, validez:num(gs('czValidez').value)||7, vendedor:gs('czVendedor').value.trim(), items, subtotal, flete, total, obs:gs('czObs').value.trim(), por:(getSession()&&getSession().nombre)||'', ts:new Date().toISOString(), pending:true };
+  const c={ id:curCotizId||('CZ-'+Date.now()), num:prev?prev.num:cotizNextNum(), fecha:gs('czFecha').value||hoy(), cliente, cliente_id:cli?cli.id:'', condicion:cond, moneda:usd?'USD':'PYG', dolar:dol, validez:num(gs('czValidez').value)||7, vendedor:gs('czVendedor').value.trim(), items, subtotal, flete_kg:fleteKg, flete, total, obs:gs('czObs').value.trim(), por:(getSession()&&getSession().nombre)||'', ts:new Date().toISOString(), pending:true };
   let a=getCotiz(); if(curCotizId){ a=a.map(x=>x.id===curCotizId?c:x); } else a.unshift(c);
   saveCotiz(a); cloudPush('cotiz',c); curCotizId=null; showToast('✓ Cotización guardada'); if(imprimir) cotizPrint(c.id); openCotiz();
 }
@@ -1606,7 +1606,7 @@ function cotizVer(id){ const c=getCotiz().find(x=>x.id===id); if(!c) return;
   gs('modal').classList.add('show');
 }
 function cotizEditar(id){ const c=getCotiz().find(x=>x.id===id); if(!c) return; cerrarModal(); cotizNueva(); curCotizId=id;
-  gs('czCliente').value=c.cliente||''; gs('czCond').value=c.condicion||'p0'; gs('czFecha').value=c.fecha; gs('czValidez').value=c.validez||7; gs('czVendedor').value=c.vendedor||''; gs('czFlete').value=c.flete||''; gs('czObs').value=c.obs||''; gs('czUsd').checked=c.moneda==='USD'; gs('czDolar').value=c.dolar||cotizDolar();
+  gs('czCliente').value=c.cliente||''; gs('czCond').value=c.condicion||'p0'; gs('czFecha').value=c.fecha; gs('czValidez').value=c.validez||7; gs('czVendedor').value=c.vendedor||''; gs('czFlete').value=c.flete_kg||''; gs('czObs').value=c.obs||''; gs('czUsd').checked=c.moneda==='USD'; gs('czDolar').value=c.dolar||cotizDolar();
   _cotizLineas=(c.items||[]).map(i=>({ key:i.key, nombre:i.nombre, kg_bolsa:i.kg_bolsa, precio_kg:i.precio_kg, unidad:i.unidad, cantidad:i.cantidad }));
   showScreen('sCotizNueva','Editar cotización','',true); cotizRecalc();
 }
