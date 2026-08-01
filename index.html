@@ -600,7 +600,7 @@ const PL_INSPREC={
 'INS007':1345.45,'INS014':4688.73,'INS056':7535.45,'BIO25-004':2901.97,'INS049':20206.18,'BIO25-014':1221.51,'INS071':11275.27
 };
 // Parámetros de costeo (globales, editables por el gerente)
-const PL_COSTCFG={ merma:0, mano_obra:100, bolsa:90, etiqueta_bolsa:450, gastos_adm:0.04, comision:0.04, margen:0.20, plazo_mes:0.01, iva:0.10, flete_kg:0, dolar:6100 };
+const PL_COSTCFG={ merma:0.03, mano_obra:100, bolsa:90, etiqueta_bolsa:420, gastos_adm:0.04, comision:0.04, margen:0.20, plazo_mes:0.01, iva:0.10, flete_kg:0, dolar:6100 };
 const PL_MARGEN={};   // margen por producto (override); default = cfg.margen
 function getInsPrecOv(){ return getArr('bio:insprec'); }
 function saveInsPrecOv(a){ setArr('bio:insprec',a); }
