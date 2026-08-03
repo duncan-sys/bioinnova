@@ -307,7 +307,7 @@ textarea{resize:vertical;min-height:66px}
       <label class="fl">Cliente</label><input id="czCliente" list="czClienteList" placeholder="Nombre del cliente" autocomplete="off"><datalist id="czClienteList"></datalist>
       <div class="row2"><div><label class="fl">Condición de pago</label><select id="czCond" onchange="cotizCondChange()"></select></div><div><label class="fl">Fecha</label><input type="date" id="czFecha"></div></div>
       <div class="row2"><div><label class="fl">Validez (días)</label><input type="number" id="czValidez" value="7" inputmode="numeric"></div><div><label class="fl">Vendedor</label><input id="czVendedor"></div></div>
-      <div class="row2"><div><label class="fl">Margen % (de esta cotización)</label><input type="number" step="0.1" id="czMargen" inputmode="decimal" oninput="cotizCondChange()"></div><div><label class="fl">Flete ₲/kg (según destino)</label><input type="number" id="czFlete" inputmode="numeric" placeholder="0" oninput="cotizRecalc()"></div></div>
+      <div class="row2"><div><label class="fl">Margen % (opcional · vacío = por producto)</label><input type="number" step="0.1" id="czMargen" inputmode="decimal" placeholder="por producto" oninput="cotizCondChange()"></div><div><label class="fl">Flete ₲/kg (según destino)</label><input type="number" id="czFlete" inputmode="numeric" placeholder="0" oninput="cotizRecalc()"></div></div>
       <div style="font-size:10px;color:var(--gray-400);margin-top:-2px">El margen y el flete afectan el precio pero NO se muestran en la cotización impresa.</div>
       <label class="fl" style="display:flex;gap:8px;align-items:center;margin-top:10px;font-weight:600;cursor:pointer"><input type="checkbox" id="czUsd" onchange="cotizRecalc()" style="width:16px;height:16px"> Mostrar también en US$</label>
       <div id="czDolarRow" style="display:none"><label class="fl">Cotización del dólar (₲)</label><input type="number" id="czDolar" inputmode="numeric" oninput="cotizRecalc()"></div>
@@ -600,7 +600,7 @@ const PL_INSPREC={
 'INS007':1345.45,'INS014':4688.73,'INS056':7535.45,'BIO25-004':2901.97,'INS049':20206.18,'BIO25-014':1221.51,'INS071':11275.27
 };
 // Parámetros de costeo (globales, editables por el gerente)
-const PL_COSTCFG={ merma:0.03, mano_obra:100, bolsa:90, etiqueta_bolsa:420, gastos_adm:0.04, comision:0.04, margen:0.20, plazo_mes:0.01, iva:0.10, flete_kg:0, dolar:6100 };
+const PL_COSTCFG={ merma:0.03, mano_obra:100, bolsa:90, etiqueta_bolsa:420, gastos_adm:0.04, comision:0.04, margen:0.25, margen_sal:0.15, plazo_mes:0.01, iva:0.10, flete_kg:0, dolar:6100 };
 const PL_MARGEN={};   // margen por producto (override); default = cfg.margen
 function getInsPrecOv(){ return getArr('bio:insprec'); }
 function saveInsPrecOv(a){ setArr('bio:insprec',a); }
@@ -609,7 +609,11 @@ function getCostCfg(){ let o={}; try{ o=JSON.parse(localStorage.getItem('bio:cos
 function saveCostCfg(o){ try{ localStorage.setItem('bio:costcfg',JSON.stringify(o)); }catch{} if(typeof pushPricingCfg==='function') pushPricingCfg(); }
 function getMargenOv(){ let o={}; try{ o=JSON.parse(localStorage.getItem('bio:margen'))||{}; }catch{} return o; }
 function setMargenOv(cod,pct){ const o=getMargenOv(); if(pct==null||pct==='') delete o[cod]; else o[cod]=Number(pct); try{ localStorage.setItem('bio:margen',JSON.stringify(o)); }catch{} if(typeof pushPricingCfg==='function') pushPricingCfg(); }
-function margenDe(cod){ const ov=getMargenOv(); if(cod&&ov[cod]!=null) return Number(ov[cod]); if(cod&&PL_MARGEN[cod]!=null) return PL_MARGEN[cod]; return getCostCfg().margen; }
+// ¿Es sal mineral? (código BIOSAL o nombre lo indica) → usa el margen de sal por defecto
+function esSalMineral(cod,nombre){ return /^BIOSAL/i.test(cod||'') || /biosal|sal\s*mineral/i.test(nombre||''); }
+// Margen de un producto: override individual → default por línea (sal mineral vs general)
+function margenDe(cod, nombre){ const ov=getMargenOv(); if(cod&&ov[cod]!=null) return Number(ov[cod]);
+  const cfg=getCostCfg(); return esSalMineral(cod,nombre) ? (cfg.margen_sal!=null?cfg.margen_sal:0.15) : cfg.margen; }
 function costoBaseFormula(f){ return (f.ins||[]).filter(i=>i.t==='p').reduce((a,i)=>a+(Number(i.p)/100)*insPrecio(i.c),0); }
 // Precio ₲/kg (SIN flete) para una condición y un margen dado
 function precioBaseKg(f, cond, margen){ const cfg=getCostCfg(); const base=costoBaseFormula(f); const kg=plKgBolsa(f);
@@ -617,7 +621,7 @@ function precioBaseKg(f, cond, margen){ const cfg=getCostCfg(); const base=costo
   const conCom = bruto*(1+cfg.gastos_adm)*(1+margen)*(1+cfg.comision);                                 // × gastos adm × margen × comisión
   const t={p0:0,p30:1,p60:2,p90:3}[cond]||0;
   return Math.round( conCom*(1+t*(cfg.plazo_mes||0))*(1+(cfg.iva||0)) ); }                             // × plazo × IVA
-function precioProducto(f){ const kg=plKgBolsa(f); const m=margenDe(f.c); const fk=(getCostCfg().flete_kg||0);
+function precioProducto(f){ const kg=plKgBolsa(f); const m=margenDe(f.c, f.n); const fk=(getCostCfg().flete_kg||0);
   return { c:f.c||'', n:f.n, kg, base:Math.round(costoBaseFormula(f)), p0:precioBaseKg(f,'p0',m)+fk, p30:precioBaseKg(f,'p30',m)+fk, p60:precioBaseKg(f,'p60',m)+fk, p90:precioBaseKg(f,'p90',m)+fk, calc:true }; }
 // Lista efectiva: productos con fórmula = calculados; sin fórmula = manual (respaldo) + altas/ediciones del gerente
 function precioList(){ const m={};
@@ -1580,11 +1584,11 @@ function fillClientesDatalist(){ const dl=gs('czClienteList'); if(!dl) return; d
 function cotizNueva(){ if(!puedeVer('cotizaciones')) return; curCotizId=null; _cotizLineas=[];
   showScreen('sCotizNueva','Nueva cotización','',true);
   gs('czCond').innerHTML=COND_ORDER.map(k=>`<option value="${k}">${COND_LBL[k]}</option>`).join('');
-  gs('czCliente').value=''; gs('czFecha').value=hoy(); gs('czValidez').value='7'; gs('czVendedor').value=(getSession()&&getSession().nombre)||''; gs('czMargen').value=(getCostCfg().margen*100); gs('czFlete').value=''; gs('czUsd').checked=false; gs('czDolarRow').style.display='none'; gs('czDolar').value=cotizDolar(); gs('czObs').value='';
+  gs('czCliente').value=''; gs('czFecha').value=hoy(); gs('czValidez').value='7'; gs('czVendedor').value=(getSession()&&getSession().nombre)||''; gs('czMargen').value=''; gs('czFlete').value=''; gs('czUsd').checked=false; gs('czDolarRow').style.display='none'; gs('czDolar').value=cotizDolar(); gs('czObs').value='';
   fillClientesDatalist(); cotizRecalc();
 }
-function cotizCondChange(){ const cond=gs('czCond').value; const m=(num(gs('czMargen').value)||0)/100;
-  _cotizLineas.forEach(ln=>{ const f=PL_FORMULAS.find(x=>precioKey(x)===ln.key); if(f){ ln.precio_kg=precioBaseKg(f,cond,m); } else { const p=precioList().find(x=>x.n===ln.nombre); if(p) ln.precio_kg=p[cond]||p.p0; } });
+function cotizCondChange(){ const cond=gs('czCond').value; const ov=gs('czMargen').value; const mOv=(ov!==''&&ov!=null)?(num(ov)/100):null;
+  _cotizLineas.forEach(ln=>{ const f=PL_FORMULAS.find(x=>precioKey(x)===ln.key); if(f){ const m=(mOv!=null)?mOv:margenDe(f.c,f.n); ln.precio_kg=precioBaseKg(f,cond,m); } else { const p=precioList().find(x=>x.n===ln.nombre); if(p) ln.precio_kg=p[cond]||p.p0; } });
   cotizRecalc(); }
 function cotizAddLinea(idx){ _czEditIdx=(idx!=null)?idx:null; const ln=_czEditIdx!=null?_cotizLineas[_czEditIdx]:null; const cond=gs('czCond').value||'p0';
   gs('modalBox').innerHTML=`<h3>${ln?'Editar':'Agregar'} producto</h3>
@@ -1595,8 +1599,8 @@ function cotizAddLinea(idx){ _czEditIdx=(idx!=null)?idx:null; const ln=_czEditId
    <div class="row2" style="margin-top:12px"><button class="btn btn-sec" onclick="${ln?`cotizDelLinea(${_czEditIdx})`:'cerrarModal()'}"${ln?' style="color:var(--red)"':''}>${ln?'Quitar':'Cancelar'}</button><button class="btn btn-primary" onclick="cotizSaveLinea()">Guardar</button></div>`;
   gs('modal').classList.add('show');
 }
-function lnPrecioAuto(){ const nom=gs('lnProd').value; const cond=gs('czCond').value||'p0'; const m=(num(gs('czMargen').value)||0)/100;
-  const f=PL_FORMULAS.find(x=>x.n===nom); if(f){ gs('lnPKg').value=precioBaseKg(f,cond,m); gs('lnKgB').value=plKgBolsa(f); return; }
+function lnPrecioAuto(){ const nom=gs('lnProd').value; const cond=gs('czCond').value||'p0'; const ov=gs('czMargen').value; const mOv=(ov!==''&&ov!=null)?(num(ov)/100):null;
+  const f=PL_FORMULAS.find(x=>x.n===nom); if(f){ const m=(mOv!=null)?mOv:margenDe(f.c,f.n); gs('lnPKg').value=precioBaseKg(f,cond,m); gs('lnKgB').value=plKgBolsa(f); return; }
   const p=precioList().find(x=>x.n===nom); if(p){ gs('lnPKg').value=p[cond]||p.p0; gs('lnKgB').value=p.kg; } }
 function cotizSaveLinea(){ const nom=(gs('lnProd').value||'').trim(); if(!nom){ showToast('Elegí el producto'); return; } const cant=num(gs('lnCant').value); if(!cant||cant<=0){ showToast('Ingresá la cantidad'); return; }
   const p=precioList().find(x=>x.n===nom);
@@ -1678,8 +1682,8 @@ function precioModal(keyEnc){ if(!esGerente()) return; const key=keyEnc?decodeUR
   if(p&&p.calc){ const f=PL_FORMULAS.find(x=>precioKey(x)===key); const base=f?costoBaseFormula(f):0;
     gs('modalBox').innerHTML=`<h3>${esc(p.n)} <span style="font-size:11px;color:var(--green)">calculado</span></h3><div style="font-size:12px;color:var(--gray-500);margin-bottom:8px">${p.c?esc(p.c)+' · ':''}${p.kg}kg/bolsa</div>
      <div style="font-size:13px;line-height:1.8">Costo base insumos: <b>${gsFmt(base)}/kg</b><br>Contado: <b>${gsFmt(p.p0)}/kg</b> · <span style="color:var(--gray-500)">${gsFmt(p.p0*p.kg)}/bolsa</span><br>Crédito 90: <b>${gsFmt(p.p90)}/kg</b></div>
-     <label class="fl" style="margin-top:10px">Margen de este producto %</label><input type="number" step="0.1" id="prMargen" value="${(margenDe(p.c)*100).toFixed(1)}">
-     <div style="font-size:11px;color:var(--gray-400);margin-top:4px">El precio se calcula desde los insumos. Para ajustarlo, cambiá el margen (acá) o los precios de insumos (🧪).</div>
+     <label class="fl" style="margin-top:10px">Margen de este producto %</label><input type="number" step="0.1" id="prMargen" value="${(margenDe(p.c,p.n)*100).toFixed(1)}">
+     <div style="font-size:11px;color:var(--gray-400);margin-top:4px">Default de su línea: <b>${esSalMineral(p.c,p.n)?'Sal Mineral '+(getCostCfg().margen_sal*100).toFixed(0)+'%':'General '+(getCostCfg().margen*100).toFixed(0)+'%'}</b>. Cambiá acá para fijar un margen propio de este producto (o dejalo igual al default). Los defaults por línea se editan en ⚙ Parámetros.</div>
      <div class="row2" style="margin-top:12px"><button class="btn btn-sec" onclick="cerrarModal()">Cerrar</button><button class="btn btn-primary" onclick="precioMargenGuardar('${esc(p.c||'')}')">Guardar margen</button></div>`;
     gs('modal').classList.add('show'); return;
   }
@@ -1726,14 +1730,15 @@ function insPrecGuardar(c){ if(!esGerente()) return; const v=num(gs('ipVal').val
 function cfgCosteoModal(){ if(!esGerente()) return; const c=getCostCfg();
   gs('modalBox').innerHTML=`<h3>⚙ Parámetros de costeo</h3>
    <div class="row2"><div><label class="fl">Merma %</label><input type="number" step="0.1" id="cfMerma" value="${c.merma*100}"></div><div><label class="fl">Gastos adm %</label><input type="number" step="0.1" id="cfGA" value="${c.gastos_adm*100}"></div></div>
-   <div class="row2"><div><label class="fl">Comisión %</label><input type="number" step="0.1" id="cfCom" value="${c.comision*100}"></div><div><label class="fl">Margen general %</label><input type="number" step="0.1" id="cfMargen" value="${c.margen*100}"></div></div>
+   <div class="row2"><div><label class="fl">Comisión %</label><input type="number" step="0.1" id="cfCom" value="${c.comision*100}"></div><div><label class="fl">Margen general % <span style="color:var(--gray-400)">(prot./bal.)</span></label><input type="number" step="0.1" id="cfMargen" value="${c.margen*100}"></div></div>
+   <div class="row2"><div><label class="fl">Margen Sal Mineral %</label><input type="number" step="0.1" id="cfMargenSal" value="${(c.margen_sal!=null?c.margen_sal:0.15)*100}"></div><div><label class="fl" style="color:var(--gray-400)">Default por línea</label><div style="font-size:11px;color:var(--gray-400);padding-top:8px">El margen individual se fija en cada producto.</div></div></div>
    <div class="row2"><div><label class="fl">Mano de obra ₲/kg</label><input type="number" id="cfMO" value="${c.mano_obra}"></div><div><label class="fl">Bolsa ₲/kg</label><input type="number" id="cfBolsa" value="${c.bolsa}"></div></div>
    <div class="row2"><div><label class="fl">Etiqueta ₲/bolsa</label><input type="number" id="cfEtiq" value="${c.etiqueta_bolsa}"></div><div><label class="fl">Recargo por mes %</label><input type="number" step="0.1" id="cfPlazo" value="${c.plazo_mes*100}"></div></div>
    <div class="row2"><div><label class="fl">IVA % (0 = sin IVA)</label><input type="number" step="0.1" id="cfIva" value="${c.iva*100}"></div><div><label class="fl">Dólar ₲</label><input type="number" id="cfDolar" value="${c.dolar}"></div></div>
    <div class="row2" style="margin-top:12px"><button class="btn btn-sec" onclick="cerrarModal()">Cancelar</button><button class="btn btn-primary" onclick="cfgCosteoGuardar()">Guardar</button></div>`;
   gs('modal').classList.add('show'); }
 function cfgCosteoGuardar(){ if(!esGerente()) return; const g=id=>num(gs(id).value)||0;
-  saveCostCfg({ merma:g('cfMerma')/100, gastos_adm:g('cfGA')/100, comision:g('cfCom')/100, margen:g('cfMargen')/100, mano_obra:g('cfMO'), bolsa:g('cfBolsa'), etiqueta_bolsa:g('cfEtiq'), plazo_mes:g('cfPlazo')/100, iva:g('cfIva')/100, dolar:g('cfDolar')||6140 });
+  saveCostCfg({ merma:g('cfMerma')/100, gastos_adm:g('cfGA')/100, comision:g('cfCom')/100, margen:g('cfMargen')/100, margen_sal:g('cfMargenSal')/100, mano_obra:g('cfMO'), bolsa:g('cfBolsa'), etiqueta_bolsa:g('cfEtiq'), plazo_mes:g('cfPlazo')/100, iva:g('cfIva')/100, dolar:g('cfDolar')||6140 });
   try{ localStorage.setItem('bio:dolar', String(num(gs('cfDolar').value)||6140)); }catch{}
   cerrarModal(); showToast('✓ Parámetros guardados'); if(gs('sPrecios').classList.contains('active')) renderPrecios(); }
 
