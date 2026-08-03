@@ -612,7 +612,24 @@ const PL_COSTCFG={ merma:0.03, mano_obra:100, bolsa:90, etiqueta_bolsa:420, gast
 const PL_MARGEN={};   // margen por producto (override); default = cfg.margen
 function getInsPrecOv(){ return getArr('bio:insprec'); }
 function saveInsPrecOv(a){ setArr('bio:insprec',a); }
-function insPrecio(c){ const o=getInsPrecOv().find(x=>x.c===c); if(o) return Number(o.gskg)||0; return PL_INSPREC[c]||0; }
+// Promedio ponderado del costo del stock EN MANO (promedio móvil perpetuo), por insumo, desde los movimientos.
+// Una compra barata se mezcla con el stock viejo más caro según las cantidades → no tira el precio de golpe.
+let _wavgCache=null;
+function _computeWavg(){ const map={}, byIns={};
+  (typeof getMovs==='function'?getMovs():[]).forEach(m=>{ if(!m.insumo_c) return; (byIns[m.insumo_c]=byIns[m.insumo_c]||[]).push(m); });
+  Object.keys(byIns).forEach(c=>{ const movs=byIns[c].slice().sort((a,b)=>String(a.fecha||'').localeCompare(String(b.fecha||''))||String(a.ts||'').localeCompare(String(b.ts||'')));
+    let stock=0, avg=0, hubo=false;
+    movs.forEach(m=>{ const q=Math.abs(Number(m.cant)||0);
+      if(m.tipo==='ingreso'){ const cu=(m.costo!=null&&m.costo!=='')?Number(m.costo):avg; const ns=stock+q; avg = ns>0 ? (stock*avg + q*cu)/ns : cu; stock=ns; if(m.costo!=null&&Number(m.costo)>0) hubo=true; }
+      else if(m.tipo==='egreso'){ stock=Math.max(0,stock-q); }
+      else { stock=Math.max(0, stock+(Number(m.cant)||0)); } });   // ajuste: al costo promedio vigente
+    if(hubo && avg>0) map[c]=Math.round(avg);
+  });
+  return map;
+}
+function insWavg(c){ if(!_wavgCache) _wavgCache=_computeWavg(); return _wavgCache[c]!=null?_wavgCache[c]:null; }
+// Precio ₲/kg de un insumo para cotizar: override manual (🧪) → promedio ponderado de compras → default de fábrica
+function insPrecio(c){ const o=getInsPrecOv().find(x=>x.c===c); if(o) return Number(o.gskg)||0; const w=insWavg(c); if(w!=null&&w>0) return w; return PL_INSPREC[c]||0; }
 function getCostCfg(){ let o={}; try{ o=JSON.parse(localStorage.getItem('bio:costcfg'))||{}; }catch{} return Object.assign({},PL_COSTCFG,o); }
 function saveCostCfg(o){ try{ localStorage.setItem('bio:costcfg',JSON.stringify(o)); }catch{} if(typeof pushPricingCfg==='function') pushPricingCfg(); }
 function getMargenOv(){ let o={}; try{ o=JSON.parse(localStorage.getItem('bio:margen'))||{}; }catch{} return o; }
@@ -2114,7 +2131,7 @@ function invCatalogo(){
 }
 function invItem(c){ return invCatalogo().find(x=>x.c===c); }
 function getMovs(){ return getArr('bio:mov'); }
-function saveMovs(a){ setArr('bio:mov',a); }
+function saveMovs(a){ setArr('bio:mov',a); _wavgCache=null; }
 function invStock(c){ let s=0; getMovs().forEach(m=>{ if(m.insumo_c!==c) return; const q=Number(m.cant)||0; if(m.tipo==='ingreso') s+=q; else if(m.tipo==='egreso') s-=q; else s+=q; }); return Math.round(s*100)/100; }
 function invMins(){ try{ return JSON.parse(localStorage.getItem('bio:invmin'))||{}; }catch{ return {}; } }
 function setInvMin(c,v){ const m=invMins(); if(v>0) m[c]=v; else delete m[c]; try{ localStorage.setItem('bio:invmin',JSON.stringify(m)); }catch{} }
@@ -2170,7 +2187,8 @@ function invDetalle(c){
   const edit=puedeVer('inventario');
   const extra=esGerente()&&getInsumosExtra().some(x=>x.c===c);
   gs('modalBox').innerHTML=`<h3 style="margin-bottom:2px">${esc(it.n)} ${extra?`<span onclick="cerrarModal();invInsumoModal('${(getInsumosExtra().find(x=>x.c===c)||{}).id}')" style="color:var(--green);cursor:pointer;font-size:12px;font-weight:600">✎</span>`:''}</h3><div style="font-size:12px;color:var(--gray-600)">${esc(it.c)}${it.prov?' · '+esc(it.prov):''}</div>
-    <div style="display:flex;align-items:baseline;gap:8px;margin:10px 0"><div style="font-size:28px;font-weight:800;color:${(mn>0?s<=mn:s<=0)?'var(--red)':'var(--gray-800)'}">${s.toLocaleString('es-PY')}</div><div style="color:var(--gray-500)">${it.u} en stock</div></div>
+    <div style="display:flex;align-items:baseline;gap:8px;margin:10px 0 4px"><div style="font-size:28px;font-weight:800;color:${(mn>0?s<=mn:s<=0)?'var(--red)':'var(--gray-800)'}">${s.toLocaleString('es-PY')}</div><div style="color:var(--gray-500)">${it.u} en stock</div></div>
+    <div style="font-size:12px;color:var(--gray-600);margin-bottom:8px">Precio p/ cotizar: <b>${gsFmt(insPrecio(c))}/${it.u}</b> ${getInsPrecOv().some(x=>x.c===c)?'<span style="color:var(--amber)">· fijado a mano (🧪)</span>':(insWavg(c)!=null?'<span style="color:var(--green)">· promedio ponderado de compras</span>':'<span style="color:var(--gray-400)">· default de fábrica</span>')}</div>
     ${edit?`<label class="fl">Stock mínimo (alerta)</label><input type="number" id="invMinInp" value="${mn||''}" placeholder="sin alerta" onchange="setInvMin('${c}',num(this.value)||0);renderInv()">
     <div style="display:flex;gap:8px;margin:12px 0"><button class="btn btn-primary" style="flex:1" onclick="invMovModal('${c}','ingreso')">＋ Ingreso</button><button class="btn btn-sec" style="flex:1" onclick="invMovModal('${c}','egreso')">− Salida</button><button class="btn btn-amber" style="flex:1" onclick="invMovModal('${c}','ajuste')">⚖ Ajuste</button></div>`:''}
     <div style="font-size:12px;font-weight:700;color:var(--gray-600);margin-top:8px">Últimos movimientos</div>
@@ -2190,7 +2208,7 @@ function invMovModal(c,tipo){
     if(tipo==='ingreso') campos+=`<div class="row2"><div><label class="fl">Proveedor</label><input id="mvProv" placeholder="opcional" value="${esc(it.prov||'')}"></div><div><label class="fl">Moneda</label><select id="mvMon" onchange="invMovMonChange()"><option value="PYG">Guaraníes ₲</option><option value="USD">Dólares US$</option></select></div></div>
       <div class="row2"><div><label class="fl" id="mvCostoLbl">Costo x ${it.u} (₲)</label><input type="number" id="mvCosto" inputmode="numeric" placeholder="0" oninput="invMovCostoCalc()"></div><div id="mvTcWrap" style="display:none"><label class="fl">Tipo de cambio ₲/US$</label><input type="number" id="mvTc" inputmode="numeric" value="${cotizDolar()}" oninput="invMovCostoCalc()"></div></div>
       <div id="mvCostoGs" style="font-size:11px;color:var(--green);margin:-2px 0 6px;min-height:14px"></div>
-      <label class="fl" style="display:flex;gap:8px;align-items:center;cursor:pointer;font-weight:600"><input type="checkbox" id="mvActualizaPrecio" checked style="width:16px;height:16px"> Usar este costo como precio de cotización</label>`;
+      <div style="font-size:10px;color:var(--gray-400);margin-bottom:4px">El precio de cotización se calcula solo como <b>promedio ponderado</b> del stock (mezcla esta compra con las anteriores según cantidad).</div>`;
     campos+=`<label class="fl">Motivo</label><input id="mvMotivo" placeholder="${tipo==='ingreso'?'Compra':'Merma / traslado'}">`;
   }
   gs('modalBox').innerHTML=`<h3>${tit[tipo]}</h3><div style="font-size:12px;color:var(--gray-600);margin-bottom:8px">${esc(it.n)} · ${esc(it.c)} · stock ${s.toLocaleString('es-PY')} ${it.u}</div>
@@ -2202,7 +2220,7 @@ function invMovMonChange(){ const usd=gs('mvMon')&&gs('mvMon').value==='USD'; if
 function invMovCostoCalc(){ const el=gs('mvCostoGs'); if(!el) return; const usd=gs('mvMon')&&gs('mvMon').value==='USD'; const c=num(gs('mvCosto').value)||0; const u=(invItem(_invC)||{}).u||'kg';
   if(usd){ const tc=num(gs('mvTc').value)||0; el.textContent=(c&&tc)?('= ₲ '+Math.round(c*tc).toLocaleString('es-PY')+' por '+u+' (se registra en ₲)'):''; } else el.textContent=''; }
 function invGuardarMov(){
-  const it=invItem(_invC); if(!it) return; let cant, motivo, prov='', costo=null, monedaC='PYG', costoOrig=null, tcC=null, actualizaPrecio=false;
+  const it=invItem(_invC); if(!it) return; let cant, motivo, prov='', costo=null, monedaC='PYG', costoOrig=null, tcC=null;
   if(_invTipo==='ajuste'){
     const real=num(gs('mvReal').value); if(real==null){ showToast('Ingresá el stock contado'); return; }
     cant=Math.round((real-invStock(_invC))*100)/100; if(cant===0){ showToast('El stock ya coincide'); return; } motivo='Conteo físico';
@@ -2213,14 +2231,13 @@ function invGuardarMov(){
       monedaC=(gs('mvMon')&&gs('mvMon').value)||'PYG'; const raw=num(gs('mvCosto').value);
       if(monedaC==='USD'){ const tc=num(gs('mvTc').value)||0; if(raw!=null && !tc){ showToast('Cargá el tipo de cambio'); return; } costoOrig=raw; tcC=tc; costo=(raw!=null&&tc)?Math.round(raw*tc):null; }
       else { costo=raw; }
-      actualizaPrecio = !!(gs('mvActualizaPrecio')&&gs('mvActualizaPrecio').checked);
     }
   }
   const m={ id:'MV-'+Date.now(), insumo_c:_invC, insumo_n:it.n, u:it.u, tipo:_invTipo, cant, motivo, proveedor:prov, costo, moneda:monedaC, costo_orig:costoOrig, tc:tcC, ot_id:'', fecha:gs('mvFecha').value||hoy(), usuario:(getSession()&&getSession().nombre)||'', ts:new Date().toISOString(), pending:true };
   const a=getMovs(); a.unshift(m); saveMovs(a); cloudPush('mov',m);
   let msg='✓ Movimiento guardado';
-  if(actualizaPrecio && costo!=null && costo>0){ setInsPrec(_invC, costo); msg='✓ Compra registrada · precio de cotización → ₲ '+Math.round(costo).toLocaleString('es-PY')+'/'+it.u; }
-  showToast(msg, actualizaPrecio?3500:2000); invDetalle(_invC); renderInv();
+  if(_invTipo==='ingreso' && costo!=null && costo>0){ const w=insWavg(_invC); const ov=getInsPrecOv().some(x=>x.c===_invC); if(w!=null && !ov) msg='✓ Compra registrada · precio promedio de cotización → ₲ '+w.toLocaleString('es-PY')+'/'+it.u; }
+  showToast(msg, 3500); invDetalle(_invC); renderInv();
 }
 // Descuento de insumos desde una OT (confirmar producción)
 function otProducir(id){
