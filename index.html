@@ -306,6 +306,7 @@ textarea{resize:vertical;min-height:66px}
   <div class="screen" id="sCotizNueva">
     <div class="card"><div class="card-h">Datos de la cotización</div><div class="card-b">
       <label class="fl">Cliente</label><input id="czCliente" list="czClienteList" placeholder="Nombre del cliente" autocomplete="off"><datalist id="czClienteList"></datalist>
+      <label class="fl">Estancia / lugar de entrega <span style="color:var(--gray-400)">(opcional)</span></label><input id="czLugar" placeholder="Ej: Estancia Ita Pora / Retirado" autocomplete="off">
       <div class="row2"><div><label class="fl">Condición de pago</label><select id="czCond" onchange="cotizCondChange()"></select></div><div><label class="fl">Fecha</label><input type="date" id="czFecha"></div></div>
       <div class="row2"><div><label class="fl">Validez (días)</label><input type="number" id="czValidez" value="7" inputmode="numeric"></div><div><label class="fl">Vendedor</label><input id="czVendedor"></div></div>
       <div><label class="fl">Flete ₲/kg (según destino)</label><input type="number" id="czFlete" inputmode="numeric" placeholder="0" oninput="cotizRecalc()"></div>
@@ -1640,7 +1641,7 @@ function fillClientesDatalist(){ const dl=gs('czClienteList'); if(!dl) return; d
 function cotizNueva(){ if(!puedeVer('cotizaciones')) return; curCotizId=null; _cotizLineas=[];
   showScreen('sCotizNueva','Nueva cotización','',true);
   gs('czCond').innerHTML=COND_ORDER.map(k=>`<option value="${k}">${COND_LBL[k]}</option>`).join('');
-  gs('czCliente').value=''; gs('czFecha').value=hoy(); gs('czValidez').value='7'; gs('czVendedor').value=(getSession()&&getSession().nombre)||''; gs('czFlete').value=''; gs('czUsd').checked=false; gs('czDolarRow').style.display='none'; gs('czDolar').value=cotizDolar(); gs('czObs').value='';
+  gs('czCliente').value=''; gs('czLugar').value=''; gs('czFecha').value=hoy(); gs('czValidez').value='7'; gs('czVendedor').value=(getSession()&&getSession().nombre)||''; gs('czFlete').value=''; gs('czUsd').checked=false; gs('czDolarRow').style.display='none'; gs('czDolar').value=cotizDolar(); gs('czObs').value='';
   fillClientesDatalist(); cotizRecalc();
 }
 function cotizCondChange(){ const cond=gs('czCond').value;
@@ -1681,7 +1682,10 @@ function cotizRecalc(){
   gs('czLineas').innerHTML=_cotizLineas.length? _cotizLineas.map((ln,i)=>{ const kg=ln.unidad==='bolsa'?ln.cantidad*ln.kg_bolsa:ln.cantidad; const ef=(Number(ln.precio_kg)||0)+fleteKg; const sub=kg*ef; total+=sub;
     return `<div class="li" onclick="cotizAddLinea(${i})"><div style="min-width:0"><div class="li-t">${esc(ln.nombre)}${ln.margen!=null?` <span style="font-size:10px;color:var(--gray-400);font-weight:400">· m ${(ln.margen*100).toFixed(0)}%</span>`:''}</div><div class="li-s">${ln.cantidad} ${ln.unidad==='bolsa'?'bolsa(s) × '+ln.kg_bolsa+'kg':'kg'} · ${gsFmt(ef)}/kg${fleteKg?' <span style="color:var(--gray-400)">(flete incl.)</span>':''}</div></div><div style="text-align:right;flex-shrink:0;font-weight:700">${gsFmt(sub)}</div></div>`;
   }).join('') : '<div class="empty">Sin productos. Tocá ＋ Agregar producto.</div>';
-  gs('czResumen').innerHTML=`<div style="display:flex;justify-content:space-between;font-size:15px"><span>Total · ${COND_LBL[gs('czCond').value]||''}</span><b>${gsFmt(total)}</b></div>${fleteKg?`<div style="font-size:10px;color:var(--gray-400);margin-top:2px">incluye flete ${gsFmt(fleteKg)}/kg · margen por producto</div>`:''}${usd?`<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--gray-500);margin-top:3px"><span>En dólares (₲ ${dol.toLocaleString('es-PY')}/US$)</span><b>US$ ${(total/dol).toLocaleString('es-PY',{maximumFractionDigits:2})}</b></div>`:''}`;
+  const sinTotal = _cotizLineas.length>=2 && _cotizLineas.every(ln=>(Number(ln.cantidad)||0)<=1);
+  gs('czResumen').innerHTML = sinTotal
+    ? `<div style="display:flex;justify-content:space-between;font-size:13px;color:var(--gray-600)"><span>Lista de precios · ${COND_LBL[gs('czCond').value]||''}</span><b style="font-weight:600">sin total general</b></div><div style="font-size:10px;color:var(--gray-400);margin-top:2px">Son varios productos por 1 unidad → se muestran los precios de cada uno, sin sumar.</div>`
+    : `<div style="display:flex;justify-content:space-between;font-size:15px"><span>Total · ${COND_LBL[gs('czCond').value]||''}</span><b>${gsFmt(total)}</b></div>${fleteKg?`<div style="font-size:10px;color:var(--gray-400);margin-top:2px">incluye flete ${gsFmt(fleteKg)}/kg · margen por producto</div>`:''}${usd?`<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--gray-500);margin-top:3px"><span>En dólares (₲ ${dol.toLocaleString('es-PY')}/US$)</span><b>US$ ${(total/dol).toLocaleString('es-PY',{maximumFractionDigits:2})}</b></div>`:''}`;
 }
 function cotizGuardar(imprimir){ if(!puedeVer('cotizaciones')) return;
   const cliente=(gs('czCliente').value||'').trim(); if(!cliente){ showToast('Poné el cliente'); return; }
@@ -1692,48 +1696,72 @@ function cotizGuardar(imprimir){ if(!puedeVer('cotizaciones')) return;
   const items=_cotizLineas.map(ln=>{ const kg=ln.unidad==='bolsa'?ln.cantidad*ln.kg_bolsa:ln.cantidad; const ef=(Number(ln.precio_kg)||0)+fleteKg; return { key:ln.key, nombre:ln.nombre, kg_bolsa:ln.kg_bolsa, precio_base:ln.precio_kg, precio_kg:ef, unidad:ln.unidad, cantidad:ln.cantidad, margen:(ln.margen!=null?ln.margen:null), kg:Math.round(kg*100)/100, subtotal:Math.round(kg*ef) }; });
   const total=items.reduce((a,i)=>a+i.subtotal,0);
   const prev=curCotizId?getCotiz().find(x=>x.id===curCotizId):null;
-  const c={ id:curCotizId||('CZ-'+Date.now()), num:prev?prev.num:cotizNextNum(), fecha:gs('czFecha').value||hoy(), cliente, cliente_id:cli?cli.id:'', condicion:cond, moneda:usd?'USD':'PYG', dolar:dol, validez:num(gs('czValidez').value)||7, vendedor:gs('czVendedor').value.trim(), items, margen:null, flete_kg:fleteKg, subtotal:total, flete:0, total, obs:gs('czObs').value.trim(), por:(getSession()&&getSession().nombre)||'', ts:new Date().toISOString(), pending:true };
+  const c={ id:curCotizId||('CZ-'+Date.now()), num:prev?prev.num:cotizNextNum(), fecha:gs('czFecha').value||hoy(), cliente, cliente_id:cli?cli.id:'', condicion:cond, moneda:usd?'USD':'PYG', dolar:dol, validez:num(gs('czValidez').value)||7, vendedor:gs('czVendedor').value.trim(), lugar:(gs('czLugar').value||'').trim(), items, margen:null, flete_kg:fleteKg, subtotal:total, flete:0, total, obs:gs('czObs').value.trim(), por:(getSession()&&getSession().nombre)||'', ts:new Date().toISOString(), pending:true };
   let a=getCotiz(); if(curCotizId){ a=a.map(x=>x.id===curCotizId?c:x); } else a.unshift(c);
   saveCotiz(a); cloudPush('cotiz',c); curCotizId=null; showToast('✓ Cotización guardada'); if(imprimir) cotizPrint(c.id); openCotiz();
 }
 function cotizVer(id){ const c=getCotiz().find(x=>x.id===id); if(!c) return;
+  const _sinTot=(c.items||[]).length>=2 && (c.items||[]).every(i=>(Number(i.cantidad)||0)<=1);
   const filas=(c.items||[]).map(i=>`<tr><td>${esc(i.nombre)}</td><td style="text-align:right">${i.cantidad} ${i.unidad==='bolsa'?'bl':'kg'}</td><td style="text-align:right;font-weight:600">${gsFmt(i.subtotal)}</td></tr>`).join('');
   gs('modalBox').innerHTML=`<h3>Cotización N° ${c.num}</h3><div style="font-size:12px;color:var(--gray-600);margin-bottom:6px">${esc(c.cliente)} · ${fmtFecha(c.fecha)} · ${COND_LBL[c.condicion]||''}${c.vendedor?'<br>Vendedor: '+esc(c.vendedor):''}</div>
-   <table style="width:100%;border-collapse:collapse;font-size:12px"><tbody>${filas}${c.flete?`<tr><td>Flete</td><td></td><td style="text-align:right">${gsFmt(c.flete)}</td></tr>`:''}<tr style="border-top:2px solid var(--gray-300)"><td><b>Total</b></td><td></td><td style="text-align:right"><b>${gsFmt(c.total)}</b></td></tr></tbody></table>
+   <table style="width:100%;border-collapse:collapse;font-size:12px"><tbody>${filas}${_sinTot?'':`${c.flete?`<tr><td>Flete</td><td></td><td style="text-align:right">${gsFmt(c.flete)}</td></tr>`:''}<tr style="border-top:2px solid var(--gray-300)"><td><b>Total</b></td><td></td><td style="text-align:right"><b>${gsFmt(c.total)}</b></td></tr>`}</tbody></table>${_sinTot?'<div style="font-size:10px;color:var(--gray-400)">Lista de precios (sin total general)</div>':''}
    <div class="row2" style="margin-top:12px"><button class="btn btn-sec" onclick="cotizEditar('${c.id}')">✎ Editar</button><button class="btn btn-amber" onclick="cotizPrint('${c.id}')">🖨️ Imprimir</button></div>
    <button class="btn btn-sec btn-block" style="margin-top:8px;color:var(--red)" onclick="cotizBorrar('${c.id}')">Borrar</button>
    <button class="btn btn-ghost btn-block" style="margin-top:8px" onclick="cerrarModal()">Cerrar</button>`;
   gs('modal').classList.add('show');
 }
 function cotizEditar(id){ const c=getCotiz().find(x=>x.id===id); if(!c) return; cerrarModal(); cotizNueva(); curCotizId=id;
-  gs('czCliente').value=c.cliente||''; gs('czCond').value=c.condicion||'p0'; gs('czFecha').value=c.fecha; gs('czValidez').value=c.validez||7; gs('czVendedor').value=c.vendedor||''; gs('czFlete').value=c.flete_kg||''; gs('czObs').value=c.obs||''; gs('czUsd').checked=c.moneda==='USD'; gs('czDolar').value=c.dolar||cotizDolar();
+  gs('czCliente').value=c.cliente||''; gs('czLugar').value=c.lugar||''; gs('czCond').value=c.condicion||'p0'; gs('czFecha').value=c.fecha; gs('czValidez').value=c.validez||7; gs('czVendedor').value=c.vendedor||''; gs('czFlete').value=c.flete_kg||''; gs('czObs').value=c.obs||''; gs('czUsd').checked=c.moneda==='USD'; gs('czDolar').value=c.dolar||cotizDolar();
   _cotizLineas=(c.items||[]).map(i=>({ key:i.key, nombre:i.nombre, kg_bolsa:i.kg_bolsa, precio_kg:(i.precio_base!=null?i.precio_base:((Number(i.precio_kg)||0)-(c.flete_kg||0))), unidad:i.unidad, cantidad:i.cantidad, margen:(i.margen!=null?i.margen:null) }));
   showScreen('sCotizNueva','Editar cotización','',true); cotizRecalc();
 }
 function cotizBorrar(id){ if(!confirm('¿Borrar esta cotización?')) return; saveCotiz(getCotiz().filter(x=>x.id!==id)); cloudDelete('cotiz',id); cerrarModal(); openCotiz(); }
 function cotizPrint(id){ const c=getCotiz().find(x=>x.id===id); if(!c) return; const w=window.open('','_blank'); if(!w){ showToast('Permití las ventanas emergentes'); return; }
   const base=`${location.origin}${location.pathname.replace(/[^/]*$/,'')}logo.jpg`; const usd=c.moneda==='USD'; const dol=c.dolar||cotizDolar();
-  const filas=(c.items||[]).map(i=>{ const pb=Math.round(i.precio_kg*(i.kg_bolsa||0)); return `<tr><td>${esc(i.nombre)}</td><td class="r">${i.cantidad} ${i.unidad==='bolsa'?'bolsa(s)':'kg'}</td><td class="r">${gsFmt(i.precio_kg)}</td><td class="r">${pb?gsFmt(pb):'—'}</td><td class="r">${gsFmt(i.subtotal)}</td></tr>`; }).join('');
+  const cli=getClientes().find(x=>x.id===c.cliente_id) || getClientes().find(x=>String(x.nombre||'').toLowerCase()===String(c.cliente||'').toLowerCase());
+  const ruc=(cli&&cli.ruc)?cli.ruc:'RUC';
+  const items=c.items||[];
+  // Regla: si hay ≥2 productos y TODAS las cantidades ≤1 (lista de precios de referencia), NO se totaliza
+  const sinTotal = items.length>=2 && items.every(i=>(Number(i.cantidad)||0)<=1);
+  const nf=n=>Math.round(Number(n)||0).toLocaleString('es-PY');
+  let totKg=0, totGs=0;
+  const filas=items.map(i=>{ const cant=Number(i.cantidad)||0; const kgb=Number(i.kg_bolsa)||0; const esBolsa=i.unidad==='bolsa';
+    const totalKilos=esBolsa?cant*kgb:cant; const pkg=Number(i.precio_kg)||0; const pbolsa=Math.round(pkg*kgb); const sub=Number(i.subtotal)||Math.round(totalKilos*pkg);
+    totKg+=totalKilos; totGs+=sub;
+    return `<tr><td class="c">${nf(cant)}</td><td class="d">${esc(i.nombre)}</td><td class="c">${kgb||'—'}</td><td class="r">${nf(totalKilos)}</td><td class="r">${nf(pkg)}</td><td class="r">${pbolsa?nf(pbolsa):'—'}</td><td class="r">${nf(sub)}</td></tr>`; }).join('');
+  const totalRow = sinTotal?'':`<tr class="tot"><td></td><td class="c">TOTAL</td><td></td><td class="r">${nf(totKg)}</td><td></td><td></td><td class="r">${nf(c.total||totGs)}</td></tr>`;
+  const validoHasta=(()=>{ try{ const d=new Date(c.fecha+'T00:00:00'); d.setDate(d.getDate()+(Number(c.validez)||7)); return fmtFecha(d.toISOString().split('T')[0]); }catch{ return ''; } })();
   w.document.write(`<html><head><meta charset="utf-8"><title>Cotización ${c.num} — ${esc(c.cliente)}</title><style>
-   *{box-sizing:border-box} body{font-family:Arial,sans-serif;color:#1a202c;font-size:12.5px;margin:0} .wrap{max-width:780px;margin:0 auto;padding:24px}
-   .top{display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #2f7d3b;padding-bottom:8px;margin-bottom:12px} .top img{height:46px}
-   .top .t{text-align:right} .top .t b{font-size:15px;color:#2f7d3b}
-   .hdr td{border:none;padding:3px 6px;font-size:12px} .hdr .k{color:#718096;width:110px}
-   table.g{width:100%;border-collapse:collapse;margin-top:10px} table.g td,table.g th{border:1px solid #cbd5e0;padding:6px 8px} table.g th{background:#eef5ef;text-align:left;font-size:11px} .r{text-align:right;white-space:nowrap}
-   .tot td{background:#eef5ef;font-weight:700;font-size:14px}
-   .obs{margin-top:10px;font-size:11px;color:#555} .firma{margin-top:40px;font-size:12px;color:#555}
-   @media print{.wrap{padding:10mm} .noprint{display:none}}</style></head><body><div class="wrap">
-   <div class="top"><img src="${base}"><div class="t"><b>COTIZACIÓN</b><br>N° ${c.num} · ${fmtFecha(c.fecha)}</div></div>
-   <table class="hdr"><tr><td class="k">Cliente</td><td><b>${esc(c.cliente)}</b></td><td class="k">Condición</td><td>${COND_LBL[c.condicion]||''}</td></tr>
-    <tr><td class="k">Vendedor</td><td>${esc(c.vendedor||'—')}</td><td class="k">Validez</td><td>${c.validez||7} días</td></tr></table>
-   <table class="g"><thead><tr><th>Producto</th><th class="r">Cantidad</th><th class="r">₲/kg</th><th class="r">₲/bolsa</th><th class="r">Subtotal ₲</th></tr></thead><tbody>${filas}
-    ${c.flete?`<tr><td colspan="4" class="r">Subtotal productos</td><td class="r">${gsFmt(c.subtotal!=null?c.subtotal:(c.total-(c.flete||0)))}</td></tr><tr><td colspan="4" class="r">Flete</td><td class="r">${gsFmt(c.flete)}</td></tr>`:''}
-    <tr class="tot"><td colspan="4">TOTAL (${COND_LBL[c.condicion]||''})</td><td class="r">${gsFmt(c.total)}</td></tr>
-    ${usd?`<tr><td colspan="4" style="text-align:right;color:#718096">Total en dólares (₲ ${dol.toLocaleString('es-PY')}/US$)</td><td class="r">US$ ${(c.total/dol).toLocaleString('es-PY',{maximumFractionDigits:2})}</td></tr>`:''}</tbody></table>
-   ${c.obs?`<div class="obs"><b>Observaciones:</b> ${esc(c.obs)}</div>`:''}
-   <div class="obs">Precios en guaraníes${usd?' (con equivalencia en dólares)':''}. Cotización válida por ${c.validez||7} días. Sujeta a disponibilidad.</div>
-   <div class="firma">_____________________________<br>${esc(c.vendedor||'BioInnova')} — BioInnova S.A.</div>
-   <div class="noprint" style="text-align:center;margin-top:16px"><button onclick="window.print()" style="background:#2f7d3b;color:#fff;border:none;padding:10px 22px;border-radius:8px;cursor:pointer">🖨️ Imprimir / Guardar PDF</button></div>
+   *{box-sizing:border-box} body{font-family:Arial,Helvetica,sans-serif;color:#1a202c;font-size:12.5px;margin:0}
+   .wrap{max-width:800px;margin:0 auto;padding:26px 30px}
+   .hd{display:flex;align-items:center;gap:16px} .hd img{height:60px}
+   .hd .co{flex:1;text-align:center} .hd .co .nm{font-size:18px;font-weight:800;letter-spacing:.3px} .hd .co .ad{font-size:11.5px;color:#333;margin-top:2px}
+   .rule{height:3px;background:#1a2a44;margin:8px 0 0}
+   .fecha{text-align:right;font-size:12px;margin:14px 0 8px}
+   .cli .n{font-weight:700} .cli div{font-size:12.5px;line-height:1.5}
+   .intro{margin:14px 0 10px;font-size:12.5px}
+   table.g{width:100%;border-collapse:collapse} table.g th,table.g td{border:1px solid #b9c2cf;padding:6px 8px;font-size:11.5px}
+   table.g th{background:#2e5b8a;color:#fff;text-align:center;font-weight:700;line-height:1.15}
+   .r{text-align:right;white-space:nowrap} .c{text-align:center} .d{text-align:center}
+   .tot td{background:#eef2f7;font-weight:800}
+   .obs{margin-top:16px;font-size:12px;line-height:1.75} .obs b{font-weight:700}
+   .close{margin-top:18px;font-size:12.5px} .firma{margin-top:32px;font-size:12.5px;line-height:1.55}
+   .vh{margin-top:22px;font-weight:700;font-size:12.5px}
+   @media print{.wrap{padding:12mm 14mm} .noprint{display:none}}</style></head><body><div class="wrap">
+   <div class="hd"><img src="${base}"><div class="co"><div class="nm">BIOINNOVA S.A.</div><div class="ad">Calle Uno Esq. Ruta Luque y Mariano Roque Alonso</div><div class="ad">Tel. (021) 688-5112 · info@bioinnova.com.py</div></div><div style="width:60px"></div></div>
+   <div class="rule"></div>
+   <div class="fecha"><b>Fecha:</b> ${fmtFecha(c.fecha)}</div>
+   <div class="cli"><div class="n">${esc(c.cliente||'')}</div><div>${esc(ruc)}</div>${c.lugar?`<div>${esc(c.lugar)}</div>`:''}</div>
+   <div class="intro">Por la presente me dirijo a Ud., a efecto de remitir el siguiente presupuesto:</div>
+   <table class="g"><thead><tr><th>Cantidad<br>${items.every(i=>i.unidad!=='kg')?'Bolsas':''}</th><th>Descripción</th><th>Kg/bolsa</th><th>Total Kilos</th><th>Precio kilos GS</th><th>Precio bolsa GS</th><th>Total</th></tr></thead><tbody>${filas}${totalRow}</tbody></table>
+   ${usd&&!sinTotal?`<div style="text-align:right;font-size:11.5px;color:#555;margin-top:5px">Equivalente: US$ ${((c.total||totGs)/dol).toLocaleString('es-PY',{maximumFractionDigits:2})} (₲ ${dol.toLocaleString('es-PY')}/US$)</div>`:''}
+   <div class="obs"><b>Obs:</b> Precio incluye entrega en puerta y asistencia técnica permanente de nuestros asesores<br>
+   <b>Plazo de entrega:</b> 3 días luego de la aprobación del presupuesto<br>
+   <b>Formas de Pago:</b> ${esc(COND_LBL[c.condicion]||'')}${c.obs?`<br><b>Observaciones:</b> ${esc(c.obs)}`:''}</div>
+   <div class="close">En espera de una respuesta favorable me despido,<br>Atte</div>
+   <div class="firma"><b>${esc(c.vendedor||'')}</b><br>Asesor técnico<br><b>Bioinnova S.A.</b></div>
+   <div class="vh">Válido Hasta ${validoHasta}</div>
+   <div class="noprint" style="text-align:center;margin-top:20px"><button onclick="window.print()" style="background:#2e5b8a;color:#fff;border:none;padding:10px 22px;border-radius:8px;cursor:pointer">🖨️ Imprimir / Guardar PDF</button></div>
    </div></body></html>`);
   w.document.close();
 }
