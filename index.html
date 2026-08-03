@@ -194,6 +194,7 @@ textarea{resize:vertical;min-height:66px}
 
   <!-- FORMULACIONES -->
   <div class="screen" id="sFormulas">
+    <button class="btn btn-primary btn-block" id="btnNuevaFormula" style="margin-bottom:10px;display:none" onclick="formulaEditor()">＋ Nuevo producto (formulación)</button>
     <div style="margin-bottom:10px"><input type="search" id="fBuscar" placeholder="🔎 Buscar producto…" oninput="renderFormulas()"></div>
     <div class="card"><div class="card-h"><span>Formulaciones</span><span id="fCount" style="font-weight:500;color:var(--gray-400)"></span></div><div id="fList"></div></div>
   </div>
@@ -507,7 +508,7 @@ const PL_INSUMOS=[
 ];
 // Secuestrante temporal que se agrega POR ENCIMA de la fórmula (a las que llevan maíz)
 const SECU={c:'INS070',n:'Zeolítica',pct:0.3};
-const PL_FORMULAS=[
+const PL_FORMULAS_BASE=[
 {c:'BIOSAL02',n:'Bioinnova Cria 90 - 30 kg',kg:30,ins:[{c:'INS047',n:'Prymix Bio micromin',p:4.4,t:'p'},{c:'INS040',n:'Calcareo',p:20.6,t:'p'},{c:'INS007',n:'Sal entrefina yodada animal',p:25,t:'p'},{c:'INS037',n:'Fosfato Dicalcico',p:25,t:'p'},{c:'INS056',n:'Fosfato Dicalcico 18%',p:25,t:'p'},{c:'INS041',n:'Bolsa laminada 49x75 - Linea Mineral',p:0,t:'b'},{c:'INS059',n:'Etiqueta Blanca 10x20',p:0,t:'b'},{c:'INS019',n:'Mano de obra',p:0,t:'m'}]},
 {c:'BIOSAL03',n:'Bioinnova Nutri 80 - 30 kg',kg:30,ins:[{c:'INS047',n:'Prymix Bio micromin',p:3.4,t:'p'},{c:'INS040',n:'Calcareo',p:26.7,t:'p'},{c:'INS007',n:'Sal entrefina yodada animal',p:25,t:'p'},{c:'INS037',n:'Fosfato Dicalcico',p:22.22,t:'p'},{c:'INS056',n:'Fosfato Dicalcico 18%',p:22.22,t:'p'},{c:'INS046',n:'Oxido de Magnesio 52',p:0.22,t:'p'},{c:'INS045',n:'Azufre pec 99%',p:0.24,t:'p'},{c:'INS041',n:'Bolsa laminada 49x75 impresa',p:0,t:'b'},{c:'INS065',n:'Etiqueta Verde 10x20',p:0,t:'b'},{c:'INS019',n:'Mano de obra',p:0,t:'m'}]},
 {c:'BIOSAL04',n:'Bioinnova Recria 65 - 30 kg',kg:30,ins:[{c:'INS047',n:'Prymix Bio micromin',p:2.4,t:'p'},{c:'INS040',n:'Calcareo',p:35.6,t:'p'},{c:'INS007',n:'Sal entrefina yodada animal',p:25,t:'p'},{c:'INS056',n:'Fosfato Dicalcico 18%',p:36.2,t:'p'},{c:'INS046',n:'Oxido de Magnesio 52',p:0.43,t:'p'},{c:'INS045',n:'Azufre pec 99%',p:0.45,t:'p'},{c:'INS041',n:'Bolsa laminada 49x75',p:0,t:'b'},{c:'INS063',n:'Etiq. Recria 65',p:0,t:'b'},{c:'INS019',n:'Mano de obra',p:0,t:'m'}]},
@@ -539,6 +540,11 @@ const PL_FORMULAS=[
 {c:'BIO25-001',n:'Bioinnova Confi 4 SL - 25kg',kg:25,ins:[{c:'INS038',n:'Prymix confipeso',p:6.5,t:'p'},{c:'INS056',n:'Fosfato Dicalcico 18%',p:16.7,t:'p'},{c:'INS040',n:'Calcareo',p:66.8,t:'p'},{c:'INS007',n:'Sal entrefina yodada animal',p:10,t:'p'},{c:'INS019',n:'Mano de obra',p:0,t:'m'}]},
 {c:'BIO25-002',n:'Bioinnova Confi 4 CL - 25kg',kg:25,ins:[{c:'INS039',n:'Prymix confipeso Levadura',p:6.5,t:'p'},{c:'INS056',n:'Fosfato Dicalcico 18%',p:16.7,t:'p'},{c:'INS040',n:'Calcareo',p:66.8,t:'p'},{c:'INS007',n:'Sal entrefina yodada animal',p:10,t:'p'},{c:'INS019',n:'Mano de obra',p:0,t:'m'}]},
 ];
+// Fórmulas propias (agregadas desde la app) — se mezclan con las de fábrica
+function getFormulasExtra(){ return getArr('bio:formulas'); }
+function saveFormulasExtra(a){ setArr('bio:formulas',a); rebuildFormulas(); }
+let PL_FORMULAS = PL_FORMULAS_BASE.slice();
+function rebuildFormulas(){ const byKey={}; PL_FORMULAS_BASE.forEach(f=>byKey[precioKey(f)]=f); getFormulasExtra().forEach(f=>{ if(f&&(f.c||f.n)) byKey[precioKey(f)]=f; }); PL_FORMULAS = Object.values(byKey); }
 // Bolsas de un producto por kg de producción
 function plKgBolsa(f){ return (f&&f.kg)||30; }
 function plInsumo(cod){ return PL_INSUMOS.find(x=>x.c===cod); }
@@ -828,7 +834,10 @@ const SYNC_DEFS = {
   precio:{ get:getPreciosOv, save:savePreciosOv, table:'bio_precios', toRow:precRow, fromRow:rowPrec },
   cotiz:{ get:getCotiz, save:saveCotiz, table:'bio_cotiz', toRow:cotizRow, fromRow:rowCotiz, toRowSafe:(c)=>{ const r=cotizRow(c); delete r.subtotal; delete r.flete; delete r.flete_kg; delete r.margen; return r; } },
   insprec:{ get:getInsPrecOv, save:saveInsPrecOv, table:'bio_insprec', toRow:insprecRow, fromRow:rowInsprec },
+  formula:{ get:getFormulasExtra, save:saveFormulasExtra, table:'bio_formulas', toRow:formulaRow, fromRow:rowFormula },
 };
+function formulaRow(f){ return { id:f.id||('FM-'+(f.c||f.n)), c:f.c||'', n:f.n||'', kg:Number(f.kg)||0, ins:f.ins||[], ts:f.ts||null }; }
+function rowFormula(r){ let ins=r.ins; if(typeof ins==='string'){ try{ ins=JSON.parse(ins); }catch{ ins=[]; } } return { id:r.id, c:r.c||'', n:r.n||'', kg:Number(r.kg)||0, ins:Array.isArray(ins)?ins:[], custom:true, ts:r.ts }; }
 function insprecRow(o){ return { id:o.id||('IP-'+o.c), c:o.c||'', gskg:Number(o.gskg)||0, ts:o.ts||null }; }
 function rowInsprec(r){ return { id:r.id, c:r.c||'', gskg:Number(r.gskg)||0, ts:r.ts, pending:false }; }
 // Parámetros de costeo (costcfg + margen) — fila única en bio_config
@@ -1438,22 +1447,68 @@ async function toggleActivoUsuario(id,activar){ const on=(activar===true||activa
 async function eliminarUsuario(id,nombre){ if(!confirm('¿Eliminar a "'+nombre+'" de la lista?\nBorra el perfil; la cuenta de acceso sigue en Supabase. Para bloquear el acceso, usá Desactivar.'))return; try{ const r=await sb.del('perfiles',{id}); if(!r.ok)throw new Error(); showToast('✓ Perfil eliminado'); renderUsuarios(); }catch(e){ showToast('No se pudo eliminar'); } }
 
 // ══ PLANTA: Formulaciones ══
-function openFormulas(){ if(!puedeVer('formulas')){ showToast('Sin permiso'); return; } showScreen('sFormulas','Formulaciones','Recetas de producción',true); renderFormulas(); }
+function puedeEditarFormula(){ return esGerente() || currentRol==='supervisor'; }
+function openFormulas(){ if(!puedeVer('formulas')){ showToast('Sin permiso'); return; } showScreen('sFormulas','Formulaciones','Recetas de producción',true); const b=gs('btnNuevaFormula'); if(b) b.style.display=puedeEditarFormula()?'':'none'; renderFormulas(); }
 function renderFormulas(){
   const q=(gs('fBuscar').value||'').trim().toLowerCase();
   let fs=PL_FORMULAS.slice().sort((a,b)=>a.n.localeCompare(b.n));
   if(q) fs=fs.filter(f=>(f.n+' '+f.c).toLowerCase().includes(q));
   gs('fCount').textContent=fs.length+' productos';
-  gs('fList').innerHTML=fs.map((f)=>{ const gi=PL_FORMULAS.indexOf(f); return `<div class="li" onclick="verFormula(${gi})"><div style="min-width:0"><div class="li-t">${esc(f.n)}</div><div class="li-s">${f.c?esc(f.c)+' · ':''}${f.ins.length} insumos · ${plKgBolsa(f)} kg/bolsa</div></div><div class="li-chev">›</div></div>`; }).join('') || '<div class="empty">Sin resultados.</div>';
+  gs('fList').innerHTML=fs.map((f)=>{ const gi=PL_FORMULAS.indexOf(f); return `<div class="li" onclick="verFormula(${gi})"><div style="min-width:0"><div class="li-t">${esc(f.n)}${f.custom?' <span style="font-size:9px;color:var(--green);border:1px solid var(--green);border-radius:6px;padding:0 4px">propio</span>':''}</div><div class="li-s">${f.c?esc(f.c)+' · ':''}${f.ins.length} insumos · ${plKgBolsa(f)} kg/bolsa</div></div><div class="li-chev">›</div></div>`; }).join('') || '<div class="empty">Sin resultados.</div>';
 }
 function verFormula(gi){ const f=PL_FORMULAS[gi]; if(!f) return;
   const filas=f.ins.map(i=>`<tr><td style="color:var(--gray-500)">${esc(i.c)}</td><td>${esc(i.n)}</td><td style="text-align:right;font-weight:600">${i.t==='p'?(i.p+'%'):(i.t==='b'?'× bolsa':i.t==='m'?'× kg':'—')}</td></tr>`).join('');
   gs('modalBox').innerHTML=`<h3>${esc(f.n)}</h3><div style="font-size:12px;color:var(--gray-600);margin-bottom:8px">${f.c?esc(f.c)+' · ':''}${plKgBolsa(f)} kg/bolsa</div>
     <table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="color:var(--gray-500)"><th style="text-align:left">Cód.</th><th style="text-align:left">Insumo</th><th style="text-align:right">Proporción</th></tr></thead><tbody>${filas}</tbody></table>
     <button class="btn btn-amber btn-block" style="margin-top:12px" onclick="cerrarModal();nuevaOTde(${gi})">🏭 Crear OT de este producto</button>
+    ${(f.custom&&puedeEditarFormula())?`<button class="btn btn-sec btn-block" style="margin-top:8px" onclick="cerrarModal();formulaEditor('${esc(f.c||f.n)}')">✎ Editar formulación</button>`:''}
     <button class="btn btn-ghost btn-block" style="margin-top:8px" onclick="cerrarModal()">Cerrar</button>`;
   gs('modal').classList.add('show');
 }
+// ── Editor de fórmulas propias ──
+function insumosAll(){ const m={}; PL_INSUMOS.forEach(i=>m[i.c]={c:i.c,n:i.n}); Object.keys(PL_INSPREC).forEach(c=>{ if(!m[c]) m[c]={c,n:c}; }); try{ (getInsumosExtra()||[]).forEach(i=>{ if(i&&i.c) m[i.c]={c:i.c,n:i.n||i.c}; }); }catch{} return Object.values(m).sort((a,b)=>String(a.n).localeCompare(String(b.n))); }
+function _insNombre(c){ const i=insumosAll().find(x=>x.c===c); return i?i.n:(c||''); }
+function formulaEditor(cod){ if(!puedeEditarFormula()){ showToast('Sin permiso'); return; }
+  const f = cod? getFormulasExtra().find(x=>(x.c||x.n)===cod) : null;
+  const ins = f? (f.ins||[]).filter(x=>x.t!=='b'&&x.t!=='m') : [];
+  gs('modalBox').innerHTML=`<h3>${f?'Editar':'Nuevo'} producto</h3>
+    <div class="row2"><div><label class="fl">Código</label><input id="fmC" value="${f?esc(f.c):''}" placeholder="ej. NUEVO01"></div><div><label class="fl">Kg/bolsa</label><input type="number" id="fmKg" value="${f?f.kg:'30'}" oninput="fmRecalc()"></div></div>
+    <label class="fl">Nombre</label><input id="fmN" value="${f?esc(f.n):''}" placeholder="Nombre del producto" oninput="fmRecalc()">
+    <label class="fl" style="margin-top:8px">Ingredientes (insumo · %)</label>
+    <datalist id="fmInsList">${insumosAll().map(i=>`<option value="${esc(i.n)}">`).join('')}</datalist>
+    <div id="fmRows"></div>
+    <button class="btn btn-ghost btn-block" style="margin-top:2px" onclick="fmAddRow()">＋ Agregar ingrediente</button>
+    <div id="fmTot" style="font-size:12px;margin-top:6px"></div>
+    <div id="fmPrecio" style="font-size:12px;color:var(--green);margin-top:2px"></div>
+    <div class="row2" style="margin-top:12px"><button class="btn btn-sec" onclick="${f?`formulaBorrar('${esc(f.c||f.n)}')`:'cerrarModal()'}"${f?' style="color:var(--red)"':''}>${f?'Borrar':'Cancelar'}</button><button class="btn btn-primary" onclick="formulaGuardar('${f?esc(f.c||f.n):''}')">Guardar</button></div>`;
+  gs('modal').classList.add('show');
+  gs('fmRows').innerHTML='';
+  (ins.length?ins:[null,null]).forEach(x=>fmAddRow(x?(x.n||_insNombre(x.c)):'', x?x.p:''));
+  fmRecalc();
+}
+function fmAddRow(nombre, pct){ const row=document.createElement('div'); row.className='fmRow'; row.style.cssText='display:flex;gap:6px;margin-bottom:5px';
+  const nv=nombre?String(nombre).replace(/"/g,'&quot;'):'';
+  row.innerHTML=`<input class="fmIns" list="fmInsList" placeholder="Insumo" autocomplete="off" value="${nv}" oninput="fmRecalc()" style="flex:1;min-width:0"><input class="fmPct" type="number" step="0.1" inputmode="decimal" placeholder="%" value="${pct!=null&&pct!==''?pct:''}" oninput="fmRecalc()" style="width:64px"><span onclick="this.parentNode.remove();fmRecalc()" style="cursor:pointer;color:var(--red);align-self:center;padding:0 3px">✕</span>`;
+  gs('fmRows').appendChild(row); }
+function fmReadRows(){ const out=[]; document.querySelectorAll('#fmRows .fmRow').forEach(r=>{ const nom=(r.querySelector('.fmIns').value||'').trim(); if(!nom) return; const p=num(r.querySelector('.fmPct').value); const ins=insumosAll().find(x=>String(x.n).toLowerCase()===nom.toLowerCase()); out.push({ c:ins?ins.c:('X-'+nom.toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,12)), n:ins?ins.n:nom, p:p||0, t:'p' }); }); return out; }
+function fmRecalc(){ const rows=fmReadRows(); const tot=rows.reduce((a,x)=>a+(Number(x.p)||0),0);
+  const el=gs('fmTot'); if(el) el.innerHTML=`Total ingredientes: <b style="color:${Math.abs(tot-100)<0.5?'var(--green)':'var(--amber)'}">${tot.toFixed(1)}%</b>${Math.abs(tot-100)<0.5?' ✓':' <span style="color:var(--gray-400)">(idealmente 100%)</span>'}`;
+  const kg=num(gs('fmKg').value)||30; const f={ c:(gs('fmC').value||'').trim(), n:(gs('fmN').value||'').trim(), kg, ins:rows };
+  const pe=gs('fmPrecio'); if(pe){ if(rows.length){ const base=costoBaseFormula(f); const p0=precioBaseKg(f,'p0',margenDe(f.c,f.n)); pe.textContent=`Costo base insumos: ${gsFmt(Math.round(base))}/kg · Precio contado estimado: ${gsFmt(p0)}/kg (margen ${(margenDe(f.c,f.n)*100).toFixed(0)}%)`; } else pe.textContent=''; } }
+function formulaGuardar(orig){ if(!puedeEditarFormula()){ showToast('Sin permiso'); return; }
+  const c=(gs('fmC').value||'').trim(); const n=(gs('fmN').value||'').trim(); if(!n){ showToast('Poné el nombre del producto'); return; }
+  const kg=num(gs('fmKg').value)||30; const ins=fmReadRows(); if(!ins.length){ showToast('Agregá al menos un ingrediente'); return; }
+  const key=precioKey({c,n}); if((!orig) && PL_FORMULAS_BASE.some(f=>precioKey(f)===key)){ showToast('Ese código/nombre ya existe en las fórmulas de fábrica'); return; }
+  const rec={ id:'FM-'+(c||n), c, n, kg, ins, custom:true, ts:new Date().toISOString() };
+  const a=getFormulasExtra().filter(x=>(x.c||x.n)!==orig); a.unshift(rec); saveFormulasExtra(a);
+  if(typeof cloudPush==='function') cloudPush('formula',rec);
+  cerrarModal(); showToast('✓ Producto guardado'); renderFormulas();
+  if(typeof renderPrecios==='function' && gs('sPrecios') && gs('sPrecios').classList.contains('active')) renderPrecios(); }
+function formulaBorrar(orig){ if(!puedeEditarFormula()){ showToast('Sin permiso'); return; } if(!confirm('¿Borrar este producto y su formulación?')) return;
+  const rec=getFormulasExtra().find(x=>(x.c||x.n)===orig);
+  saveFormulasExtra(getFormulasExtra().filter(x=>(x.c||x.n)!==orig));
+  if(rec && typeof cloudDelete==='function') cloudDelete('formula', rec.id||('FM-'+(rec.c||rec.n)));
+  cerrarModal(); showToast('Producto borrado'); renderFormulas(); }
 // ══ PLANTA: Órdenes de Trabajo ══
 let editOTId=null, _otSecuTocado=false;
 function getOTs(){ return getArr('bio:ot'); }
@@ -2204,6 +2259,7 @@ window.addEventListener('online',()=>{ pintarConexion(); showToast('✓ Conexió
 window.addEventListener('offline',()=>{ pintarConexion(); showToast('📴 Sin conexión — podés seguir cargando'); });
 
 // ── Init ──
+rebuildFormulas();   // mezcla las fórmulas propias guardadas con las de fábrica
 applyAuth();
 if(!navigator.onLine) pintarConexion();
 </script>
