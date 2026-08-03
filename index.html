@@ -828,7 +828,7 @@ const SYNC_DEFS = {
   estancias:{ get:getEstancias, save:saveEstancias, table:'estancias', toRow:estRow, fromRow:rowEst },
   visitas:{ get:getVisitas, save:saveVisitas, table:'visitas', toRow:visRow, fromRow:rowVis },
   ot:{ get:getOTs, save:saveOTs, table:'bio_ot', toRow:otRow, fromRow:rowOT },
-  mov:{ get:getMovs, save:saveMovs, table:'bio_mov', toRow:movRow, fromRow:rowMov },
+  mov:{ get:getMovs, save:saveMovs, table:'bio_mov', toRow:movRow, fromRow:rowMov, toRowSafe:(m)=>{ const r=movRow(m); delete r.moneda; delete r.costo_orig; delete r.tc; return r; } },
   caja:{ get:getCaja, save:saveCaja, table:'bio_caja', toRow:cajaRow, fromRow:rowCaja },
   viat:{ get:getRend, save:saveRend, table:'bio_viat', toRow:viatRow, fromRow:rowViat },
   insumo:{ get:getInsumosExtra, save:saveInsumosExtra, table:'bio_insumos', toRow:insuRow, fromRow:rowInsu },
@@ -856,8 +856,8 @@ function cajaRow(m){ return { id:m.id, tipo:m.tipo, monto:m.monto||0, fecha:m.fe
 function rowCaja(r){ return { id:r.id, tipo:r.tipo, monto:Number(r.monto)||0, fecha:r.fecha||'', concepto:r.concepto||'', categoria:r.categoria||'', proveedor:r.proveedor||'', factura:r.factura||'', responsable:r.responsable||'', obs:r.obs||'', por:r.por||'', ts:r.ts, pending:false }; }
 function otRow(o){ return { id:o.id, num:o.num, fecha:o.fecha||null, producto_cod:o.producto_cod||'', producto_nom:o.producto_nom||'', kg_bolsa:o.kg_bolsa||null, kg:o.kg||null, bolsas:o.bolsas||0, lote:o.lote||'', cliente:o.cliente||'', comercial:o.comercial||'', insumos:o.insumos||[], estado:o.estado||'abierta', ts:o.ts||null }; }
 function rowOT(r){ return { id:r.id, num:r.num, fecha:r.fecha, producto_cod:r.producto_cod, producto_nom:r.producto_nom, kg_bolsa:r.kg_bolsa, kg:r.kg, bolsas:r.bolsas, lote:r.lote, cliente:r.cliente, comercial:r.comercial, insumos:(typeof r.insumos==='string'?JSON.parse(r.insumos||'[]'):(r.insumos||[])), estado:r.estado, ts:r.ts, pending:false }; }
-function movRow(m){ return { id:m.id, insumo_c:m.insumo_c||'', insumo_n:m.insumo_n||'', u:m.u||'kg', tipo:m.tipo||'ingreso', cant:m.cant||0, motivo:m.motivo||'', proveedor:m.proveedor||'', costo:m.costo==null?null:m.costo, ot_id:m.ot_id||'', fecha:m.fecha||null, usuario:m.usuario||'', ts:m.ts||null }; }
-function rowMov(r){ return { id:r.id, insumo_c:r.insumo_c||'', insumo_n:r.insumo_n||'', u:r.u||'kg', tipo:r.tipo, cant:Number(r.cant)||0, motivo:r.motivo||'', proveedor:r.proveedor||'', costo:r.costo, ot_id:r.ot_id||'', fecha:r.fecha||'', usuario:r.usuario||'', ts:r.ts, pending:false }; }
+function movRow(m){ return { id:m.id, insumo_c:m.insumo_c||'', insumo_n:m.insumo_n||'', u:m.u||'kg', tipo:m.tipo||'ingreso', cant:m.cant||0, motivo:m.motivo||'', proveedor:m.proveedor||'', costo:m.costo==null?null:m.costo, moneda:m.moneda||'PYG', costo_orig:m.costo_orig==null?null:m.costo_orig, tc:m.tc==null?null:m.tc, ot_id:m.ot_id||'', fecha:m.fecha||null, usuario:m.usuario||'', ts:m.ts||null }; }
+function rowMov(r){ return { id:r.id, insumo_c:r.insumo_c||'', insumo_n:r.insumo_n||'', u:r.u||'kg', tipo:r.tipo, cant:Number(r.cant)||0, motivo:r.motivo||'', proveedor:r.proveedor||'', costo:r.costo, moneda:r.moneda||'PYG', costo_orig:(r.costo_orig!=null?Number(r.costo_orig):null), tc:(r.tc!=null?Number(r.tc):null), ot_id:r.ot_id||'', fecha:r.fecha||'', usuario:r.usuario||'', ts:r.ts, pending:false }; }
 let syncTimer=null;
 async function cloudPush(name,obj){
   if(!AUTH_ON||!obj) return;
@@ -1815,9 +1815,11 @@ function insPrecModal(c){ if(!esGerente()) return; const it=insumoCatalogoPrecio
    <div style="font-size:11px;color:var(--gray-400);margin-top:4px">Al guardar, todos los productos que usan este insumo se recalculan solos.</div>
    <div class="row2" style="margin-top:12px"><button class="btn btn-sec" onclick="cerrarModal()">Cancelar</button><button class="btn btn-primary" onclick="insPrecGuardar('${esc(c)}')">Guardar</button></div>`;
   gs('modal').classList.add('show'); }
+// Fija el precio ₲/kg de un insumo (lo usan las cotizaciones). Usado por el editor 🧪 y por las compras.
+function setInsPrec(c, v){ const a=getInsPrecOv(); const ex=a.find(x=>x.c===c); const rec={ id:ex?ex.id:('IP-'+c), c:c, gskg:Number(v)||0, ts:new Date().toISOString(), pending:true };
+  const out=ex?a.map(x=>x.c===c?rec:x):[rec,...a]; saveInsPrecOv(out); if(typeof cloudPush==='function') cloudPush('insprec',rec); return rec; }
 function insPrecGuardar(c){ if(!esGerente()) return; const v=num(gs('ipVal').value); if(v==null||v<0){ showToast('Ingresá el precio'); return; }
-  const a=getInsPrecOv(); const ex=a.find(x=>x.c===c); const rec={ id:ex?ex.id:('IP-'+c), c:c, gskg:v, ts:new Date().toISOString(), pending:true };
-  const out=ex?a.map(x=>x.c===c?rec:x):[rec,...a]; saveInsPrecOv(out); cloudPush('insprec',rec); cerrarModal(); showToast('✓ Precio actualizado'); renderInsPrec(); }
+  setInsPrec(c,v); cerrarModal(); showToast('✓ Precio actualizado'); renderInsPrec(); }
 // ── Parámetros de costeo (gerente) ──
 function cfgCosteoModal(){ if(!esGerente()) return; const c=getCostCfg();
   gs('modalBox').innerHTML=`<h3>⚙ Parámetros de costeo</h3>
@@ -2163,7 +2165,8 @@ function invDetalle(c){
   const movs=getMovs().filter(m=>m.insumo_c===c).sort((a,b)=>String(b.ts||'').localeCompare(String(a.ts||''))).slice(0,15);
   const tN={ingreso:'Ingreso',egreso:'Salida',ajuste:'Ajuste'};
   const filas=movs.map(m=>{ const neg=m.tipo==='egreso'||(m.tipo==='ajuste'&&Number(m.cant)<0); const val=Math.abs(Number(m.cant)||0);
-    return `<tr style="border-top:1px solid var(--gray-200)"><td style="padding:4px 6px;color:var(--gray-500)">${fmtFecha(m.fecha)}</td><td>${tN[m.tipo]||m.tipo}${m.ot_id?' · OT':''}${m.motivo&&!m.ot_id?'<div style="font-size:10px;color:var(--gray-400)">'+esc(m.motivo)+'</div>':''}</td><td style="text-align:right;font-weight:600;color:${neg?'var(--red)':'var(--green)'}">${neg?'−':'+'}${val.toLocaleString('es-PY')}</td></tr>`; }).join('') || '<tr><td colspan="3" style="color:var(--gray-400);padding:8px 6px">Sin movimientos aún.</td></tr>';
+    const costoTxt = (m.tipo==='ingreso'&&m.costo!=null&&m.costo>0) ? `<div style="font-size:10px;color:var(--gray-400)">₲ ${Math.round(m.costo).toLocaleString('es-PY')}/${it.u||'kg'}${m.moneda==='USD'&&m.costo_orig!=null?' (US$ '+m.costo_orig+' × '+Math.round(m.tc||0).toLocaleString('es-PY')+')':''}</div>` : '';
+    return `<tr style="border-top:1px solid var(--gray-200)"><td style="padding:4px 6px;color:var(--gray-500)">${fmtFecha(m.fecha)}</td><td>${tN[m.tipo]||m.tipo}${m.ot_id?' · OT':''}${m.motivo&&!m.ot_id?'<div style="font-size:10px;color:var(--gray-400)">'+esc(m.motivo)+'</div>':''}${costoTxt}</td><td style="text-align:right;font-weight:600;color:${neg?'var(--red)':'var(--green)'}">${neg?'−':'+'}${val.toLocaleString('es-PY')}</td></tr>`; }).join('') || '<tr><td colspan="3" style="color:var(--gray-400);padding:8px 6px">Sin movimientos aún.</td></tr>';
   const edit=puedeVer('inventario');
   const extra=esGerente()&&getInsumosExtra().some(x=>x.c===c);
   gs('modalBox').innerHTML=`<h3 style="margin-bottom:2px">${esc(it.n)} ${extra?`<span onclick="cerrarModal();invInsumoModal('${(getInsumosExtra().find(x=>x.c===c)||{}).id}')" style="color:var(--green);cursor:pointer;font-size:12px;font-weight:600">✎</span>`:''}</h3><div style="font-size:12px;color:var(--gray-600)">${esc(it.c)}${it.prov?' · '+esc(it.prov):''}</div>
@@ -2184,7 +2187,10 @@ function invMovModal(c,tipo){
     campos=`<label class="fl">Stock actual del sistema</label><input value="${s} ${it.u}" readonly style="background:var(--gray-100)"><label class="fl">Stock real contado (${it.u})</label><input type="number" id="mvReal" inputmode="decimal" placeholder="lo que contaste">`;
   } else {
     campos=`<label class="fl">Cantidad (${it.u})</label><input type="number" id="mvCant" inputmode="decimal" placeholder="0">`;
-    if(tipo==='ingreso') campos+=`<div class="row2"><div><label class="fl">Proveedor</label><input id="mvProv" placeholder="opcional" value="${esc(it.prov||'')}"></div><div><label class="fl">Costo x ${it.u} (Gs)</label><input type="number" id="mvCosto" inputmode="numeric" placeholder="opcional"></div></div>`;
+    if(tipo==='ingreso') campos+=`<div class="row2"><div><label class="fl">Proveedor</label><input id="mvProv" placeholder="opcional" value="${esc(it.prov||'')}"></div><div><label class="fl">Moneda</label><select id="mvMon" onchange="invMovMonChange()"><option value="PYG">Guaraníes ₲</option><option value="USD">Dólares US$</option></select></div></div>
+      <div class="row2"><div><label class="fl" id="mvCostoLbl">Costo x ${it.u} (₲)</label><input type="number" id="mvCosto" inputmode="numeric" placeholder="0" oninput="invMovCostoCalc()"></div><div id="mvTcWrap" style="display:none"><label class="fl">Tipo de cambio ₲/US$</label><input type="number" id="mvTc" inputmode="numeric" value="${cotizDolar()}" oninput="invMovCostoCalc()"></div></div>
+      <div id="mvCostoGs" style="font-size:11px;color:var(--green);margin:-2px 0 6px;min-height:14px"></div>
+      <label class="fl" style="display:flex;gap:8px;align-items:center;cursor:pointer;font-weight:600"><input type="checkbox" id="mvActualizaPrecio" checked style="width:16px;height:16px"> Usar este costo como precio de cotización</label>`;
     campos+=`<label class="fl">Motivo</label><input id="mvMotivo" placeholder="${tipo==='ingreso'?'Compra':'Merma / traslado'}">`;
   }
   gs('modalBox').innerHTML=`<h3>${tit[tipo]}</h3><div style="font-size:12px;color:var(--gray-600);margin-bottom:8px">${esc(it.n)} · ${esc(it.c)} · stock ${s.toLocaleString('es-PY')} ${it.u}</div>
@@ -2192,19 +2198,29 @@ function invMovModal(c,tipo){
     <div class="row2" style="margin-top:12px"><button class="btn btn-sec" onclick="invDetalle('${c}')">Cancelar</button><button class="btn btn-primary" onclick="invGuardarMov()">Guardar</button></div>`;
   gs('modal').classList.add('show');
 }
+function invMovMonChange(){ const usd=gs('mvMon')&&gs('mvMon').value==='USD'; if(gs('mvTcWrap')) gs('mvTcWrap').style.display=usd?'':'none'; const it=invItem(_invC); if(gs('mvCostoLbl')) gs('mvCostoLbl').textContent='Costo x '+(it?it.u:'kg')+(usd?' (US$)':' (₲)'); invMovCostoCalc(); }
+function invMovCostoCalc(){ const el=gs('mvCostoGs'); if(!el) return; const usd=gs('mvMon')&&gs('mvMon').value==='USD'; const c=num(gs('mvCosto').value)||0; const u=(invItem(_invC)||{}).u||'kg';
+  if(usd){ const tc=num(gs('mvTc').value)||0; el.textContent=(c&&tc)?('= ₲ '+Math.round(c*tc).toLocaleString('es-PY')+' por '+u+' (se registra en ₲)'):''; } else el.textContent=''; }
 function invGuardarMov(){
-  const it=invItem(_invC); if(!it) return; let cant, motivo, prov='', costo=null;
+  const it=invItem(_invC); if(!it) return; let cant, motivo, prov='', costo=null, monedaC='PYG', costoOrig=null, tcC=null, actualizaPrecio=false;
   if(_invTipo==='ajuste'){
     const real=num(gs('mvReal').value); if(real==null){ showToast('Ingresá el stock contado'); return; }
     cant=Math.round((real-invStock(_invC))*100)/100; if(cant===0){ showToast('El stock ya coincide'); return; } motivo='Conteo físico';
   } else {
     const v=num(gs('mvCant').value); if(!v||v<=0){ showToast('Ingresá la cantidad'); return; }
     cant=Math.abs(v); motivo=(gs('mvMotivo')&&gs('mvMotivo').value.trim())||(_invTipo==='ingreso'?'Compra':'Salida');
-    if(_invTipo==='ingreso'){ prov=(gs('mvProv').value||'').trim(); costo=num(gs('mvCosto').value); }
+    if(_invTipo==='ingreso'){ prov=(gs('mvProv').value||'').trim();
+      monedaC=(gs('mvMon')&&gs('mvMon').value)||'PYG'; const raw=num(gs('mvCosto').value);
+      if(monedaC==='USD'){ const tc=num(gs('mvTc').value)||0; if(raw!=null && !tc){ showToast('Cargá el tipo de cambio'); return; } costoOrig=raw; tcC=tc; costo=(raw!=null&&tc)?Math.round(raw*tc):null; }
+      else { costo=raw; }
+      actualizaPrecio = !!(gs('mvActualizaPrecio')&&gs('mvActualizaPrecio').checked);
+    }
   }
-  const m={ id:'MV-'+Date.now(), insumo_c:_invC, insumo_n:it.n, u:it.u, tipo:_invTipo, cant, motivo, proveedor:prov, costo, ot_id:'', fecha:gs('mvFecha').value||hoy(), usuario:(getSession()&&getSession().nombre)||'', ts:new Date().toISOString(), pending:true };
+  const m={ id:'MV-'+Date.now(), insumo_c:_invC, insumo_n:it.n, u:it.u, tipo:_invTipo, cant, motivo, proveedor:prov, costo, moneda:monedaC, costo_orig:costoOrig, tc:tcC, ot_id:'', fecha:gs('mvFecha').value||hoy(), usuario:(getSession()&&getSession().nombre)||'', ts:new Date().toISOString(), pending:true };
   const a=getMovs(); a.unshift(m); saveMovs(a); cloudPush('mov',m);
-  showToast('✓ Movimiento guardado'); invDetalle(_invC); renderInv();
+  let msg='✓ Movimiento guardado';
+  if(actualizaPrecio && costo!=null && costo>0){ setInsPrec(_invC, costo); msg='✓ Compra registrada · precio de cotización → ₲ '+Math.round(costo).toLocaleString('es-PY')+'/'+it.u; }
+  showToast(msg, actualizaPrecio?3500:2000); invDetalle(_invC); renderInv();
 }
 // Descuento de insumos desde una OT (confirmar producción)
 function otProducir(id){
