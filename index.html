@@ -1979,7 +1979,7 @@ function cotizPrint(id, incluirGar){ const c=getCotiz().find(x=>x.id===id); if(!
    <div class="close">En espera de una respuesta favorable me despido,<br>Atte</div>
    <div class="firma"><b>${esc(c.vendedor||'')}</b><br>Asesor técnico<br><b>Bioinnova S.A.</b></div>
    <div class="vh">Válido Hasta ${validoHasta}</div>
-   ${incluirGar?garForCotizItems(items).map(g=>`<div style="page-break-before:always;padding-top:6px"><div style="text-align:center;font-weight:700;font-size:12.5px;margin:10px 0;color:#2e5b8a">ÍNDICE DE GARANTÍA — ${esc(g.nom)}</div>${g.imgs.map(d=>`<img src="${d}" style="width:100%;border:1px solid #ccc;margin-bottom:8px">`).join('')}</div>`).join(''):''}
+   ${incluirGar?('<style>'+garDocCss()+'</style>'+garForCotizItems(items).map(x=>`<div style="page-break-before:always;padding-top:10px">${garDocInner(x.g,x.p)}</div>`).join('')):''}
    <div class="noprint" style="text-align:center;margin-top:20px"><button onclick="window.print()" style="background:#2e5b8a;color:#fff;border:none;padding:10px 22px;border-radius:8px;cursor:pointer">🖨️ Imprimir / Guardar PDF</button></div>
    </div></body></html>`);
   w.document.close();
@@ -2577,48 +2577,98 @@ function ptAddFromOT(o){ if(!o||!o.bolsas) return; const key=precioKey({c:o.prod
   const a=getPtMovs().filter(x=>x.ot_id!==o.id); a.unshift(m); savePtMovs(a); if(typeof cloudPush==='function') cloudPush('ptmov',m); }
 function ptRemoveFromOT(id){ getPtMovs().filter(m=>m.ot_id===id).forEach(m=>{ if(typeof cloudDelete==='function') cloudDelete('ptmov',m.id); }); savePtMovs(getPtMovs().filter(m=>m.ot_id!==id)); }
 
-// ══ ÍNDICES DE GARANTÍA (análisis garantizado, subido de PDF/foto · no editable · imprimible · adjuntable a cotización) ══
+// ══ ÍNDICES DE GARANTÍA (análisis garantizado en formato BioInnova · datos estructurados · imprimible · adjuntable) ══
+const GAR_NUT=['Proteína bruta','Extracto etéreo (grasa)','Fibra bruta','Humedad','Cenizas / Minerales','Calcio','Fósforo','Sodio','Magnesio','Potasio','Materia orgánica','Nitrógeno no proteico (equiv. PB)','Energía metabolizable'];
+const GAR_UNID=['%','g/kg','ppm','mg/kg','Mcal/kg','UI/kg'];
 function getGarantias(){ return getArr('bio:garantias'); }
 function saveGarantias(a){ setArr('bio:garantias',a); }
 function garantiaDe(key){ return getGarantias().find(g=>g.prod_key===key); }
-function garRow(g){ return { id:g.id, prod_key:g.prod_key||'', prod_nom:g.prod_nom||'', imgs:g.imgs||[], ts:g.ts||null }; }
-function rowGar(r){ let imgs=r.imgs; if(typeof imgs==='string'){ try{ imgs=JSON.parse(imgs); }catch{ imgs=[]; } } return { id:r.id, prod_key:r.prod_key||'', prod_nom:r.prod_nom||'', imgs:Array.isArray(imgs)?imgs:[], ts:r.ts, pending:false }; }
+function garTieneDatos(g){ return !!(g && ((g.composicion&&g.composicion.length) || g.ingredientes || g.indicaciones || g.dosis)); }
+function garRow(g){ return { id:g.id, prod_key:g.prod_key||'', prod_nom:g.prod_nom||'', data:{ registro:g.registro||'', especie:g.especie||'', composicion:g.composicion||[], ingredientes:g.ingredientes||'', indicaciones:g.indicaciones||'', dosis:g.dosis||'' }, ts:g.ts||null }; }
+function rowGar(r){ let d=r.data; if(typeof d==='string'){ try{ d=JSON.parse(d); }catch{ d={}; } } d=d||{}; return { id:r.id, prod_key:r.prod_key||'', prod_nom:r.prod_nom||'', registro:d.registro||'', especie:d.especie||'', composicion:Array.isArray(d.composicion)?d.composicion:[], ingredientes:d.ingredientes||'', indicaciones:d.indicaciones||'', dosis:d.dosis||'', ts:r.ts, pending:false }; }
 function renderProductosGar(){ const q=(gs('prodGarBuscar').value||'').trim().toLowerCase(); let ls=precioList(); if(q) ls=ls.filter(p=>((p.n||'')+' '+(p.c||'')).toLowerCase().includes(q)); if(gs('prodGarCount')) gs('prodGarCount').textContent=ls.length+' productos';
-  gs('prodGarList').innerHTML=ls.map(p=>{ const key=precioKey(p); const g=garantiaDe(key); const n=g?(g.imgs||[]).length:0;
-    return `<div class="li" onclick="garVer('${encodeURIComponent(key)}')"><div style="min-width:0"><div class="li-t">${esc(p.n)}</div><div class="li-s">${p.c?esc(p.c)+' · ':''}${n?('<span style="color:var(--green)">✓ garantía cargada'+(n>1?' ('+n+' pág.)':'')+'</span>'):'<span style="color:var(--gray-400)">sin garantía</span>'}</div></div><div class="li-chev">${n?'📄':'＋'}</div></div>`; }).join('') || '<div class="empty">Sin productos.</div>';
+  gs('prodGarList').innerHTML=ls.map(p=>{ const key=precioKey(p); const g=garantiaDe(key); const ok=garTieneDatos(g); const n=(g&&g.composicion&&g.composicion.length)||0;
+    return `<div class="li" onclick="garVer('${encodeURIComponent(key)}')"><div style="min-width:0"><div class="li-t">${esc(p.n)}</div><div class="li-s">${p.c?esc(p.c)+' · ':''}${ok?('<span style="color:var(--green)">✓ garantía cargada'+(n?' ('+n+' ítems)':'')+'</span>'):'<span style="color:var(--gray-400)">sin garantía</span>'}</div></div><div class="li-chev">${ok?'📄':'＋'}</div></div>`; }).join('') || '<div class="empty">Sin productos.</div>';
 }
-function garVer(keyEnc){ const key=decodeURIComponent(keyEnc); const p=precioList().find(x=>precioKey(x)===key); if(!p) return; const g=garantiaDe(key); const imgs=(g&&g.imgs)||[]; const ed=esGerente();
-  const cont=imgs.length? imgs.map(d=>`<img src="${d}" style="width:100%;border:1px solid var(--gray-200);border-radius:8px;margin-bottom:8px">`).join('') : '<div class="empty">Sin garantía cargada.</div>';
+function garDocCss(){ return `
+  .gd{max-width:760px;margin:0 auto;background:#fff;color:#1a202c;font-family:Arial,Helvetica,sans-serif}
+  .gd .hd{display:flex;align-items:center;gap:14px;border-bottom:3px solid #2f7d3b;padding-bottom:10px}
+  .gd .hd img{height:52px}
+  .gd .hd .co .t1{font-size:11px;letter-spacing:2px;color:#2f7d3b;font-weight:700}
+  .gd .hd .co .t2{font-size:17px;font-weight:800}
+  .gd h1{font-size:15px;margin:14px 0 2px;text-transform:uppercase;letter-spacing:.5px;color:#255f2e}
+  .gd .meta{font-size:12px;color:#555;margin-bottom:8px}
+  .gd .sec{font-weight:700;font-size:12px;color:#2f7d3b;margin:14px 0 4px;border-bottom:1px solid #ddd;padding-bottom:2px}
+  .gd table{width:100%;border-collapse:collapse;font-size:12.5px}
+  .gd th{background:#eef5ef;text-align:left;padding:7px 9px;border:1px solid #cbd5e0}
+  .gd td{padding:6px 9px;border:1px solid #dde3ea}
+  .gd td.v{text-align:right;font-weight:700;white-space:nowrap;width:170px}
+  .gd .txt{font-size:12.5px;white-space:pre-wrap;line-height:1.55}
+  .gd .ft{margin-top:20px;border-top:1px solid #cbd5e0;padding-top:8px;color:#718096;font-size:10.5px;text-align:center}`; }
+function garDocInner(g,p){ const base=`${location.origin}${location.pathname.replace(/[^/]*$/,'')}logo.jpg`;
+  const comp=(g.composicion||[]).filter(x=>x.nut);
+  const filas=comp.length? comp.map(x=>{ const tip=(x.tipo&&x.tipo!=='—')?(x.tipo+'. '):''; return `<tr><td>${esc(x.nut)}</td><td class="v">${tip}${esc(x.valor)} ${esc(x.unidad||'')}</td></tr>`; }).join('') : '<tr><td colspan="2" style="color:#a0aec0">—</td></tr>';
+  const sec=(t,b)=>b?`<div class="sec">${t}</div><div class="txt">${esc(b)}</div>`:'';
+  return `<div class="gd">
+    <div class="hd"><img src="${base}" onerror="this.style.display='none'"><div class="co"><div class="t1">BIOINNOVA S.A.</div><div class="t2">Análisis garantizado</div></div></div>
+    <h1>${esc(p?p.n:(g.prod_nom||''))}</h1>
+    <div class="meta">${g.especie?('Destino: '+esc(g.especie)):''}${(g.especie&&g.registro)?' · ':''}${g.registro?('Reg. SENACSA N° '+esc(g.registro)):''}${(p&&p.kg)?' · Presentación: '+p.kg+' kg':''}</div>
+    <div class="sec">Composición / niveles de garantía</div>
+    <table><thead><tr><th>Nutriente</th><th style="text-align:right">Garantía</th></tr></thead><tbody>${filas}</tbody></table>
+    ${sec('Ingredientes',g.ingredientes)}
+    ${sec('Indicaciones de uso',g.indicaciones)}
+    ${sec('Dosis / modo de empleo',g.dosis)}
+    <div class="ft">Bioinnova S.A. · Nutrición de bovinos de corte · Análisis garantizado</div>
+  </div>`;
+}
+function garVer(keyEnc){ const key=decodeURIComponent(keyEnc); const p=precioList().find(x=>precioKey(x)===key); if(!p) return; const g=garantiaDe(key)||{prod_key:key,prod_nom:p.n,composicion:[]}; const ed=esGerente(); const ok=garTieneDatos(g);
   gs('modalBox').innerHTML=`<h3>Índice de garantía</h3><div style="font-size:12px;color:var(--gray-600);margin-bottom:8px">${esc(p.n)}</div>
-    <div style="max-height:52vh;overflow:auto;background:var(--gray-100);border-radius:8px;padding:8px">${cont}</div>
-    ${ed?`<label class="btn btn-sec btn-block" style="margin-top:10px;cursor:pointer">📎 ${imgs.length?'Reemplazar':'Cargar'} garantía (PDF o foto)<input type="file" accept="image/*,application/pdf" onchange="garUpload('${keyEnc}',this)" style="display:none"></label>`:''}
-    <div class="row2" style="margin-top:8px">${imgs.length?`<button class="btn btn-amber" onclick="garPrint('${keyEnc}')">🖨️ Imprimir</button>`:'<div></div>'}${(ed&&imgs.length)?`<button class="btn btn-sec" style="color:var(--red)" onclick="garBorrar('${keyEnc}')">Quitar</button>`:'<div></div>'}</div>
+    <div style="max-height:56vh;overflow:auto;background:var(--gray-100);border-radius:8px;padding:10px"><style>${garDocCss()}</style>${ok?garDocInner(g,p):'<div class="empty">Sin garantía cargada.</div>'}</div>
+    ${ed?`<button class="btn btn-primary btn-block" style="margin-top:10px" onclick="garEditor('${keyEnc}')">✎ ${ok?'Editar':'Cargar'} garantía</button>`:''}
+    <div class="row2" style="margin-top:8px">${ok?`<button class="btn btn-amber" onclick="garPrint('${keyEnc}')">🖨️ Imprimir</button>`:'<div></div>'}${(ed&&ok)?`<button class="btn btn-sec" style="color:var(--red)" onclick="garBorrar('${keyEnc}')">Quitar</button>`:'<div></div>'}</div>
     <button class="btn btn-ghost btn-block" style="margin-top:8px" onclick="cerrarModal()">Cerrar</button>`;
   gs('modal').classList.add('show');
 }
-function garCompress(file){ return new Promise((res,rej)=>{ const rd=new FileReader(); rd.onload=e=>{ const img=new Image(); img.onload=()=>{ const max=1400; let w=img.width,h=img.height; if(w>=h&&w>max){h=Math.round(h*max/w);w=max;} else if(h>w&&h>max){w=Math.round(w*max/h);h=max;} const cv=document.createElement('canvas'); cv.width=w; cv.height=h; cv.getContext('2d').drawImage(img,0,0,w,h); res(cv.toDataURL('image/jpeg',0.82)); }; img.onerror=rej; img.src=e.target.result; }; rd.onerror=rej; rd.readAsDataURL(file); }); }
-let _pdfjsP=null;
-function garLoadPdfjs(){ if(window.pdfjsLib) return Promise.resolve(window.pdfjsLib); if(_pdfjsP) return _pdfjsP; _pdfjsP=new Promise((res,rej)=>{ const s=document.createElement('script'); s.src='https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js'; s.onload=()=>{ try{ window.pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js'; }catch(e){} res(window.pdfjsLib); }; s.onerror=rej; document.head.appendChild(s); }); return _pdfjsP; }
-async function garPdfToImgs(file){ const lib=await garLoadPdfjs(); const buf=await file.arrayBuffer(); const pdf=await lib.getDocument({data:buf}).promise; const out=[]; const N=Math.min(pdf.numPages,6); for(let i=1;i<=N;i++){ const page=await pdf.getPage(i); const vp=page.getViewport({scale:1.6}); const cv=document.createElement('canvas'); cv.width=vp.width; cv.height=vp.height; await page.render({canvasContext:cv.getContext('2d'), viewport:vp}).promise; out.push(cv.toDataURL('image/jpeg',0.82)); } return out; }
-async function garUpload(keyEnc, input){ if(!esGerente()){ showToast('Solo el gerente'); return; } const f=input.files&&input.files[0]; input.value=''; if(!f) return; const key=decodeURIComponent(keyEnc); const p=precioList().find(x=>precioKey(x)===key); if(!p) return;
-  showToast('Procesando archivo…', 4000); let imgs=[];
-  try{ if(f.type==='application/pdf'){ imgs=await garPdfToImgs(f); } else if(f.type&&f.type.startsWith('image/')){ imgs=[await garCompress(f)]; } else { showToast('Subí una imagen o un PDF'); return; } }
-  catch(e){ showToast('No se pudo procesar el archivo'); return; }
-  if(!imgs.length){ showToast('No se pudo leer el archivo'); return; }
-  const ex=garantiaDe(key); const rec={ id:ex?ex.id:('GA-'+Date.now()), prod_key:key, prod_nom:p.n, imgs, ts:new Date().toISOString(), pending:true };
+function garAddComp(nut,val,uni,tipo){ const row=document.createElement('div'); row.className='garCompRow'; row.style.cssText='display:flex;gap:5px;margin-bottom:5px';
+  row.innerHTML=`<input class="gcNut" list="garNutList" placeholder="Nutriente" autocomplete="off" value="${nut?esc(nut):''}" style="flex:1.4;min-width:0">
+    <select class="gcTipo" style="flex:0 0 60px"><option ${tipo==='mín'?'selected':''}>mín</option><option ${tipo==='máx'?'selected':''}>máx</option><option ${(!tipo||tipo==='—')?'selected':''}>—</option></select>
+    <input class="gcVal" type="text" inputmode="decimal" placeholder="valor" value="${(val!=null&&val!=='')?esc(val):''}" style="flex:0 0 68px">
+    <input class="gcUni" list="garUniList" placeholder="un." value="${uni?esc(uni):''}" autocomplete="off" style="flex:0 0 60px">
+    <span onclick="this.parentNode.remove()" style="cursor:pointer;color:var(--red);align-self:center;padding:0 2px">✕</span>`;
+  gs('garCompRows').appendChild(row); }
+function garReadComp(){ const out=[]; document.querySelectorAll('#garCompRows .garCompRow').forEach(r=>{ const nut=(r.querySelector('.gcNut').value||'').trim(); if(!nut) return; out.push({ nut, tipo:r.querySelector('.gcTipo').value, valor:(r.querySelector('.gcVal').value||'').trim(), unidad:(r.querySelector('.gcUni').value||'').trim() }); }); return out; }
+function garEditor(keyEnc){ if(!esGerente()){ showToast('Solo el gerente'); return; } const key=decodeURIComponent(keyEnc); const p=precioList().find(x=>precioKey(x)===key); if(!p) return; const g=garantiaDe(key)||{};
+  gs('modalBox').innerHTML=`<h3>${garTieneDatos(g)?'Editar':'Cargar'} garantía</h3><div style="font-size:12px;color:var(--gray-600);margin-bottom:8px">${esc(p.n)}</div>
+    <datalist id="garNutList">${GAR_NUT.map(n=>`<option value="${esc(n)}">`).join('')}</datalist><datalist id="garUniList">${GAR_UNID.map(u=>`<option value="${esc(u)}">`).join('')}</datalist>
+    <div class="row2"><div><label class="fl">Destino / especie</label><input id="garEsp" value="${esc(g.especie||'')}" placeholder="ej: Bovinos de corte"></div><div><label class="fl">Reg. SENACSA N°</label><input id="garReg" value="${esc(g.registro||'')}" placeholder="opcional"></div></div>
+    <label class="fl" style="margin-top:8px">Composición / niveles de garantía</label>
+    <div style="display:flex;gap:5px;font-size:10px;color:var(--gray-400);padding:0 2px"><span style="flex:1.4">Nutriente</span><span style="flex:0 0 60px">mín/máx</span><span style="flex:0 0 68px">valor</span><span style="flex:0 0 60px">unidad</span><span style="width:12px"></span></div>
+    <div id="garCompRows"></div>
+    <button class="btn btn-ghost btn-block" style="margin-top:2px" onclick="garAddComp()">＋ Agregar nutriente</button>
+    <label class="fl" style="margin-top:8px">Ingredientes</label><textarea id="garIng" placeholder="Lista de ingredientes…">${esc(g.ingredientes||'')}</textarea>
+    <label class="fl">Indicaciones de uso</label><textarea id="garInd" placeholder="Para qué / cuándo usarlo…">${esc(g.indicaciones||'')}</textarea>
+    <label class="fl">Dosis / modo de empleo</label><textarea id="garDos" placeholder="ej: 100–150 g/animal/día…">${esc(g.dosis||'')}</textarea>
+    <label class="btn btn-sec btn-block" style="margin-top:8px;cursor:pointer">📎 Abrir foto/PDF de referencia <span style="color:var(--gray-400);font-weight:400">(no se guarda)</span><input type="file" accept="image/*,application/pdf" onchange="garRef(this)" style="display:none"></label>
+    <div class="row2" style="margin-top:10px"><button class="btn btn-sec" onclick="garVer('${keyEnc}')">Cancelar</button><button class="btn btn-primary" onclick="garGuardar('${keyEnc}')">✓ Guardar</button></div>`;
+  gs('modal').classList.add('show');
+  gs('garCompRows').innerHTML=''; const comp=(g.composicion&&g.composicion.length)?g.composicion:[{nut:'Proteína bruta',tipo:'mín',valor:'',unidad:'%'},{nut:'Calcio',tipo:'mín',valor:'',unidad:'%'},{nut:'Fósforo',tipo:'mín',valor:'',unidad:'%'}]; comp.forEach(x=>garAddComp(x.nut,x.valor,x.unidad,x.tipo));
+}
+function garRef(input){ const f=input.files&&input.files[0]; if(!f) return; try{ window.open(URL.createObjectURL(f),'_blank'); }catch(e){ showToast('No se pudo abrir'); } input.value=''; }
+function garGuardar(keyEnc){ if(!esGerente()){ showToast('Solo el gerente'); return; } const key=decodeURIComponent(keyEnc); const p=precioList().find(x=>precioKey(x)===key); if(!p) return;
+  const comp=garReadComp(); const ing=(gs('garIng').value||'').trim(), ind=(gs('garInd').value||'').trim(), dos=(gs('garDos').value||'').trim();
+  if(!comp.length && !ing && !ind && !dos){ showToast('Cargá al menos un nutriente o una sección'); return; }
+  const ex=garantiaDe(key); const rec={ id:ex?ex.id:('GA-'+Date.now()), prod_key:key, prod_nom:p.n, registro:(gs('garReg').value||'').trim(), especie:(gs('garEsp').value||'').trim(), composicion:comp, ingredientes:ing, indicaciones:ind, dosis:dos, ts:new Date().toISOString(), pending:true };
   saveGarantias([rec, ...getGarantias().filter(g=>g.prod_key!==key)]);
   if(typeof cloudPush==='function') cloudPush('garantia',rec);
   showToast('✓ Garantía guardada'); garVer(keyEnc); renderProductosGar();
 }
 function garBorrar(keyEnc){ if(!esGerente()) return; if(!confirm('¿Quitar la garantía de este producto?')) return; const key=decodeURIComponent(keyEnc); const g=garantiaDe(key); if(g){ saveGarantias(getGarantias().filter(x=>x.prod_key!==key)); if(typeof cloudDelete==='function') cloudDelete('garantia', g.id); } cerrarModal(); renderProductosGar(); }
-function garPrint(keyEnc){ const key=decodeURIComponent(keyEnc); const p=precioList().find(x=>precioKey(x)===key); const g=garantiaDe(key); if(!g||!(g.imgs||[]).length){ showToast('Sin garantía'); return; } const w=window.open('','_blank'); if(!w){ showToast('Permití las ventanas emergentes'); return; }
-  const base=`${location.origin}${location.pathname.replace(/[^/]*$/,'')}logo.jpg`;
-  const pages=g.imgs.map(d=>`<div class="pg"><img src="${d}"></div>`).join('');
-  w.document.write(`<html><head><meta charset="utf-8"><title>Garantía — ${esc(p?p.n:'')}</title><style>*{box-sizing:border-box}body{margin:0;font-family:Arial,sans-serif}.wrap{max-width:800px;margin:0 auto;padding:20px}.hd{text-align:center;border-bottom:2px solid #2f7d3b;padding-bottom:8px;margin-bottom:12px}.hd img{height:44px}.hd .t{font-size:13px;font-weight:700;margin-top:4px}.pg img{width:100%;border:1px solid #ccc;margin-bottom:10px}@media print{.wrap{padding:0}.noprint{display:none}.pg{page-break-after:always}}</style></head><body><div class="wrap"><div class="hd"><img src="${base}"><div class="t">ÍNDICE DE GARANTÍA — ${esc(p?p.n:'')}</div></div>${pages}<div class="noprint" style="text-align:center;margin-top:16px"><button onclick="window.print()" style="background:#2f7d3b;color:#fff;border:none;padding:10px 22px;border-radius:8px;cursor:pointer">🖨️ Imprimir / Guardar PDF</button></div></div></body></html>`);
+function garPrint(keyEnc){ const key=decodeURIComponent(keyEnc); const p=precioList().find(x=>precioKey(x)===key); const g=garantiaDe(key); if(!garTieneDatos(g)){ showToast('Sin garantía'); return; } const w=window.open('','_blank'); if(!w){ showToast('Permití las ventanas emergentes'); return; }
+  w.document.write(`<html><head><meta charset="utf-8"><title>Garantía — ${esc(p?p.n:'')}</title><style>body{margin:0;padding:24px;background:#fff}${garDocCss()}@media print{body{padding:0}.noprint{display:none}}</style></head><body>${garDocInner(g,p)}<div class="noprint" style="text-align:center;margin-top:16px"><button onclick="window.print()" style="background:#2f7d3b;color:#fff;border:none;padding:10px 22px;border-radius:8px;cursor:pointer">🖨️ Imprimir / Guardar PDF</button></div></body></html>`);
   w.document.close();
 }
-// garantías correspondientes a los ítems de una cotización (para adjuntar al PDF)
-function garForCotizItems(items){ const byName={}; precioList().forEach(p=>{ byName[String(p.n).trim().toLowerCase()]=precioKey(p); }); const out=[]; (items||[]).forEach(i=>{ const key=byName[String(i.nombre||'').trim().toLowerCase()]; if(!key) return; const g=garantiaDe(key); if(g&&(g.imgs||[]).length && !out.some(o=>o.key===key)){ out.push({key, nom:i.nombre, imgs:g.imgs}); } }); return out; }
+// garantías (con datos) correspondientes a los ítems de una cotización
+function garForCotizItems(items){ const byName={}; precioList().forEach(p=>{ byName[String(p.n).trim().toLowerCase()]={key:precioKey(p),p}; }); const out=[]; (items||[]).forEach(i=>{ const m=byName[String(i.nombre||'').trim().toLowerCase()]; if(!m) return; const g=garantiaDe(m.key); if(garTieneDatos(g) && !out.some(o=>o.key===m.key)){ out.push({key:m.key, nom:i.nombre, g, p:m.p}); } }); return out; }
 
 // ── INFORME PDF (molde del .docx) ──
 function informeComercialPDF(id){
