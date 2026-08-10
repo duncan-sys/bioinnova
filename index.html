@@ -473,6 +473,17 @@ const PRODUCTOS={
  ]
 };
 function catClass(c){ return c==='Cría'?'chip-cria':c==='Recría'?'chip-recria':'chip-terminacion'; }
+// Productos para el desplegable de visitas: recomendados de la categoría + TODO el resto del catálogo (sin duplicar).
+// Así el técnico siempre encuentra cualquier producto, aunque no esté en la lista curada de la categoría.
+function _prodNorm(n){ return String(n||'').replace(/^\s*[A-Za-zÁÉÍÓÚÑ]{2,4}\s*-\s*/,'').replace(/\s+/g,' ').trim().toLowerCase(); }
+function productosVisita(cat){
+  const rec=(PRODUCTOS[cat]||[]).map(p=>({n:p.n,p:p.p||'',rec:true}));
+  const seen=new Set(rec.map(p=>_prodNorm(p.n)));
+  const extra=[];
+  try{ precioList().forEach(p=>{ if(!p||!p.n) return; const nn=_prodNorm(p.n); if(seen.has(nn)) return; seen.add(nn); extra.push({n:p.n, p:(p.kg?('Bolsa '+p.kg+' kg'):''), rec:false}); }); }catch{}
+  extra.sort((a,b)=>String(a.n).localeCompare(String(b.n)));
+  return {rec, extra};
+}
 
 // ══════════════════════════════════════════════════════════
 //  PLANTA — Insumos y Formulaciones (extraídas del Excel BioInnova)
@@ -1217,10 +1228,13 @@ function evalBlockHtml(ev,i){
     + lotes.map(l=>`<option value="${esc(l.nombre)}" ${ev.lote===l.nombre?'selected':''} data-cab="${l.cabezas!=null?l.cabezas:''}">${esc(l.nombre)}${l.cabezas!=null?' ('+l.cabezas+' cab.)':''}</option>`).join('')
     + (ev.lote && !lotes.some(l=>l.nombre===ev.lote)?`<option value="${esc(ev.lote)}" selected>${esc(ev.lote)}</option>`:'')
     + '<option value="__otro">➕ Otro lote…</option>';
-  const prods=PRODUCTOS[cat]||[];
+  const pv=productosVisita(cat);
+  const prodOpt=p=>`<option value="${esc(p.n)}" ${ev.producto===p.n?'selected':''} data-p="${esc(p.p||'')}">${esc(p.n)}</option>`;
+  const yaEsta = pv.rec.some(p=>p.n===ev.producto) || pv.extra.some(p=>p.n===ev.producto);
   const prodOpts='<option value="">— Elegir —</option>'
-    + prods.map(p=>`<option value="${esc(p.n)}" ${ev.producto===p.n?'selected':''} data-p="${esc(p.p)}">${esc(p.n)}</option>`).join('')
-    + (ev.producto && !prods.some(p=>p.n===ev.producto)?`<option value="${esc(ev.producto)}" selected>${esc(ev.producto)}</option>`:'')
+    + (pv.rec.length?`<optgroup label="Recomendados — ${esc(cat)}">${pv.rec.map(prodOpt).join('')}</optgroup>`:'')
+    + (pv.extra.length?`<optgroup label="Otros productos">${pv.extra.map(prodOpt).join('')}</optgroup>`:'')
+    + (ev.producto && !yaEsta?`<option value="${esc(ev.producto)}" selected>${esc(ev.producto)}</option>`:'')
     + '<option value="__otro">➕ Otro…</option>';
   const kpisHtml=(KPIS[cat]||[]).map((d,j)=>{ const val=(ev.kpis&&ev.kpis[j]!=null)?ev.kpis[j]:''; const st=kpiEstado(val,d);
     return `<div class="kpi"><div class="kpi-top"><span class="kpi-n">${esc(d.k)}</span><span class="kpi-ref">🟢 ${esc(refTxt(d))}</span></div>
