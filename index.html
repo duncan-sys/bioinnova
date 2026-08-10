@@ -157,6 +157,7 @@ textarea{resize:vertical;min-height:66px}
         <div class="ico">🤝</div><div class="tlab" style="color:#fff">Nueva visita comercial</div><div class="tsub" style="color:rgba(255,255,255,.85)">Prospección y relevamiento</div>
       </div>
       <div class="tile" id="tileClientes" onclick="openClientes()"><div class="ico">🏡</div><div class="tlab">Clientes</div><div class="tsub">y estancias</div></div>
+      <div class="tile" id="tileAgenda" onclick="openAgenda()" style="display:none"><div class="ico">📅</div><div class="tlab">Agenda</div><div class="tsub">plan semanal</div></div>
       <div class="tile" id="tileHistorial" onclick="openHistorial()"><div class="ico">🗂️</div><div class="tlab">Historial</div><div class="tsub">de visitas</div></div>
       <div class="tile" id="tileOT" onclick="openOTList()" style="display:none"><div class="ico">🏭</div><div class="tlab">Órdenes de Trabajo</div><div class="tsub">producción</div></div>
       <div class="tile" id="tileProductos" onclick="openProductos()" style="display:none"><div class="ico">🏷️</div><div class="tlab">Productos</div><div class="tsub">catálogo e inventario PT</div></div>
@@ -455,6 +456,20 @@ textarea{resize:vertical;min-height:66px}
     </div>
     <div style="margin-bottom:10px"><input type="search" id="hBuscar" placeholder="🔎 Buscar cliente…" oninput="renderHistorial()"></div>
     <div class="card"><div class="card-h"><span>Visitas</span><span id="hCount" style="font-weight:500;color:var(--gray-400)"></span></div><div id="histList"></div></div>
+  </div>
+
+  <!-- AGENDA SEMANAL -->
+  <div class="screen" id="sAgenda">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+      <button class="btn btn-sec" onclick="agNav(-1)" style="flex:0 0 46px;font-size:18px;padding:6px">‹</button>
+      <div id="agWeekLbl" style="flex:1;text-align:center;font-weight:700;font-size:12.5px"></div>
+      <button class="btn btn-sec" onclick="agNav(1)" style="flex:0 0 46px;font-size:18px;padding:6px">›</button>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:10px">
+      <button class="btn btn-sec" onclick="agNav(0,true)" style="flex:0 0 auto;font-size:12px;padding:7px 12px">📍 Hoy</button>
+      <select id="agFiltroCom" onchange="renderAgenda()" style="flex:1"></select>
+    </div>
+    <div id="agDays"></div>
   </div>
 
 </div>
@@ -823,8 +838,8 @@ const sb = {
 const ROLES = { gerente:{label:'Gerente',editar:true}, tecnico:{label:'Comercial',editar:true}, supervisor:{label:'Supervisor de planta',editar:true}, planta:{label:'Planta',editar:false}, lectura:{label:'Solo lectura',editar:false} };
 // Qué módulos ve cada rol. Editar acá para ajustar accesos.
 const ROL_MODULOS = {
-  gerente:    ['visita','clientes','historial','crm','viaticos','cotizaciones','ot','formulas','inventario','caja','usuarios'],
-  tecnico:    ['visita','clientes','historial','crm','viaticos','cotizaciones'],
+  gerente:    ['visita','clientes','historial','crm','viaticos','cotizaciones','ot','formulas','inventario','caja','usuarios','agenda'],
+  tecnico:    ['visita','clientes','historial','crm','viaticos','cotizaciones','agenda'],
   supervisor: ['ot','formulas','inventario','caja'],
   planta:     ['inventario','caja'],
   lectura:    ['clientes','historial','crm']
@@ -904,6 +919,7 @@ function applyRoleUI(){
   showEl('tileVisitaCom', puedeVer('visita') && canEdit());
   showEl('tileClientes', puedeVer('clientes'));
   showEl('tileHistorial', puedeVer('historial'));
+  showEl('tileAgenda', puedeVer('agenda'));
   showEl('tileCrm', puedeVer('crm'));
   showEl('tileViat', puedeVer('viaticos'));
   showEl('tileCotiz', puedeVer('cotizaciones'));
@@ -923,13 +939,13 @@ function applyRoleUI(){
 // ══════════════════════════════════════════════════════════
 function cliRow(c){ return { id:c.id, nombre:c.nombre||'', codigo:c.codigo||'', ruc:c.ruc||'', direccion:c.direccion||'', contacto:c.contacto||'', tel:c.tel||'', email:c.email||'', ubicacion:c.ubicacion||'', obs:c.obs||'', estado:c.estado||'', prioridad:c.prioridad||'', comercial:c.comercial||'', prox_fecha:c.prox_fecha||null, prox_nota:c.prox_nota||'', seguimientos:c.seguimientos||[], ts:c.ts }; }
 function rowCli(r){ return { id:r.id, nombre:r.nombre||'', codigo:r.codigo||'', ruc:r.ruc||'', direccion:r.direccion||'', contacto:r.contacto||'', tel:r.tel||'', email:r.email||'', ubicacion:r.ubicacion||'', obs:r.obs||'', estado:r.estado||'', prioridad:r.prioridad||'', comercial:r.comercial||'', prox_fecha:r.prox_fecha||'', prox_nota:r.prox_nota||'', seguimientos:(typeof r.seguimientos==='string'?(()=>{try{return JSON.parse(r.seguimientos)}catch{return[]}})():(r.seguimientos||[])), ts:r.ts }; }
-function estRow(e){ return { id:e.id, cliente_id:e.cliente_id||'', nombre:e.nombre||'', zona:e.zona||'', hato:e.hato||[], lotes:e.lotes||[], obs:e.obs||'', ts:e.ts }; }
-function rowEst(r){ const p=x=>typeof x==='string'?(()=>{try{return JSON.parse(x)}catch{return[]}})():(x||[]); return { id:r.id, cliente_id:r.cliente_id||'', nombre:r.nombre||'', zona:r.zona||'', hato:p(r.hato), lotes:p(r.lotes), obs:r.obs||'', ts:r.ts }; }
+function estRow(e){ return { id:e.id, cliente_id:e.cliente_id||'', nombre:e.nombre||'', zona:e.zona||'', ubicacion:e.ubicacion||'', hato:e.hato||[], lotes:e.lotes||[], obs:e.obs||'', ts:e.ts }; }
+function rowEst(r){ const p=x=>typeof x==='string'?(()=>{try{return JSON.parse(x)}catch{return[]}})():(x||[]); return { id:r.id, cliente_id:r.cliente_id||'', nombre:r.nombre||'', zona:r.zona||'', ubicacion:r.ubicacion||'', hato:p(r.hato), lotes:p(r.lotes), obs:r.obs||'', ts:r.ts }; }
 function visRow(v){ return { id:v.id, tipo:v.tipo||'tecnica', cliente_id:v.cliente_id||'', estancia_id:v.estancia_id||'', fecha:v.fecha||null, tecnico:v.tecnico||'', evaluaciones:(v.evaluaciones||visitaEvals(v)), comercial:(v.comercial||null), diagnostico:v.diagnostico||'', recomendacion:v.recomendacion||'', proxima:v.proxima||null, ts:v.ts }; }
 function rowVis(r){ const pj=x=>typeof x==='string'?(()=>{try{return JSON.parse(x)}catch{return null}})():x; const p=x=>{ const v=pj(x); return Array.isArray(v)?v:[]; }; return { id:r.id, tipo:r.tipo||'tecnica', cliente_id:r.cliente_id||'', estancia_id:r.estancia_id||'', fecha:r.fecha||'', tecnico:r.tecnico||'', evaluaciones:p(r.evaluaciones), comercial:(pj(r.comercial)||null), diagnostico:r.diagnostico||'', recomendacion:r.recomendacion||'', proxima:r.proxima||'', ts:r.ts }; }
 const SYNC_DEFS = {
   clientes:{ get:getClientes, save:saveClientes, table:'clientes', toRow:cliRow, fromRow:rowCli, toRowSafe:(c)=>{ const r=cliRow(c); ['codigo','estado','prioridad','comercial','prox_fecha','prox_nota','seguimientos'].forEach(k=>delete r[k]); return r; } },
-  estancias:{ get:getEstancias, save:saveEstancias, table:'estancias', toRow:estRow, fromRow:rowEst },
+  estancias:{ get:getEstancias, save:saveEstancias, table:'estancias', toRow:estRow, fromRow:rowEst, toRowSafe:(e)=>{ const r=estRow(e); delete r.ubicacion; return r; } },
   visitas:{ get:getVisitas, save:saveVisitas, table:'visitas', toRow:visRow, fromRow:rowVis, toRowSafe:(v)=>{ const r=visRow(v); delete r.tipo; delete r.comercial; return r; } },
   ot:{ get:getOTs, save:saveOTs, table:'bio_ot', toRow:otRow, fromRow:rowOT },
   mov:{ get:getMovs, save:saveMovs, table:'bio_mov', toRow:movRow, fromRow:rowMov, toRowSafe:(m)=>{ const r=movRow(m); delete r.moneda; delete r.costo_orig; delete r.tc; return r; } },
@@ -942,6 +958,7 @@ const SYNC_DEFS = {
   formula:{ get:getFormulasExtra, save:saveFormulasExtra, table:'bio_formulas', toRow:formulaRow, fromRow:rowFormula },
   ptmov:{ get:getPtMovs, save:savePtMovs, table:'bio_ptmov', toRow:ptmovRow, fromRow:rowPtmov },
   garantia:{ get:getGarantias, save:saveGarantias, table:'bio_garantias', toRow:garRow, fromRow:rowGar },
+  agenda:{ get:getAgenda, save:saveAgenda, table:'bio_agenda', toRow:agRow, fromRow:rowAg },
 };
 function formulaRow(f){ return { id:f.id||('FM-'+(f.c||f.n)), c:f.c||'', n:f.n||'', kg:Number(f.kg)||0, ins:f.ins||[], ts:f.ts||null }; }
 function rowFormula(r){ let ins=r.ins; if(typeof ins==='string'){ try{ ins=JSON.parse(ins); }catch{ ins=[]; } } return { id:r.id, c:r.c||'', n:r.n||'', kg:Number(r.kg)||0, ins:Array.isArray(ins)?ins:[], custom:true, ts:r.ts }; }
@@ -990,7 +1007,7 @@ async function cloudPull(name){
     d.save(Object.values(merged));
   }catch(e){}
 }
-async function cloudPullAll(){ if(!AUTH_ON) return; await cloudPull('clientes'); await cloudPull('estancias'); await cloudPull('visitas'); await cloudPull('ot'); await cloudPull('mov'); await cloudPull('caja'); await cloudPull('viat'); await cloudPull('insumo'); await cloudPull('precio'); await cloudPull('cotiz'); await cloudPull('insprec'); await cloudPull('ptmov'); await cloudPull('garantia'); await pullPricingCfg(); refreshVista(); }
+async function cloudPullAll(){ if(!AUTH_ON) return; await cloudPull('clientes'); await cloudPull('estancias'); await cloudPull('visitas'); await cloudPull('ot'); await cloudPull('mov'); await cloudPull('caja'); await cloudPull('viat'); await cloudPull('insumo'); await cloudPull('precio'); await cloudPull('cotiz'); await cloudPull('insprec'); await cloudPull('ptmov'); await cloudPull('garantia'); await cloudPull('agenda'); await pullPricingCfg(); refreshVista(); }
 function refreshVista(){ const act=document.querySelector('.screen.active'); if(!act) return;
   if(act.id==='sHome') renderHome(); else if(act.id==='sClientes') renderClientes();
   else if(act.id==='sCliente'&&curCliente) abrirCliente(curCliente); else if(act.id==='sHistorial') renderHistorial();
@@ -998,7 +1015,8 @@ function refreshVista(){ const act=document.querySelector('.screen.active'); if(
   else if(act.id==='sViaticos') renderViatList(); else if(act.id==='sViatDet') renderViatDet();
   else if(act.id==='sCrm') renderCrm();
   else if(act.id==='sCotiz') renderCotizList(); else if(act.id==='sPrecios') renderPrecios(); else if(act.id==='sInsPrec') renderInsPrec();
-  else if(act.id==='sProductos'){ if(_prodTab==='inv') renderProductosInv(); else if(_prodTab==='gar') renderProductosGar(); else renderProductosCat(); } }
+  else if(act.id==='sProductos'){ if(_prodTab==='inv') renderProductosInv(); else if(_prodTab==='gar') renderProductosGar(); else renderProductosCat(); }
+  else if(act.id==='sAgenda') renderAgenda(); }
 function startSync(){ if(!AUTH_ON) return; cloudPullAll(); if(syncTimer) clearInterval(syncTimer); syncTimer=setInterval(cloudPullAll, 30000); }
 
 let curCliente=null, editVisitaId=null, curSub='Visitas técnicas a campo', _lotesEdit=[], _evals=[], _estEdit=[];
@@ -1017,6 +1035,7 @@ function showScreen(id,titulo,sub,back){
 function reopenScreen(id){ _navBacking=true; try{ switch(id){
     case 'sClientes': openClientes(); break;
     case 'sHistorial': openHistorial(); break;
+    case 'sAgenda': openAgenda(); break;
     case 'sCliente': curCliente?abrirCliente(curCliente):openClientes(); break;
     case 'sCrm': openCrm(); break;
     case 'sCotiz': openCotiz(); break;
@@ -1224,7 +1243,8 @@ function abrirCliente(id){
   gs('estList').innerHTML=ests.length? ests.map(e=>{
     const hato=(e.hato||[]).filter(h=>h.cabezas).map(h=>`${h.categoria} ${h.cabezas}`).join(' · ');
     const nl=(e.lotes||[]).length;
-    return `<div class="li" onclick="estanciaModal('${e.id}')"><div style="min-width:0"><div class="li-t">${esc(e.nombre)}</div><div class="li-s">${e.zona?esc(e.zona)+' · ':''}${hato||'sin hato cargado'}${nl?' · '+nl+' lote'+(nl!==1?'s':''):''}</div></div><div class="li-chev">✎</div></div>`;
+    const ubic=e.ubicacion?`<a href="${esc(e.ubicacion)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Abrir ubicación" style="flex-shrink:0;text-decoration:none;font-size:18px;padding:0 6px">📍</a>`:'';
+    return `<div class="li" onclick="estanciaModal('${e.id}')"><div style="min-width:0"><div class="li-t">${esc(e.nombre)}</div><div class="li-s">${e.zona?esc(e.zona)+' · ':''}${hato||'sin hato cargado'}${nl?' · '+nl+' lote'+(nl!==1?'s':''):''}</div></div>${ubic}<div class="li-chev">✎</div></div>`;
   }).join('') : '<div class="empty"><b>Paso 2:</b> cargá la primera estancia y su hato.<br>Tocá <span style="color:var(--green);font-weight:700">＋ Agregar</span> arriba a la derecha.</div>';
   const vis=visitasDe(id).slice().sort((a,b)=>String(b.fecha||'').localeCompare(String(a.fecha||'')));
   gs('cliVisCount').textContent=vis.length?vis.length:'';
@@ -1238,6 +1258,7 @@ function estanciaModal(id){
   gs('modalBox').innerHTML=`<h3>${e?'Editar':'Nueva'} estancia</h3>
     <label class="fl">Nombre de la estancia</label><input id="mEsNombre" value="${esc(e&&e.nombre)}" placeholder="Ej: La Rosita">
     <label class="fl">Zona</label><input id="mEsZona" value="${esc(e&&e.zona)}" placeholder="Ej: Chaco">
+    <label class="fl">Ubicación <span style="color:var(--gray-400);font-weight:400">(pegá el link de ubicación de WhatsApp o Google Maps)</span></label><input id="mEsUbic" value="${esc(e&&e.ubicacion)}" placeholder="https://maps.google.com/?q=…" autocomplete="off">
     <div class="sect-t" style="margin-top:14px">Hato (cabezas por categoría)</div>
     ${CATEGORIAS.map((c,i)=>{ const h=hato.find(x=>x.categoria===c)||{}; return `<div style="display:flex;align-items:center;gap:10px;margin:6px 0"><span class="chip ${catClass(c)}" style="width:96px">${c}</span><input type="number" id="mHato${i}" value="${h.cabezas!=null?h.cabezas:''}" placeholder="0" inputmode="numeric"></div>`; }).join('')}
     <div class="sect-t" style="margin-top:14px">Lotes (opcional)</div>
@@ -1269,7 +1290,7 @@ function guardarEstancia(id){
   syncLotesEdit();
   const lotes=_lotesEdit.filter(l=>String(l.nombre||'').trim()).map((l,i)=>({id:l.id||('LT-'+Date.now()+'-'+i),categoria:l.categoria,nombre:String(l.nombre).trim(),cabezas:num(l.cabezas)}));
   let es=getEstancias(); let e=id?es.find(x=>x.id===id):null;
-  const data={cliente_id:curCliente,nombre,zona:gs('mEsZona').value.trim(),hato,lotes,obs:gs('mEsObs').value.trim()};
+  const data={cliente_id:curCliente,nombre,zona:gs('mEsZona').value.trim(),ubicacion:gs('mEsUbic').value.trim(),hato,lotes,obs:gs('mEsObs').value.trim()};
   let savedId=id;
   if(e){ Object.assign(e,data); e.ts=new Date().toISOString(); e.pending=true; } else { es.push({id:'ES-'+Date.now(),...data,ts:new Date().toISOString(),pending:true}); savedId=es[es.length-1].id; }
   saveEstancias(es); cloudPush('estancias', es.find(x=>x.id===savedId));
@@ -2669,6 +2690,63 @@ function garPrint(keyEnc){ const key=decodeURIComponent(keyEnc); const p=precioL
 }
 // garantías (con datos) correspondientes a los ítems de una cotización
 function garForCotizItems(items){ const byName={}; precioList().forEach(p=>{ byName[String(p.n).trim().toLowerCase()]={key:precioKey(p),p}; }); const out=[]; (items||[]).forEach(i=>{ const m=byName[String(i.nombre||'').trim().toLowerCase()]; if(!m) return; const g=garantiaDe(m.key); if(garTieneDatos(g) && !out.some(o=>o.key===m.key)){ out.push({key:m.key, nom:i.nombre, g, p:m.p}); } }); return out; }
+
+// ══ AGENDA SEMANAL (plan de comerciales: visitas técnicas, comerciales y otras actividades por día/hora) ══
+const AG_TIPOS=[['tecnica','Visita técnica','#166534','#dcfce7'],['comercial','Visita comercial','#1e3f63','#dbeafe'],['otra','Otra actividad','#6b7280','#eceef2']];
+let _agOffset=0, _agFiltroCom='';
+function getAgenda(){ return getArr('bio:agenda'); }
+function saveAgenda(a){ setArr('bio:agenda',a); }
+function agRow(a){ return { id:a.id, fecha:a.fecha||null, hora:a.hora||'', tipo:a.tipo||'otra', titulo:a.titulo||'', lugar:a.lugar||'', cliente_id:a.cliente_id||'', comercial:a.comercial||'', nota:a.nota||'', estado:a.estado||'pendiente', ts:a.ts||null }; }
+function rowAg(r){ return { id:r.id, fecha:r.fecha||'', hora:r.hora||'', tipo:r.tipo||'otra', titulo:r.titulo||'', lugar:r.lugar||'', cliente_id:r.cliente_id||'', comercial:r.comercial||'', nota:r.nota||'', estado:r.estado||'pendiente', ts:r.ts, pending:false }; }
+function agTipo(t){ return AG_TIPOS.find(x=>x[0]===t)||AG_TIPOS[2]; }
+function _ymd(d){ const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), da=String(d.getDate()).padStart(2,'0'); return y+'-'+m+'-'+da; }
+function _monday(offset){ const d=new Date(hoy()+'T00:00:00'); const wd=(d.getDay()+6)%7; d.setDate(d.getDate()-wd+(offset||0)*7); return d; }
+function miNombre(){ return (getSession()&&getSession().nombre)||localStorage.getItem('bio:tecnico')||''; }
+function agComerciales(){ const s=new Set(); getAgenda().forEach(a=>{ if(a.comercial) s.add(a.comercial); }); const me=miNombre(); if(me) s.add(me); return [...s].sort((a,b)=>a.localeCompare(b)); }
+function openAgenda(){ if(!puedeVer('agenda')){ showToast('Sin permiso'); return; } showScreen('sAgenda','Agenda semanal','Plan de la semana',true); _agOffset=0; _agFiltroCom=esGerente()?'':miNombre(); renderAgenda(); }
+function agNav(delta, irHoy){ if(irHoy) _agOffset=0; else _agOffset+=delta; renderAgenda(); }
+function renderAgenda(){
+  const mon=_monday(_agOffset); const dias=[]; for(let i=0;i<7;i++){ const d=new Date(mon); d.setDate(mon.getDate()+i); dias.push(d); }
+  const wl=gs('agWeekLbl'); if(wl) wl.textContent=fmtFecha(_ymd(dias[0]))+' al '+fmtFecha(_ymd(dias[6]));
+  const fc=gs('agFiltroCom'); if(fc){ if(esGerente()){ fc.style.display=''; const coms=agComerciales(); fc.innerHTML='<option value="">Todos los comerciales</option>'+coms.map(c=>`<option ${_agFiltroCom===c?'selected':''}>${esc(c)}</option>`).join(''); _agFiltroCom=fc.value; } else fc.style.display='none'; }
+  const com = esGerente()? _agFiltroCom : miNombre();
+  const DOW=['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo']; const hoyStr=hoy();
+  gs('agDays').innerHTML=dias.map((d,i)=>{ const ymd=_ymd(d); let acts=getAgenda().filter(a=>a.fecha===ymd); if(com) acts=acts.filter(a=>String(a.comercial||'')===com);
+    acts.sort((a,b)=>String(a.hora||'').localeCompare(String(b.hora||'')));
+    const esHoy=hoyStr===ymd;
+    const items=acts.map(a=>{ const tp=agTipo(a.tipo); const done=a.estado==='hecha';
+      return `<div style="display:flex;gap:8px;align-items:center;padding:7px 12px;border-bottom:1px solid var(--gray-100)${done?';opacity:.55':''}">
+        <div onclick="agToggle('${a.id}')" style="cursor:pointer;font-size:16px;flex-shrink:0">${done?'✅':'⬜'}</div>
+        <div style="min-width:0;flex:1" onclick="agActModal('${ymd}','${a.id}')">
+          <div style="font-size:12px;color:var(--gray-800)${done?';text-decoration:line-through':''}"><b>${a.hora||'--:--'}</b> <span class="chip" style="background:${tp[3]};color:${tp[2]};font-size:10px">${tp[1]}</span> ${esc(a.titulo)}</div>
+          <div style="font-size:10px;color:var(--gray-400)">${a.lugar?esc(a.lugar):''}${(a.lugar&&esGerente()&&a.comercial)?' · ':''}${(esGerente()&&a.comercial)?esc(a.comercial):''}${a.nota?' · '+esc(a.nota):''}</div>
+        </div>
+        ${canEdit()?`<div onclick="agBorrar('${a.id}')" style="cursor:pointer;color:var(--red);flex-shrink:0;padding:0 2px">🗑</div>`:''}
+      </div>`; }).join('') || '<div style="font-size:11px;color:var(--gray-400);padding:6px 12px">Sin actividades</div>';
+    return `<div class="card" style="margin-bottom:8px"><div class="card-h" style="display:flex;justify-content:space-between;align-items:center;${esHoy?'color:var(--green)':''}"><span>${DOW[i]} ${fmtFecha(ymd).slice(0,5)}${esHoy?' · hoy':''}</span>${canEdit()?`<span onclick="agActModal('${ymd}','')" style="cursor:pointer;color:var(--green);font-weight:700;font-size:16px">＋</span>`:''}</div>${items}</div>`;
+  }).join('');
+}
+function agActModal(fecha, id){ if(!canEdit()){ showToast('Tu rol es de solo lectura'); return; } const a=id?getAgenda().find(x=>x.id===id):null;
+  gs('modalBox').innerHTML=`<h3>${a?'Editar':'Nueva'} actividad</h3>
+    <div class="row2"><div><label class="fl">Fecha</label><input type="date" id="agFecha" value="${a?a.fecha:fecha}"></div><div><label class="fl">Hora</label><input type="time" id="agHora" value="${a?a.hora:''}"></div></div>
+    <label class="fl">Tipo</label><select id="agTipoSel">${AG_TIPOS.map(t=>`<option value="${t[0]}" ${a&&a.tipo===t[0]?'selected':''}>${t[1]}</option>`).join('')}</select>
+    <label class="fl">Título / cliente</label><input id="agTitulo" list="agCliList" value="${esc(a&&a.titulo)}" placeholder="ej: Visita a Estancia La Rosita" autocomplete="off">
+    <datalist id="agCliList">${getClientes().map(c=>`<option value="${esc(c.nombre)}">`).join('')}</datalist>
+    <label class="fl">Lugar</label><input id="agLugar" value="${esc(a&&a.lugar)}" placeholder="zona / ciudad" autocomplete="off">
+    <label class="fl">Comercial</label><input id="agComercial" value="${esc(a?a.comercial:miNombre())}" autocomplete="off">
+    <label class="fl">Nota</label><textarea id="agNota" placeholder="opcional">${esc(a&&a.nota)}</textarea>
+    <div class="row2" style="margin-top:10px">${a?`<button class="btn btn-sec" onclick="agBorrar('${a.id}')" style="color:var(--red)">Borrar</button>`:'<button class="btn btn-sec" onclick="cerrarModal()">Cancelar</button>'}<button class="btn btn-primary" onclick="agGuardar('${a?a.id:''}')">Guardar</button></div>`;
+  gs('modal').classList.add('show');
+}
+function agGuardar(id){ if(!canEdit()) return; const fecha=gs('agFecha').value; if(!fecha){ showToast('Elegí la fecha'); return; } const titulo=(gs('agTitulo').value||'').trim(); if(!titulo){ showToast('Poné un título'); return; }
+  const prev=id?getAgenda().find(x=>x.id===id):null;
+  const a={ id:id||('AG-'+Date.now()), fecha, hora:gs('agHora').value||'', tipo:gs('agTipoSel').value, titulo, lugar:(gs('agLugar').value||'').trim(), cliente_id:(prev&&prev.cliente_id)||'', comercial:(gs('agComercial').value||'').trim(), nota:(gs('agNota').value||'').trim(), estado:(prev&&prev.estado)||'pendiente', ts:new Date().toISOString(), pending:true };
+  if(a.comercial) localStorage.setItem('bio:tecnico',a.comercial);
+  saveAgenda([a, ...getAgenda().filter(x=>x.id!==a.id)]); if(typeof cloudPush==='function') cloudPush('agenda',a);
+  cerrarModal(); showToast('✓ Actividad guardada'); renderAgenda();
+}
+function agToggle(id){ if(!canEdit()) return; const a=getAgenda().find(x=>x.id===id); if(!a) return; a.estado=a.estado==='hecha'?'pendiente':'hecha'; a.ts=new Date().toISOString(); a.pending=true; saveAgenda(getAgenda().map(x=>x.id===id?a:x)); if(typeof cloudPush==='function') cloudPush('agenda',a); renderAgenda(); }
+function agBorrar(id){ if(!canEdit()) return; if(!confirm('¿Borrar esta actividad?')) return; saveAgenda(getAgenda().filter(x=>x.id!==id)); if(typeof cloudDelete==='function') cloudDelete('agenda',id); cerrarModal(); renderAgenda(); }
 
 // ── INFORME PDF (molde del .docx) ──
 function informeComercialPDF(id){
