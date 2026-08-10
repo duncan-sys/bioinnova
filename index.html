@@ -958,7 +958,7 @@ const SYNC_DEFS = {
   formula:{ get:getFormulasExtra, save:saveFormulasExtra, table:'bio_formulas', toRow:formulaRow, fromRow:rowFormula },
   ptmov:{ get:getPtMovs, save:savePtMovs, table:'bio_ptmov', toRow:ptmovRow, fromRow:rowPtmov },
   garantia:{ get:getGarantias, save:saveGarantias, table:'bio_garantias', toRow:garRow, fromRow:rowGar },
-  agenda:{ get:getAgenda, save:saveAgenda, table:'bio_agenda', toRow:agRow, fromRow:rowAg },
+  agenda:{ get:getAgenda, save:saveAgenda, table:'bio_agenda', toRow:agRow, fromRow:rowAg, toRowSafe:(a)=>{ const r=agRow(a); delete r.estancia_id; return r; } },
 };
 function formulaRow(f){ return { id:f.id||('FM-'+(f.c||f.n)), c:f.c||'', n:f.n||'', kg:Number(f.kg)||0, ins:f.ins||[], ts:f.ts||null }; }
 function rowFormula(r){ let ins=r.ins; if(typeof ins==='string'){ try{ ins=JSON.parse(ins); }catch{ ins=[]; } } return { id:r.id, c:r.c||'', n:r.n||'', kg:Number(r.kg)||0, ins:Array.isArray(ins)?ins:[], custom:true, ts:r.ts }; }
@@ -2696,8 +2696,8 @@ const AG_TIPOS=[['tecnica','Visita técnica','#166534','#dcfce7'],['comercial','
 let _agOffset=0, _agFiltroCom='';
 function getAgenda(){ return getArr('bio:agenda'); }
 function saveAgenda(a){ setArr('bio:agenda',a); }
-function agRow(a){ return { id:a.id, fecha:a.fecha||null, hora:a.hora||'', tipo:a.tipo||'otra', titulo:a.titulo||'', lugar:a.lugar||'', cliente_id:a.cliente_id||'', comercial:a.comercial||'', nota:a.nota||'', estado:a.estado||'pendiente', ts:a.ts||null }; }
-function rowAg(r){ return { id:r.id, fecha:r.fecha||'', hora:r.hora||'', tipo:r.tipo||'otra', titulo:r.titulo||'', lugar:r.lugar||'', cliente_id:r.cliente_id||'', comercial:r.comercial||'', nota:r.nota||'', estado:r.estado||'pendiente', ts:r.ts, pending:false }; }
+function agRow(a){ return { id:a.id, fecha:a.fecha||null, hora:a.hora||'', tipo:a.tipo||'otra', titulo:a.titulo||'', lugar:a.lugar||'', cliente_id:a.cliente_id||'', estancia_id:a.estancia_id||'', comercial:a.comercial||'', nota:a.nota||'', estado:a.estado||'pendiente', ts:a.ts||null }; }
+function rowAg(r){ return { id:r.id, fecha:r.fecha||'', hora:r.hora||'', tipo:r.tipo||'otra', titulo:r.titulo||'', lugar:r.lugar||'', cliente_id:r.cliente_id||'', estancia_id:r.estancia_id||'', comercial:r.comercial||'', nota:r.nota||'', estado:r.estado||'pendiente', ts:r.ts, pending:false }; }
 function agTipo(t){ return AG_TIPOS.find(x=>x[0]===t)||AG_TIPOS[2]; }
 function _ymd(d){ const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), da=String(d.getDate()).padStart(2,'0'); return y+'-'+m+'-'+da; }
 function _monday(offset){ const d=new Date(hoy()+'T00:00:00'); const wd=(d.getDay()+6)%7; d.setDate(d.getDate()-wd+(offset||0)*7); return d; }
@@ -2719,7 +2719,7 @@ function renderAgenda(){
         <div onclick="agToggle('${a.id}')" style="cursor:pointer;font-size:16px;flex-shrink:0">${done?'✅':'⬜'}</div>
         <div style="min-width:0;flex:1" onclick="agActModal('${ymd}','${a.id}')">
           <div style="font-size:12px;color:var(--gray-800)${done?';text-decoration:line-through':''}"><b>${a.hora||'--:--'}</b> <span class="chip" style="background:${tp[3]};color:${tp[2]};font-size:10px">${tp[1]}</span> ${esc(a.titulo)}</div>
-          <div style="font-size:10px;color:var(--gray-400)">${a.lugar?esc(a.lugar):''}${(a.lugar&&esGerente()&&a.comercial)?' · ':''}${(esGerente()&&a.comercial)?esc(a.comercial):''}${a.nota?' · '+esc(a.nota):''}</div>
+          <div style="font-size:10px;color:var(--gray-400)">${a.estancia_id?('🏡 '+esc((estanciaById(a.estancia_id)||{}).nombre||'')):''}${(a.estancia_id&&a.lugar)?' · ':''}${a.lugar?esc(a.lugar):''}${((a.estancia_id||a.lugar)&&esGerente()&&a.comercial)?' · ':''}${(esGerente()&&a.comercial)?esc(a.comercial):''}${a.nota?' · '+esc(a.nota):''}</div>
         </div>
         ${canEdit()?`<div onclick="agBorrar('${a.id}')" style="cursor:pointer;color:var(--red);flex-shrink:0;padding:0 2px">🗑</div>`:''}
       </div>`; }).join('') || '<div style="font-size:11px;color:var(--gray-400);padding:6px 12px">Sin actividades</div>';
@@ -2730,17 +2730,27 @@ function agActModal(fecha, id){ if(!canEdit()){ showToast('Tu rol es de solo lec
   gs('modalBox').innerHTML=`<h3>${a?'Editar':'Nueva'} actividad</h3>
     <div class="row2"><div><label class="fl">Fecha</label><input type="date" id="agFecha" value="${a?a.fecha:fecha}"></div><div><label class="fl">Hora</label><input type="time" id="agHora" value="${a?a.hora:''}"></div></div>
     <label class="fl">Tipo</label><select id="agTipoSel">${AG_TIPOS.map(t=>`<option value="${t[0]}" ${a&&a.tipo===t[0]?'selected':''}>${t[1]}</option>`).join('')}</select>
-    <label class="fl">Título / cliente</label><input id="agTitulo" list="agCliList" value="${esc(a&&a.titulo)}" placeholder="ej: Visita a Estancia La Rosita" autocomplete="off">
-    <datalist id="agCliList">${getClientes().map(c=>`<option value="${esc(c.nombre)}">`).join('')}</datalist>
+    <label class="fl">Cliente <span style="color:var(--gray-400);font-weight:400">(opcional)</span></label>
+    <select id="agCliente" onchange="agClienteChange()"><option value="">— Libre / sin cliente —</option>${getClientes().slice().sort((x,y)=>x.nombre.localeCompare(y.nombre)).map(c=>`<option value="${c.id}" ${a&&a.cliente_id===c.id?'selected':''}>${esc(c.nombre)}</option>`).join('')}</select>
+    <div id="agEstWrap" style="display:none"><label class="fl">Estancia a visitar</label><select id="agEstancia"></select></div>
+    <label class="fl">Título / descripción</label><input id="agTitulo" value="${esc(a&&a.titulo)}" placeholder="opcional si elegís un cliente" autocomplete="off">
     <label class="fl">Lugar</label><input id="agLugar" value="${esc(a&&a.lugar)}" placeholder="zona / ciudad" autocomplete="off">
     <label class="fl">Comercial</label><input id="agComercial" value="${esc(a?a.comercial:miNombre())}" autocomplete="off">
     <label class="fl">Nota</label><textarea id="agNota" placeholder="opcional">${esc(a&&a.nota)}</textarea>
     <div class="row2" style="margin-top:10px">${a?`<button class="btn btn-sec" onclick="agBorrar('${a.id}')" style="color:var(--red)">Borrar</button>`:'<button class="btn btn-sec" onclick="cerrarModal()">Cancelar</button>'}<button class="btn btn-primary" onclick="agGuardar('${a?a.id:''}')">Guardar</button></div>`;
-  gs('modal').classList.add('show');
+  gs('modal').classList.add('show'); agClienteChange(a&&a.estancia_id);
 }
-function agGuardar(id){ if(!canEdit()) return; const fecha=gs('agFecha').value; if(!fecha){ showToast('Elegí la fecha'); return; } const titulo=(gs('agTitulo').value||'').trim(); if(!titulo){ showToast('Poné un título'); return; }
+function agClienteChange(selEst){ const cid=gs('agCliente')?gs('agCliente').value:''; const ests=cid?estanciasDe(cid):[]; const wrap=gs('agEstWrap'); const sel=gs('agEstancia'); if(!wrap||!sel) return;
+  if(cid && ests.length){ wrap.style.display=''; sel.innerHTML='<option value="">Toda la estancia / sin especificar</option>'+ests.map(e=>`<option value="${e.id}" ${selEst===e.id?'selected':''}>${esc(e.nombre)}${e.zona?' ('+esc(e.zona)+')':''}</option>`).join(''); }
+  else { wrap.style.display='none'; sel.innerHTML=''; }
+}
+function agGuardar(id){ if(!canEdit()) return; const fecha=gs('agFecha').value; if(!fecha){ showToast('Elegí la fecha'); return; }
+  const cid=(gs('agCliente')&&gs('agCliente').value)||''; const estId=(cid && gs('agEstWrap')&&gs('agEstWrap').style.display!=='none'&&gs('agEstancia'))?gs('agEstancia').value:'';
+  let titulo=(gs('agTitulo').value||'').trim();
+  if(!titulo && cid){ const cli=clienteById(cid); const est=estId?estanciaById(estId):null; titulo=((cli&&cli.nombre)||'')+(est?(' — '+est.nombre):''); titulo=titulo.trim(); }
+  if(!titulo){ showToast('Poné un título o elegí un cliente'); return; }
   const prev=id?getAgenda().find(x=>x.id===id):null;
-  const a={ id:id||('AG-'+Date.now()), fecha, hora:gs('agHora').value||'', tipo:gs('agTipoSel').value, titulo, lugar:(gs('agLugar').value||'').trim(), cliente_id:(prev&&prev.cliente_id)||'', comercial:(gs('agComercial').value||'').trim(), nota:(gs('agNota').value||'').trim(), estado:(prev&&prev.estado)||'pendiente', ts:new Date().toISOString(), pending:true };
+  const a={ id:id||('AG-'+Date.now()), fecha, hora:gs('agHora').value||'', tipo:gs('agTipoSel').value, titulo, lugar:(gs('agLugar').value||'').trim(), cliente_id:cid, estancia_id:estId, comercial:(gs('agComercial').value||'').trim(), nota:(gs('agNota').value||'').trim(), estado:(prev&&prev.estado)||'pendiente', ts:new Date().toISOString(), pending:true };
   if(a.comercial) localStorage.setItem('bio:tecnico',a.comercial);
   saveAgenda([a, ...getAgenda().filter(x=>x.id!==a.id)]); if(typeof cloudPush==='function') cloudPush('agenda',a);
   cerrarModal(); showToast('✓ Actividad guardada'); renderAgenda();
