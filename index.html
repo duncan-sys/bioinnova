@@ -253,7 +253,8 @@ textarea{resize:vertical;min-height:66px}
   <div class="screen" id="sProductos">
     <div style="display:flex;gap:6px;margin-bottom:10px">
       <button class="btn btn-primary" id="prodTabCat" style="flex:1" onclick="prodSetTab('cat')">📋 Catálogo</button>
-      <button class="btn btn-sec" id="prodTabInv" style="flex:1" onclick="prodSetTab('inv')">📦 Inventario PT</button>
+      <button class="btn btn-sec" id="prodTabInv" style="flex:1" onclick="prodSetTab('inv')">📦 Inventario</button>
+      <button class="btn btn-sec" id="prodTabGar" style="flex:1" onclick="prodSetTab('gar')">📄 Garantías</button>
     </div>
     <div id="prodCatWrap">
       <button class="btn btn-primary btn-block" id="btnNuevoProducto" style="margin-bottom:10px;display:none" onclick="productoEditor()">＋ Nuevo producto</button>
@@ -263,6 +264,10 @@ textarea{resize:vertical;min-height:66px}
     <div id="prodInvWrap" style="display:none">
       <div style="margin-bottom:10px"><input type="search" id="prodInvBuscar" placeholder="🔎 Buscar producto…" oninput="renderProductosInv()"></div>
       <div class="card"><div class="card-h"><span>Stock de productos terminados</span><span id="prodInvCount" style="font-weight:500;color:var(--gray-400)"></span></div><div id="prodInvList"></div></div>
+    </div>
+    <div id="prodGarWrap" style="display:none">
+      <div style="margin-bottom:10px"><input type="search" id="prodGarBuscar" placeholder="🔎 Buscar producto…" oninput="renderProductosGar()"></div>
+      <div class="card"><div class="card-h"><span>Índices de garantía</span><span id="prodGarCount" style="font-weight:500;color:var(--gray-400)"></span></div><div id="prodGarList"></div></div>
     </div>
   </div>
 
@@ -936,6 +941,7 @@ const SYNC_DEFS = {
   insprec:{ get:getInsPrecOv, save:saveInsPrecOv, table:'bio_insprec', toRow:insprecRow, fromRow:rowInsprec },
   formula:{ get:getFormulasExtra, save:saveFormulasExtra, table:'bio_formulas', toRow:formulaRow, fromRow:rowFormula },
   ptmov:{ get:getPtMovs, save:savePtMovs, table:'bio_ptmov', toRow:ptmovRow, fromRow:rowPtmov },
+  garantia:{ get:getGarantias, save:saveGarantias, table:'bio_garantias', toRow:garRow, fromRow:rowGar },
 };
 function formulaRow(f){ return { id:f.id||('FM-'+(f.c||f.n)), c:f.c||'', n:f.n||'', kg:Number(f.kg)||0, ins:f.ins||[], ts:f.ts||null }; }
 function rowFormula(r){ let ins=r.ins; if(typeof ins==='string'){ try{ ins=JSON.parse(ins); }catch{ ins=[]; } } return { id:r.id, c:r.c||'', n:r.n||'', kg:Number(r.kg)||0, ins:Array.isArray(ins)?ins:[], custom:true, ts:r.ts }; }
@@ -984,7 +990,7 @@ async function cloudPull(name){
     d.save(Object.values(merged));
   }catch(e){}
 }
-async function cloudPullAll(){ if(!AUTH_ON) return; await cloudPull('clientes'); await cloudPull('estancias'); await cloudPull('visitas'); await cloudPull('ot'); await cloudPull('mov'); await cloudPull('caja'); await cloudPull('viat'); await cloudPull('insumo'); await cloudPull('precio'); await cloudPull('cotiz'); await cloudPull('insprec'); await cloudPull('ptmov'); await pullPricingCfg(); refreshVista(); }
+async function cloudPullAll(){ if(!AUTH_ON) return; await cloudPull('clientes'); await cloudPull('estancias'); await cloudPull('visitas'); await cloudPull('ot'); await cloudPull('mov'); await cloudPull('caja'); await cloudPull('viat'); await cloudPull('insumo'); await cloudPull('precio'); await cloudPull('cotiz'); await cloudPull('insprec'); await cloudPull('ptmov'); await cloudPull('garantia'); await pullPricingCfg(); refreshVista(); }
 function refreshVista(){ const act=document.querySelector('.screen.active'); if(!act) return;
   if(act.id==='sHome') renderHome(); else if(act.id==='sClientes') renderClientes();
   else if(act.id==='sCliente'&&curCliente) abrirCliente(curCliente); else if(act.id==='sHistorial') renderHistorial();
@@ -992,7 +998,7 @@ function refreshVista(){ const act=document.querySelector('.screen.active'); if(
   else if(act.id==='sViaticos') renderViatList(); else if(act.id==='sViatDet') renderViatDet();
   else if(act.id==='sCrm') renderCrm();
   else if(act.id==='sCotiz') renderCotizList(); else if(act.id==='sPrecios') renderPrecios(); else if(act.id==='sInsPrec') renderInsPrec();
-  else if(act.id==='sProductos'){ if(_prodTab==='inv') renderProductosInv(); else renderProductosCat(); } }
+  else if(act.id==='sProductos'){ if(_prodTab==='inv') renderProductosInv(); else if(_prodTab==='gar') renderProductosGar(); else renderProductosCat(); } }
 function startSync(){ if(!AUTH_ON) return; cloudPullAll(); if(syncTimer) clearInterval(syncTimer); syncTimer=setInterval(cloudPullAll, 30000); }
 
 let curCliente=null, editVisitaId=null, curSub='Visitas técnicas a campo', _lotesEdit=[], _evals=[], _estEdit=[];
@@ -1915,6 +1921,7 @@ function cotizVer(id){ const c=getCotiz().find(x=>x.id===id); if(!c) return;
   gs('modalBox').innerHTML=`<h3>Cotización N° ${c.num}</h3><div style="font-size:12px;color:var(--gray-600);margin-bottom:6px">${esc(c.cliente)} · ${fmtFecha(c.fecha)} · ${COND_LBL[c.condicion]||''}${c.vendedor?'<br>Vendedor: '+esc(c.vendedor):''}</div>
    <table style="width:100%;border-collapse:collapse;font-size:12px"><tbody>${filas}${_sinTot?'':`${c.flete?`<tr><td>Flete</td><td></td><td style="text-align:right">${gsFmt(c.flete)}</td></tr>`:''}<tr style="border-top:2px solid var(--gray-300)"><td><b>Total</b></td><td></td><td style="text-align:right"><b>${gsFmt(c.total)}</b></td></tr>`}</tbody></table>${_sinTot?'<div style="font-size:10px;color:var(--gray-400)">Lista de precios (sin total general)</div>':''}
    <div class="row2" style="margin-top:12px"><button class="btn btn-sec" onclick="cotizEditar('${c.id}')">✎ Editar</button><button class="btn btn-amber" onclick="cotizPrint('${c.id}')">🖨️ Imprimir</button></div>
+   <button class="btn btn-sec btn-block" style="margin-top:8px" onclick="cotizPrint('${c.id}',true)">📎 Imprimir con índices de garantía</button>
    <button class="btn btn-sec btn-block" style="margin-top:8px;color:var(--red)" onclick="cotizBorrar('${c.id}')">Borrar</button>
    <button class="btn btn-ghost btn-block" style="margin-top:8px" onclick="cerrarModal()">Cerrar</button>`;
   gs('modal').classList.add('show');
@@ -1925,7 +1932,9 @@ function cotizEditar(id){ const c=getCotiz().find(x=>x.id===id); if(!c) return; 
   showScreen('sCotizNueva','Editar cotización','',true); cotizRecalc();
 }
 function cotizBorrar(id){ if(!confirm('¿Borrar esta cotización?')) return; saveCotiz(getCotiz().filter(x=>x.id!==id)); cloudDelete('cotiz',id); cerrarModal(); openCotiz(); }
-function cotizPrint(id){ const c=getCotiz().find(x=>x.id===id); if(!c) return; const w=window.open('','_blank'); if(!w){ showToast('Permití las ventanas emergentes'); return; }
+function cotizPrint(id, incluirGar){ const c=getCotiz().find(x=>x.id===id); if(!c) return;
+  if(incluirGar && !garForCotizItems(c.items||[]).length){ showToast('Ningún producto de esta cotización tiene garantía cargada'); return; }
+  const w=window.open('','_blank'); if(!w){ showToast('Permití las ventanas emergentes'); return; }
   const base=`${location.origin}${location.pathname.replace(/[^/]*$/,'')}logo.jpg`; const usd=c.moneda==='USD'; const dol=c.dolar||cotizDolar();
   const cli=getClientes().find(x=>x.id===c.cliente_id) || getClientes().find(x=>String(x.nombre||'').toLowerCase()===String(c.cliente||'').toLowerCase());
   const ruc=(cli&&cli.ruc)?cli.ruc:'RUC';
@@ -1970,6 +1979,7 @@ function cotizPrint(id){ const c=getCotiz().find(x=>x.id===id); if(!c) return; c
    <div class="close">En espera de una respuesta favorable me despido,<br>Atte</div>
    <div class="firma"><b>${esc(c.vendedor||'')}</b><br>Asesor técnico<br><b>Bioinnova S.A.</b></div>
    <div class="vh">Válido Hasta ${validoHasta}</div>
+   ${incluirGar?garForCotizItems(items).map(g=>`<div style="page-break-before:always;padding-top:6px"><div style="text-align:center;font-weight:700;font-size:12.5px;margin:10px 0;color:#2e5b8a">ÍNDICE DE GARANTÍA — ${esc(g.nom)}</div>${g.imgs.map(d=>`<img src="${d}" style="width:100%;border:1px solid #ccc;margin-bottom:8px">`).join('')}</div>`).join(''):''}
    <div class="noprint" style="text-align:center;margin-top:20px"><button onclick="window.print()" style="background:#2e5b8a;color:#fff;border:none;padding:10px 22px;border-radius:8px;cursor:pointer">🖨️ Imprimir / Guardar PDF</button></div>
    </div></body></html>`);
   w.document.close();
@@ -2463,10 +2473,10 @@ function prodKgBolsa(p){ const k=precioKey(p); const f=PL_FORMULAS.find(x=>preci
 function ptmovRow(m){ return { id:m.id, prod_key:m.prod_key||'', prod_cod:m.prod_cod||'', prod_nom:m.prod_nom||'', kg_bolsa:Number(m.kg_bolsa)||0, tipo:m.tipo||'produccion', bolsas:Number(m.bolsas)||0, motivo:m.motivo||'', cliente:m.cliente||'', ot_id:m.ot_id||'', ot_num:(m.ot_num!=null&&m.ot_num!=='')?String(m.ot_num):null, fecha:m.fecha||null, usuario:m.usuario||'', ts:m.ts||null }; }
 function rowPtmov(r){ return { id:r.id, prod_key:r.prod_key||'', prod_cod:r.prod_cod||'', prod_nom:r.prod_nom||'', kg_bolsa:Number(r.kg_bolsa)||0, tipo:r.tipo||'produccion', bolsas:Number(r.bolsas)||0, motivo:r.motivo||'', cliente:r.cliente||'', ot_id:r.ot_id||'', ot_num:(r.ot_num!=null?r.ot_num:''), fecha:r.fecha||'', usuario:r.usuario||'', ts:r.ts, pending:false }; }
 function openProductos(){ if(!(puedeVer('formulas')||puedeVer('inventario'))){ showToast('Sin permiso'); return; } showScreen('sProductos','Productos','Catálogo e inventario de terminados',true); prodSetTab(_prodTab||'cat'); }
-function prodSetTab(t){ _prodTab=t; const cat=t==='cat';
-  gs('prodCatWrap').style.display=cat?'':'none'; gs('prodInvWrap').style.display=cat?'none':'';
-  gs('prodTabCat').className='btn '+(cat?'btn-primary':'btn-sec'); gs('prodTabInv').className='btn '+(cat?'btn-sec':'btn-primary');
-  if(cat){ const b=gs('btnNuevoProducto'); if(b) b.style.display=puedeEditarFormula()?'':'none'; renderProductosCat(); } else renderProductosInv();
+function prodSetTab(t){ _prodTab=t; const cat=t==='cat', inv=t==='inv', gar=t==='gar';
+  gs('prodCatWrap').style.display=cat?'':'none'; gs('prodInvWrap').style.display=inv?'':'none'; if(gs('prodGarWrap')) gs('prodGarWrap').style.display=gar?'':'none';
+  gs('prodTabCat').className='btn '+(cat?'btn-primary':'btn-sec'); gs('prodTabInv').className='btn '+(inv?'btn-primary':'btn-sec'); if(gs('prodTabGar')) gs('prodTabGar').className='btn '+(gar?'btn-primary':'btn-sec');
+  if(cat){ const b=gs('btnNuevoProducto'); if(b) b.style.display=puedeEditarFormula()?'':'none'; renderProductosCat(); } else if(inv) renderProductosInv(); else renderProductosGar();
 }
 function renderProductosCat(){ const q=(gs('prodBuscar').value||'').trim().toLowerCase(); let ls=precioList(); if(q) ls=ls.filter(p=>((p.n||'')+' '+(p.c||'')).toLowerCase().includes(q)); if(gs('prodCount')) gs('prodCount').textContent=ls.length+' productos';
   gs('prodList').innerHTML=ls.map(p=>{ const key=precioKey(p); const st=ptStock(key); const fx=tieneFormula(p);
@@ -2566,6 +2576,49 @@ function ptAddFromOT(o){ if(!o||!o.bolsas) return; const key=precioKey({c:o.prod
   const m={ id:'PT-OT-'+o.id, prod_key:key, prod_cod:o.producto_cod||'', prod_nom:o.producto_nom||'', kg_bolsa:o.kg_bolsa||0, tipo:'produccion', bolsas:Math.abs(Number(o.bolsas)||0), motivo:'Producción OT', cliente:o.cliente||'', ot_id:o.id, ot_num:o.num, fecha:o.fecha||hoy(), usuario:(getSession()&&getSession().nombre)||'', ts:new Date().toISOString(), pending:true };
   const a=getPtMovs().filter(x=>x.ot_id!==o.id); a.unshift(m); savePtMovs(a); if(typeof cloudPush==='function') cloudPush('ptmov',m); }
 function ptRemoveFromOT(id){ getPtMovs().filter(m=>m.ot_id===id).forEach(m=>{ if(typeof cloudDelete==='function') cloudDelete('ptmov',m.id); }); savePtMovs(getPtMovs().filter(m=>m.ot_id!==id)); }
+
+// ══ ÍNDICES DE GARANTÍA (análisis garantizado, subido de PDF/foto · no editable · imprimible · adjuntable a cotización) ══
+function getGarantias(){ return getArr('bio:garantias'); }
+function saveGarantias(a){ setArr('bio:garantias',a); }
+function garantiaDe(key){ return getGarantias().find(g=>g.prod_key===key); }
+function garRow(g){ return { id:g.id, prod_key:g.prod_key||'', prod_nom:g.prod_nom||'', imgs:g.imgs||[], ts:g.ts||null }; }
+function rowGar(r){ let imgs=r.imgs; if(typeof imgs==='string'){ try{ imgs=JSON.parse(imgs); }catch{ imgs=[]; } } return { id:r.id, prod_key:r.prod_key||'', prod_nom:r.prod_nom||'', imgs:Array.isArray(imgs)?imgs:[], ts:r.ts, pending:false }; }
+function renderProductosGar(){ const q=(gs('prodGarBuscar').value||'').trim().toLowerCase(); let ls=precioList(); if(q) ls=ls.filter(p=>((p.n||'')+' '+(p.c||'')).toLowerCase().includes(q)); if(gs('prodGarCount')) gs('prodGarCount').textContent=ls.length+' productos';
+  gs('prodGarList').innerHTML=ls.map(p=>{ const key=precioKey(p); const g=garantiaDe(key); const n=g?(g.imgs||[]).length:0;
+    return `<div class="li" onclick="garVer('${encodeURIComponent(key)}')"><div style="min-width:0"><div class="li-t">${esc(p.n)}</div><div class="li-s">${p.c?esc(p.c)+' · ':''}${n?('<span style="color:var(--green)">✓ garantía cargada'+(n>1?' ('+n+' pág.)':'')+'</span>'):'<span style="color:var(--gray-400)">sin garantía</span>'}</div></div><div class="li-chev">${n?'📄':'＋'}</div></div>`; }).join('') || '<div class="empty">Sin productos.</div>';
+}
+function garVer(keyEnc){ const key=decodeURIComponent(keyEnc); const p=precioList().find(x=>precioKey(x)===key); if(!p) return; const g=garantiaDe(key); const imgs=(g&&g.imgs)||[]; const ed=esGerente();
+  const cont=imgs.length? imgs.map(d=>`<img src="${d}" style="width:100%;border:1px solid var(--gray-200);border-radius:8px;margin-bottom:8px">`).join('') : '<div class="empty">Sin garantía cargada.</div>';
+  gs('modalBox').innerHTML=`<h3>Índice de garantía</h3><div style="font-size:12px;color:var(--gray-600);margin-bottom:8px">${esc(p.n)}</div>
+    <div style="max-height:52vh;overflow:auto;background:var(--gray-100);border-radius:8px;padding:8px">${cont}</div>
+    ${ed?`<label class="btn btn-sec btn-block" style="margin-top:10px;cursor:pointer">📎 ${imgs.length?'Reemplazar':'Cargar'} garantía (PDF o foto)<input type="file" accept="image/*,application/pdf" onchange="garUpload('${keyEnc}',this)" style="display:none"></label>`:''}
+    <div class="row2" style="margin-top:8px">${imgs.length?`<button class="btn btn-amber" onclick="garPrint('${keyEnc}')">🖨️ Imprimir</button>`:'<div></div>'}${(ed&&imgs.length)?`<button class="btn btn-sec" style="color:var(--red)" onclick="garBorrar('${keyEnc}')">Quitar</button>`:'<div></div>'}</div>
+    <button class="btn btn-ghost btn-block" style="margin-top:8px" onclick="cerrarModal()">Cerrar</button>`;
+  gs('modal').classList.add('show');
+}
+function garCompress(file){ return new Promise((res,rej)=>{ const rd=new FileReader(); rd.onload=e=>{ const img=new Image(); img.onload=()=>{ const max=1400; let w=img.width,h=img.height; if(w>=h&&w>max){h=Math.round(h*max/w);w=max;} else if(h>w&&h>max){w=Math.round(w*max/h);h=max;} const cv=document.createElement('canvas'); cv.width=w; cv.height=h; cv.getContext('2d').drawImage(img,0,0,w,h); res(cv.toDataURL('image/jpeg',0.82)); }; img.onerror=rej; img.src=e.target.result; }; rd.onerror=rej; rd.readAsDataURL(file); }); }
+let _pdfjsP=null;
+function garLoadPdfjs(){ if(window.pdfjsLib) return Promise.resolve(window.pdfjsLib); if(_pdfjsP) return _pdfjsP; _pdfjsP=new Promise((res,rej)=>{ const s=document.createElement('script'); s.src='https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js'; s.onload=()=>{ try{ window.pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js'; }catch(e){} res(window.pdfjsLib); }; s.onerror=rej; document.head.appendChild(s); }); return _pdfjsP; }
+async function garPdfToImgs(file){ const lib=await garLoadPdfjs(); const buf=await file.arrayBuffer(); const pdf=await lib.getDocument({data:buf}).promise; const out=[]; const N=Math.min(pdf.numPages,6); for(let i=1;i<=N;i++){ const page=await pdf.getPage(i); const vp=page.getViewport({scale:1.6}); const cv=document.createElement('canvas'); cv.width=vp.width; cv.height=vp.height; await page.render({canvasContext:cv.getContext('2d'), viewport:vp}).promise; out.push(cv.toDataURL('image/jpeg',0.82)); } return out; }
+async function garUpload(keyEnc, input){ if(!esGerente()){ showToast('Solo el gerente'); return; } const f=input.files&&input.files[0]; input.value=''; if(!f) return; const key=decodeURIComponent(keyEnc); const p=precioList().find(x=>precioKey(x)===key); if(!p) return;
+  showToast('Procesando archivo…', 4000); let imgs=[];
+  try{ if(f.type==='application/pdf'){ imgs=await garPdfToImgs(f); } else if(f.type&&f.type.startsWith('image/')){ imgs=[await garCompress(f)]; } else { showToast('Subí una imagen o un PDF'); return; } }
+  catch(e){ showToast('No se pudo procesar el archivo'); return; }
+  if(!imgs.length){ showToast('No se pudo leer el archivo'); return; }
+  const ex=garantiaDe(key); const rec={ id:ex?ex.id:('GA-'+Date.now()), prod_key:key, prod_nom:p.n, imgs, ts:new Date().toISOString(), pending:true };
+  saveGarantias([rec, ...getGarantias().filter(g=>g.prod_key!==key)]);
+  if(typeof cloudPush==='function') cloudPush('garantia',rec);
+  showToast('✓ Garantía guardada'); garVer(keyEnc); renderProductosGar();
+}
+function garBorrar(keyEnc){ if(!esGerente()) return; if(!confirm('¿Quitar la garantía de este producto?')) return; const key=decodeURIComponent(keyEnc); const g=garantiaDe(key); if(g){ saveGarantias(getGarantias().filter(x=>x.prod_key!==key)); if(typeof cloudDelete==='function') cloudDelete('garantia', g.id); } cerrarModal(); renderProductosGar(); }
+function garPrint(keyEnc){ const key=decodeURIComponent(keyEnc); const p=precioList().find(x=>precioKey(x)===key); const g=garantiaDe(key); if(!g||!(g.imgs||[]).length){ showToast('Sin garantía'); return; } const w=window.open('','_blank'); if(!w){ showToast('Permití las ventanas emergentes'); return; }
+  const base=`${location.origin}${location.pathname.replace(/[^/]*$/,'')}logo.jpg`;
+  const pages=g.imgs.map(d=>`<div class="pg"><img src="${d}"></div>`).join('');
+  w.document.write(`<html><head><meta charset="utf-8"><title>Garantía — ${esc(p?p.n:'')}</title><style>*{box-sizing:border-box}body{margin:0;font-family:Arial,sans-serif}.wrap{max-width:800px;margin:0 auto;padding:20px}.hd{text-align:center;border-bottom:2px solid #2f7d3b;padding-bottom:8px;margin-bottom:12px}.hd img{height:44px}.hd .t{font-size:13px;font-weight:700;margin-top:4px}.pg img{width:100%;border:1px solid #ccc;margin-bottom:10px}@media print{.wrap{padding:0}.noprint{display:none}.pg{page-break-after:always}}</style></head><body><div class="wrap"><div class="hd"><img src="${base}"><div class="t">ÍNDICE DE GARANTÍA — ${esc(p?p.n:'')}</div></div>${pages}<div class="noprint" style="text-align:center;margin-top:16px"><button onclick="window.print()" style="background:#2f7d3b;color:#fff;border:none;padding:10px 22px;border-radius:8px;cursor:pointer">🖨️ Imprimir / Guardar PDF</button></div></div></body></html>`);
+  w.document.close();
+}
+// garantías correspondientes a los ítems de una cotización (para adjuntar al PDF)
+function garForCotizItems(items){ const byName={}; precioList().forEach(p=>{ byName[String(p.n).trim().toLowerCase()]=precioKey(p); }); const out=[]; (items||[]).forEach(i=>{ const key=byName[String(i.nombre||'').trim().toLowerCase()]; if(!key) return; const g=garantiaDe(key); if(g&&(g.imgs||[]).length && !out.some(o=>o.key===key)){ out.push({key, nom:i.nombre, imgs:g.imgs}); } }); return out; }
 
 // ── INFORME PDF (molde del .docx) ──
 function informeComercialPDF(id){
