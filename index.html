@@ -156,6 +156,7 @@ textarea{resize:vertical;min-height:66px}
       <div class="tile" id="tileClientes" onclick="openClientes()"><div class="ico">🏡</div><div class="tlab">Clientes</div><div class="tsub">y estancias</div></div>
       <div class="tile" id="tileHistorial" onclick="openHistorial()"><div class="ico">🗂️</div><div class="tlab">Historial</div><div class="tsub">de visitas</div></div>
       <div class="tile" id="tileOT" onclick="openOTList()" style="display:none"><div class="ico">🏭</div><div class="tlab">Órdenes de Trabajo</div><div class="tsub">producción</div></div>
+      <div class="tile" id="tileProductos" onclick="openProductos()" style="display:none"><div class="ico">🏷️</div><div class="tlab">Productos</div><div class="tsub">catálogo e inventario PT</div></div>
       <div class="tile" id="tileFormulas" onclick="openFormulas()" style="display:none"><div class="ico">🧪</div><div class="tlab">Formulaciones</div><div class="tsub">recetas</div></div>
       <div class="tile" id="tileInv" onclick="openInv()" style="display:none"><div class="ico">📦</div><div class="tlab">Inventario</div><div class="tsub">insumos y materia prima</div></div>
       <div class="tile" id="tileCaja" onclick="openCaja()" style="display:none"><div class="ico">💵</div><div class="tlab">Caja chica</div><div class="tsub">efectivo de planta</div></div>
@@ -243,6 +244,23 @@ textarea{resize:vertical;min-height:66px}
     <button class="btn btn-primary btn-block" id="btnNuevoInsumo" style="margin-bottom:10px;display:none" onclick="invInsumoModal()">＋ Nuevo insumo</button>
     <div style="margin-bottom:10px"><input type="search" id="invBuscar" placeholder="🔎 Buscar insumo…" oninput="renderInv()"></div>
     <div class="card"><div class="card-h"><span>Inventario</span><span id="invCount" style="font-weight:500;color:var(--gray-400)"></span></div><div id="invList"></div></div>
+  </div>
+
+  <!-- PRODUCTOS TERMINADOS -->
+  <div class="screen" id="sProductos">
+    <div style="display:flex;gap:6px;margin-bottom:10px">
+      <button class="btn btn-primary" id="prodTabCat" style="flex:1" onclick="prodSetTab('cat')">📋 Catálogo</button>
+      <button class="btn btn-sec" id="prodTabInv" style="flex:1" onclick="prodSetTab('inv')">📦 Inventario PT</button>
+    </div>
+    <div id="prodCatWrap">
+      <button class="btn btn-primary btn-block" id="btnNuevoProducto" style="margin-bottom:10px;display:none" onclick="productoEditor()">＋ Nuevo producto</button>
+      <div style="margin-bottom:10px"><input type="search" id="prodBuscar" placeholder="🔎 Buscar producto…" oninput="renderProductosCat()"></div>
+      <div class="card"><div class="card-h"><span>Productos terminados</span><span id="prodCount" style="font-weight:500;color:var(--gray-400)"></span></div><div id="prodList"></div></div>
+    </div>
+    <div id="prodInvWrap" style="display:none">
+      <div style="margin-bottom:10px"><input type="search" id="prodInvBuscar" placeholder="🔎 Buscar producto…" oninput="renderProductosInv()"></div>
+      <div class="card"><div class="card-h"><span>Stock de productos terminados</span><span id="prodInvCount" style="font-weight:500;color:var(--gray-400)"></span></div><div id="prodInvList"></div></div>
+    </div>
   </div>
 
   <!-- CAJA CHICA -->
@@ -833,7 +851,8 @@ function applyRoleUI(){
   showEl('tileViat', puedeVer('viaticos'));
   showEl('tileCotiz', puedeVer('cotizaciones'));
   showEl('tileOT', puedeVer('ot'));
-  showEl('tileFormulas', puedeVer('formulas'));
+  showEl('tileProductos', puedeVer('formulas')||puedeVer('inventario'));
+  showEl('tileFormulas', false);   // integrado en Productos → Catálogo
   showEl('tileInv', puedeVer('inventario'));
   showEl('tileCaja', puedeVer('caja'));
   showEl('tileUsuarios', puedeVer('usuarios'));
@@ -864,6 +883,7 @@ const SYNC_DEFS = {
   cotiz:{ get:getCotiz, save:saveCotiz, table:'bio_cotiz', toRow:cotizRow, fromRow:rowCotiz, toRowSafe:(c)=>{ const r=cotizRow(c); delete r.subtotal; delete r.flete; delete r.flete_kg; delete r.margen; return r; } },
   insprec:{ get:getInsPrecOv, save:saveInsPrecOv, table:'bio_insprec', toRow:insprecRow, fromRow:rowInsprec },
   formula:{ get:getFormulasExtra, save:saveFormulasExtra, table:'bio_formulas', toRow:formulaRow, fromRow:rowFormula },
+  ptmov:{ get:getPtMovs, save:savePtMovs, table:'bio_ptmov', toRow:ptmovRow, fromRow:rowPtmov },
 };
 function formulaRow(f){ return { id:f.id||('FM-'+(f.c||f.n)), c:f.c||'', n:f.n||'', kg:Number(f.kg)||0, ins:f.ins||[], ts:f.ts||null }; }
 function rowFormula(r){ let ins=r.ins; if(typeof ins==='string'){ try{ ins=JSON.parse(ins); }catch{ ins=[]; } } return { id:r.id, c:r.c||'', n:r.n||'', kg:Number(r.kg)||0, ins:Array.isArray(ins)?ins:[], custom:true, ts:r.ts }; }
@@ -912,14 +932,15 @@ async function cloudPull(name){
     d.save(Object.values(merged));
   }catch(e){}
 }
-async function cloudPullAll(){ if(!AUTH_ON) return; await cloudPull('clientes'); await cloudPull('estancias'); await cloudPull('visitas'); await cloudPull('ot'); await cloudPull('mov'); await cloudPull('caja'); await cloudPull('viat'); await cloudPull('insumo'); await cloudPull('precio'); await cloudPull('cotiz'); await cloudPull('insprec'); await pullPricingCfg(); refreshVista(); }
+async function cloudPullAll(){ if(!AUTH_ON) return; await cloudPull('clientes'); await cloudPull('estancias'); await cloudPull('visitas'); await cloudPull('ot'); await cloudPull('mov'); await cloudPull('caja'); await cloudPull('viat'); await cloudPull('insumo'); await cloudPull('precio'); await cloudPull('cotiz'); await cloudPull('insprec'); await cloudPull('ptmov'); await pullPricingCfg(); refreshVista(); }
 function refreshVista(){ const act=document.querySelector('.screen.active'); if(!act) return;
   if(act.id==='sHome') renderHome(); else if(act.id==='sClientes') renderClientes();
   else if(act.id==='sCliente'&&curCliente) abrirCliente(curCliente); else if(act.id==='sHistorial') renderHistorial();
   else if(act.id==='sOT') renderOTList(); else if(act.id==='sInv') renderInv(); else if(act.id==='sCaja') renderCaja();
   else if(act.id==='sViaticos') renderViatList(); else if(act.id==='sViatDet') renderViatDet();
   else if(act.id==='sCrm') renderCrm();
-  else if(act.id==='sCotiz') renderCotizList(); else if(act.id==='sPrecios') renderPrecios(); else if(act.id==='sInsPrec') renderInsPrec(); }
+  else if(act.id==='sCotiz') renderCotizList(); else if(act.id==='sPrecios') renderPrecios(); else if(act.id==='sInsPrec') renderInsPrec();
+  else if(act.id==='sProductos'){ if(_prodTab==='inv') renderProductosInv(); else renderProductosCat(); } }
 function startSync(){ if(!AUTH_ON) return; cloudPullAll(); if(syncTimer) clearInterval(syncTimer); syncTimer=setInterval(cloudPullAll, 30000); }
 
 let curCliente=null, editVisitaId=null, curSub='Visitas técnicas a campo', _lotesEdit=[], _evals=[], _estEdit=[];
@@ -1630,6 +1651,7 @@ function editarOT(id){ const o=getOTs().find(x=>x.id===id); if(!o)return; cerrar
 }
 function borrarOT(id){ if(!esPlanta())return; if(!confirm('¿Borrar esta OT?'))return;
   getMovs().filter(m=>m.ot_id===id).forEach(m=>cloudDelete('mov',m.id)); saveMovs(getMovs().filter(m=>m.ot_id!==id)); // devolver insumos si estaba producida
+  ptRemoveFromOT(id);   // quita el stock de producto terminado
   saveOTs(getOTs().filter(x=>x.id!==id)); cloudDelete('ot',id); cerrarModal(); renderOTList(); }
 function otPrint(id){ const o=getOTs().find(x=>x.id===id); if(!o) return;
   const nf=n=>Number(n).toLocaleString('es-PY',{maximumFractionDigits:2});
@@ -2262,7 +2284,8 @@ function otProducir(id){
   (o.insumos||[]).forEach((l,i)=>{ if(l.t==='m') return; const m={ id:'MV-'+Date.now()+'-'+i, insumo_c:l.c, insumo_n:l.n, u:l.t==='b'?'u':'kg', tipo:'egreso', cant:Math.abs(Number(l.cant)||0), motivo:'Producción OT N° '+o.num, proveedor:'', costo:null, ot_id:o.id, fecha:o.fecha||hoy(), usuario:(getSession()&&getSession().nombre)||'', ts:stamp, pending:true }; nuevos.push(m); });
   saveMovs(nuevos.concat(movs)); nuevos.forEach(m=>cloudPush('mov',m));
   o.estado='producida'; o.ts=stamp; o.pending=true; saveOTs(getOTs().map(x=>x.id===o.id?o:x)); cloudPush('ot',o);
-  cerrarModal(); showToast('✓ Insumos descontados del inventario'); renderOTList();
+  ptAddFromOT(o);   // suma el stock de producto terminado
+  cerrarModal(); showToast('✓ Insumos descontados · stock de producto terminado actualizado'); renderOTList();
 }
 function otRevertir(id){
   const o=getOTs().find(x=>x.id===id); if(!o||!esPlanta()) return;
@@ -2270,8 +2293,123 @@ function otRevertir(id){
   getMovs().filter(m=>m.ot_id===id).forEach(m=>cloudDelete('mov',m.id));
   saveMovs(getMovs().filter(m=>m.ot_id!==id));
   o.estado='abierta'; o.ts=new Date().toISOString(); o.pending=true; saveOTs(getOTs().map(x=>x.id===o.id?o:x)); cloudPush('ot',o);
+  ptRemoveFromOT(id);   // quita el stock de producto terminado
   cerrarModal(); showToast('Producción revertida'); renderOTList();
 }
+
+// ══ PRODUCTOS TERMINADOS — hub: Catálogo (con/sin fórmula + precio) + Inventario PT ══
+let _prodTab='cat', _ptKey=null, _ptTipo=null;
+function getPtMovs(){ return getArr('bio:ptmov'); }
+function savePtMovs(a){ setArr('bio:ptmov',a); }
+function ptStock(key){ let s=0; getPtMovs().forEach(m=>{ if(m.prod_key!==key) return; const q=Number(m.bolsas)||0; if(m.tipo==='produccion') s+=q; else if(m.tipo==='salida') s-=q; else s+=q; }); return Math.round(s*100)/100; }
+function tieneFormula(p){ const k=precioKey(p); return PL_FORMULAS.some(x=>precioKey(x)===k); }
+function prodKgBolsa(p){ const k=precioKey(p); const f=PL_FORMULAS.find(x=>precioKey(x)===k); return (f&&f.kg)||p.kg||0; }
+function ptmovRow(m){ return { id:m.id, prod_key:m.prod_key||'', prod_cod:m.prod_cod||'', prod_nom:m.prod_nom||'', kg_bolsa:Number(m.kg_bolsa)||0, tipo:m.tipo||'produccion', bolsas:Number(m.bolsas)||0, motivo:m.motivo||'', cliente:m.cliente||'', ot_id:m.ot_id||'', ot_num:(m.ot_num!=null&&m.ot_num!=='')?String(m.ot_num):null, fecha:m.fecha||null, usuario:m.usuario||'', ts:m.ts||null }; }
+function rowPtmov(r){ return { id:r.id, prod_key:r.prod_key||'', prod_cod:r.prod_cod||'', prod_nom:r.prod_nom||'', kg_bolsa:Number(r.kg_bolsa)||0, tipo:r.tipo||'produccion', bolsas:Number(r.bolsas)||0, motivo:r.motivo||'', cliente:r.cliente||'', ot_id:r.ot_id||'', ot_num:(r.ot_num!=null?r.ot_num:''), fecha:r.fecha||'', usuario:r.usuario||'', ts:r.ts, pending:false }; }
+function openProductos(){ if(!(puedeVer('formulas')||puedeVer('inventario'))){ showToast('Sin permiso'); return; } showScreen('sProductos','Productos','Catálogo e inventario de terminados',true); prodSetTab(_prodTab||'cat'); }
+function prodSetTab(t){ _prodTab=t; const cat=t==='cat';
+  gs('prodCatWrap').style.display=cat?'':'none'; gs('prodInvWrap').style.display=cat?'none':'';
+  gs('prodTabCat').className='btn '+(cat?'btn-primary':'btn-sec'); gs('prodTabInv').className='btn '+(cat?'btn-sec':'btn-primary');
+  if(cat){ const b=gs('btnNuevoProducto'); if(b) b.style.display=puedeEditarFormula()?'':'none'; renderProductosCat(); } else renderProductosInv();
+}
+function renderProductosCat(){ const q=(gs('prodBuscar').value||'').trim().toLowerCase(); let ls=precioList(); if(q) ls=ls.filter(p=>((p.n||'')+' '+(p.c||'')).toLowerCase().includes(q)); if(gs('prodCount')) gs('prodCount').textContent=ls.length+' productos';
+  gs('prodList').innerHTML=ls.map(p=>{ const key=precioKey(p); const st=ptStock(key); const fx=tieneFormula(p);
+    return `<div class="li" onclick="productoEditor('${encodeURIComponent(key)}')"><div style="min-width:0"><div class="li-t">${esc(p.n)} ${fx?'<span style="font-size:10px;color:var(--green)">fórmula</span>':'<span style="font-size:10px;color:var(--gray-400)">sin fórmula</span>'}</div><div class="li-s">${p.c?esc(p.c)+' · ':''}${p.kg||prodKgBolsa(p)}kg · Contado ${gsFmt(p.p0)}/kg</div></div><div style="text-align:right;flex-shrink:0"><div style="font-weight:700">${st.toLocaleString('es-PY')}</div><div style="font-size:10px;color:var(--gray-400)">bolsas</div></div></div>`; }).join('') || '<div class="empty">Sin productos.</div>';
+}
+function _removePrecioOv(key){ const ov=getPreciosOv(); const ex=ov.find(o=>precioKey(o)===key); if(ex){ savePreciosOv(ov.filter(o=>o.id!==ex.id)); if(typeof cloudDelete==='function') cloudDelete('precio',ex.id); } }
+function productoEditor(keyEnc){ if(!puedeEditarFormula()){ showToast('Sin permiso'); return; }
+  const key=keyEnc?decodeURIComponent(keyEnc):null;
+  const p=key?precioList().find(x=>precioKey(x)===key):null;
+  const fx=p?tieneFormula(p):false;
+  const f=fx?PL_FORMULAS.find(x=>precioKey(x)===key):null;
+  const insPre=f?(f.ins||[]).filter(x=>x.t!=='b'&&x.t!=='m'):[];
+  gs('modalBox').innerHTML=`<h3>${p?'Editar':'Nuevo'} producto</h3>
+    <div class="row2"><div><label class="fl">Código</label><input id="fmC" value="${p?esc(p.c):''}" placeholder="ej. NUEVO01"></div><div><label class="fl">Kg/bolsa</label><input type="number" id="fmKg" value="${p?(p.kg||prodKgBolsa(p)||30):'30'}" oninput="fmRecalc()"></div></div>
+    <label class="fl">Nombre</label><input id="fmN" value="${p?esc(p.n):''}" placeholder="Nombre del producto" oninput="fmRecalc()">
+    <div style="font-weight:700;font-size:12px;color:var(--green);margin:12px 0 2px">🧪 Fórmula <span style="font-weight:400;color:var(--gray-400)">(opcional)</span></div>
+    <div style="font-size:11px;color:var(--gray-400);margin-bottom:4px">Si cargás la receta, el producto aparece en OTs y su precio se calcula solo. Si la dejás vacía, poné el precio a mano abajo.</div>
+    <datalist id="fmInsList">${insumosAll().map(i=>`<option value="${esc(i.n)}">`).join('')}</datalist>
+    <div id="fmRows"></div>
+    <button class="btn btn-ghost btn-block" style="margin-top:2px" onclick="fmAddRow()">＋ Agregar ingrediente</button>
+    <div id="fmTot" style="font-size:12px;margin-top:6px"></div>
+    <div id="fmPrecio" style="font-size:12px;color:var(--green);margin-top:2px"></div>
+    <div style="font-weight:700;font-size:12px;color:var(--gray-600);margin:12px 0 2px">💰 Precio manual <span style="font-weight:400;color:var(--gray-400)">(si NO tiene fórmula)</span></div>
+    <div class="row2"><div><label class="fl">Contado ₲/kg</label><input type="number" id="peP0" value="${p&&!fx?p.p0:''}"></div><div><label class="fl">Crédito 30</label><input type="number" id="peP30" value="${p&&!fx?p.p30:''}"></div></div>
+    <div class="row2"><div><label class="fl">Crédito 60</label><input type="number" id="peP60" value="${p&&!fx?p.p60:''}"></div><div><label class="fl">Crédito 90</label><input type="number" id="peP90" value="${p&&!fx?p.p90:''}"></div></div>
+    <div class="row2" style="margin-top:12px"><button class="btn btn-sec" onclick="${p?`productoBorrar('${keyEnc}')`:'cerrarModal()'}"${p?' style="color:var(--red)"':''}>${p?'Quitar':'Cancelar'}</button><button class="btn btn-primary" onclick="productoGuardar('${keyEnc||''}')">Guardar</button></div>`;
+  gs('modal').classList.add('show');
+  gs('fmRows').innerHTML='';
+  (insPre.length?insPre:[null,null]).forEach(x=>fmAddRow(x?(x.n||_insNombre(x.c)):'', x?x.p:''));
+  fmRecalc();
+}
+function productoGuardar(keyEnc){ if(!puedeEditarFormula()){ showToast('Sin permiso'); return; }
+  const origKey=keyEnc?decodeURIComponent(keyEnc):null;
+  const c=(gs('fmC').value||'').trim(); const n=(gs('fmN').value||'').trim(); if(!n){ showToast('Poné el nombre del producto'); return; }
+  const kg=num(gs('fmKg').value)||30; const ins=fmReadRows(); const key=precioKey({c,n}); const now=new Date().toISOString();
+  if(ins.length){
+    if((!origKey||origKey!==key) && PL_FORMULAS_BASE.some(ff=>precioKey(ff)===key)){ showToast('Ese código/nombre ya existe en fórmulas de fábrica'); return; }
+    const rec={ id:'FM-'+(c||n), c, n, kg, ins, custom:true, ts:now };
+    let fa=getFormulasExtra().filter(x=>precioKey(x)!==key && (!origKey||precioKey(x)!==origKey)); fa.unshift(rec); saveFormulasExtra(fa); if(typeof cloudPush==='function') cloudPush('formula',rec);
+    _removePrecioOv(key); if(origKey&&origKey!==key) _removePrecioOv(origKey);
+  } else {
+    const p0=num(gs('peP0').value)||0, p30=num(gs('peP30').value)||0, p60=num(gs('peP60').value)||0, p90=num(gs('peP90').value)||0;
+    if(!p0){ showToast('Cargá la fórmula, o poné al menos el precio contado'); return; }
+    const ov=getPreciosOv(); const ex=ov.find(o=>precioKey(o)===key); const rec={ id:(ex?ex.id:'PR-'+Date.now()), c, n, kg, p0, p30, p60, p90, ts:now, pending:true };
+    savePreciosOv(ex?ov.map(o=>precioKey(o)===key?rec:o):[rec,...ov]); if(typeof cloudPush==='function') cloudPush('precio',rec);
+    const rmKey=origKey||key; const fexx=getFormulasExtra().find(x=>precioKey(x)===rmKey); if(fexx){ saveFormulasExtra(getFormulasExtra().filter(x=>precioKey(x)!==rmKey)); if(typeof cloudDelete==='function') cloudDelete('formula', fexx.id||('FM-'+(fexx.c||fexx.n))); }
+  }
+  rebuildFormulas(); cerrarModal(); showToast('✓ Producto guardado'); renderProductosCat();
+}
+function productoBorrar(keyEnc){ if(!puedeEditarFormula()){ showToast('Sin permiso'); return; } if(!confirm('¿Quitar este producto del catálogo?')) return;
+  const key=decodeURIComponent(keyEnc);
+  const fex=getFormulasExtra().find(x=>precioKey(x)===key); if(fex){ saveFormulasExtra(getFormulasExtra().filter(x=>precioKey(x)!==key)); if(typeof cloudDelete==='function') cloudDelete('formula', fex.id||('FM-'+(fex.c||fex.n))); }
+  const ov=getPreciosOv(); const ex=ov.find(o=>precioKey(o)===key); const base=PL_PRECIOS_MANUAL.find(pp=>precioKey(pp)===key);
+  if(base){ const rec=Object.assign({},base,{id:ex?ex.id:('PR-'+Date.now()),borrado:true,ts:new Date().toISOString(),pending:true}); savePreciosOv(ex?ov.map(o=>precioKey(o)===key?rec:o):[rec,...ov]); if(typeof cloudPush==='function') cloudPush('precio',rec); }
+  else if(ex){ savePreciosOv(ov.filter(o=>o.id!==ex.id)); if(typeof cloudDelete==='function') cloudDelete('precio',ex.id); }
+  rebuildFormulas(); cerrarModal(); showToast('Producto quitado'); renderProductosCat();
+}
+// ── Inventario de productos terminados ──
+function renderProductosInv(){ const q=(gs('prodInvBuscar').value||'').trim().toLowerCase(); let ls=precioList(); if(q) ls=ls.filter(p=>((p.n||'')+' '+(p.c||'')).toLowerCase().includes(q)); if(gs('prodInvCount')) gs('prodInvCount').textContent=ls.length+' productos';
+  gs('prodInvList').innerHTML=ls.map(p=>{ const key=precioKey(p); const st=ptStock(key);
+    return `<div class="li" onclick="ptDetalle('${encodeURIComponent(key)}')"><div style="min-width:0"><div class="li-t">${esc(p.n)}</div><div class="li-s">${p.c?esc(p.c)+' · ':''}${p.kg||prodKgBolsa(p)}kg/bolsa</div></div><div style="text-align:right;flex-shrink:0"><div style="font-weight:700;color:${st<=0?'var(--gray-400)':'var(--gray-800)'}">${st.toLocaleString('es-PY')}</div><div style="font-size:10px;color:var(--gray-400)">bolsas</div></div></div>`; }).join('') || '<div class="empty">Sin productos.</div>';
+}
+function ptDetalle(keyEnc){ const key=decodeURIComponent(keyEnc); const p=precioList().find(x=>precioKey(x)===key); if(!p) return; const st=ptStock(key); const kb=p.kg||prodKgBolsa(p);
+  const movs=getPtMovs().filter(m=>m.prod_key===key).sort((a,b)=>String(b.ts||'').localeCompare(String(a.ts||''))).slice(0,15);
+  const tN={produccion:'Ingreso',salida:'Salida',ajuste:'Ajuste'};
+  const filas=movs.map(m=>{ const neg=m.tipo==='salida'||(m.tipo==='ajuste'&&Number(m.bolsas)<0); const val=Math.abs(Number(m.bolsas)||0);
+    const sub=m.ot_id?('Producción OT N° '+esc(m.ot_num||'')):(esc(m.motivo||'')+(m.cliente?' · '+esc(m.cliente):''));
+    return `<tr style="border-top:1px solid var(--gray-200)"><td style="padding:4px 6px;color:var(--gray-500)">${fmtFecha(m.fecha)}</td><td>${tN[m.tipo]||m.tipo}${sub?'<div style="font-size:10px;color:var(--gray-400)">'+sub+'</div>':''}</td><td style="text-align:right;font-weight:600;color:${neg?'var(--red)':'var(--green)'}">${neg?'−':'+'}${val.toLocaleString('es-PY')}</td></tr>`; }).join('')||'<tr><td colspan="3" style="color:var(--gray-400);padding:8px 6px">Sin movimientos aún.</td></tr>';
+  const edit=puedeVer('inventario')||esPlanta();
+  gs('modalBox').innerHTML=`<h3>${esc(p.n)}</h3><div style="font-size:12px;color:var(--gray-600)">${p.c?esc(p.c)+' · ':''}${kb}kg/bolsa</div>
+    <div style="display:flex;align-items:baseline;gap:8px;margin:10px 0 4px"><div style="font-size:28px;font-weight:800;color:${st<=0?'var(--gray-400)':'var(--gray-800)'}">${st.toLocaleString('es-PY')}</div><div style="color:var(--gray-500)">bolsas en stock${kb?' · '+(st*kb).toLocaleString('es-PY')+' kg':''}</div></div>
+    ${edit?`<div style="display:flex;gap:8px;margin:12px 0"><button class="btn btn-primary" style="flex:1" onclick="ptMovModal('${keyEnc}','produccion')">＋ Ingreso</button><button class="btn btn-sec" style="flex:1" onclick="ptMovModal('${keyEnc}','salida')">− Salida</button><button class="btn btn-amber" style="flex:1" onclick="ptMovModal('${keyEnc}','ajuste')">⚖ Ajuste</button></div>`:''}
+    <div style="font-size:12px;font-weight:700;color:var(--gray-600);margin-top:8px">Últimos movimientos</div>
+    <table style="width:100%;border-collapse:collapse;font-size:12px"><tbody>${filas}</tbody></table>
+    <button class="btn btn-ghost btn-block" style="margin-top:12px" onclick="cerrarModal()">Cerrar</button>`;
+  gs('modal').classList.add('show');
+}
+function ptMovModal(keyEnc,tipo){ const key=decodeURIComponent(keyEnc); const p=precioList().find(x=>precioKey(x)===key); if(!p) return; _ptKey=key; _ptTipo=tipo; const st=ptStock(key);
+  const tit={produccion:'Registrar ingreso (bolsas)',salida:'Registrar salida / despacho',ajuste:'Ajuste por conteo'};
+  let campos='';
+  if(tipo==='ajuste'){ campos=`<label class="fl">Stock actual del sistema</label><input value="${st} bolsas" readonly style="background:var(--gray-100)"><label class="fl">Stock real contado (bolsas)</label><input type="number" id="ptReal" inputmode="numeric" placeholder="lo que contaste">`; }
+  else { campos=`<label class="fl">Cantidad (bolsas)</label><input type="number" id="ptCant" inputmode="numeric" placeholder="0">`;
+    if(tipo==='salida') campos+=`<label class="fl">Cliente / destino</label><input id="ptCliente" placeholder="opcional">`;
+    campos+=`<label class="fl">Motivo</label><input id="ptMotivo" placeholder="${tipo==='salida'?'Despacho / venta':'Ingreso manual'}">`;
+  }
+  gs('modalBox').innerHTML=`<h3>${tit[tipo]}</h3><div style="font-size:12px;color:var(--gray-600);margin-bottom:8px">${esc(p.n)} · stock ${st.toLocaleString('es-PY')} bolsas</div>${campos}<label class="fl">Fecha</label><input type="date" id="ptFecha" value="${hoy()}"><div class="row2" style="margin-top:12px"><button class="btn btn-sec" onclick="ptDetalle('${keyEnc}')">Cancelar</button><button class="btn btn-primary" onclick="ptGuardarMov()">Guardar</button></div>`;
+  gs('modal').classList.add('show');
+}
+function ptGuardarMov(){ const p=precioList().find(x=>precioKey(x)===_ptKey); if(!p) return; let bolsas, motivo='', cliente='';
+  if(_ptTipo==='ajuste'){ const real=num(gs('ptReal').value); if(real==null){ showToast('Ingresá el stock contado'); return; } bolsas=Math.round(real-ptStock(_ptKey)); if(bolsas===0){ showToast('El stock ya coincide'); return; } motivo='Conteo físico'; }
+  else { const v=num(gs('ptCant').value); if(!v||v<=0){ showToast('Ingresá la cantidad'); return; } bolsas=Math.abs(Math.round(v)); motivo=(gs('ptMotivo')&&gs('ptMotivo').value.trim())||(_ptTipo==='salida'?'Despacho':'Ingreso'); if(_ptTipo==='salida') cliente=(gs('ptCliente')&&gs('ptCliente').value.trim())||''; }
+  const m={ id:'PT-'+Date.now(), prod_key:_ptKey, prod_cod:p.c||'', prod_nom:p.n, kg_bolsa:(p.kg||prodKgBolsa(p)), tipo:_ptTipo, bolsas, motivo, cliente, ot_id:'', ot_num:'', fecha:gs('ptFecha').value||hoy(), usuario:(getSession()&&getSession().nombre)||'', ts:new Date().toISOString(), pending:true };
+  const a=getPtMovs(); a.unshift(m); savePtMovs(a); if(typeof cloudPush==='function') cloudPush('ptmov',m); showToast('✓ Movimiento guardado'); ptDetalle(encodeURIComponent(_ptKey)); renderProductosInv();
+}
+// Stock de terminados desde una OT producida
+function ptAddFromOT(o){ if(!o||!o.bolsas) return; const key=precioKey({c:o.producto_cod,n:o.producto_nom});
+  const m={ id:'PT-OT-'+o.id, prod_key:key, prod_cod:o.producto_cod||'', prod_nom:o.producto_nom||'', kg_bolsa:o.kg_bolsa||0, tipo:'produccion', bolsas:Math.abs(Number(o.bolsas)||0), motivo:'Producción OT', cliente:o.cliente||'', ot_id:o.id, ot_num:o.num, fecha:o.fecha||hoy(), usuario:(getSession()&&getSession().nombre)||'', ts:new Date().toISOString(), pending:true };
+  const a=getPtMovs().filter(x=>x.ot_id!==o.id); a.unshift(m); savePtMovs(a); if(typeof cloudPush==='function') cloudPush('ptmov',m); }
+function ptRemoveFromOT(id){ getPtMovs().filter(m=>m.ot_id===id).forEach(m=>{ if(typeof cloudDelete==='function') cloudDelete('ptmov',m.id); }); savePtMovs(getPtMovs().filter(m=>m.ot_id!==id)); }
 
 // ── INFORME PDF (molde del .docx) ──
 function informePDF(id){
