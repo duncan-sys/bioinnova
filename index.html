@@ -153,6 +153,9 @@ textarea{resize:vertical;min-height:66px}
       <div class="tile wide" id="tileVisita" onclick="nuevaVisita()" style="background:linear-gradient(135deg,var(--green),var(--green-d));color:#fff;border:none">
         <div class="ico">📋</div><div class="tlab" style="color:#fff">Nueva visita técnica</div><div class="tsub" style="color:rgba(255,255,255,.85)">Cargar KPIs y generar informe</div>
       </div>
+      <div class="tile wide" id="tileVisitaCom" onclick="nuevaVisitaComercial()" style="background:linear-gradient(135deg,#2e5b8a,#1e3f63);color:#fff;border:none">
+        <div class="ico">🤝</div><div class="tlab" style="color:#fff">Nueva visita comercial</div><div class="tsub" style="color:rgba(255,255,255,.85)">Prospección y relevamiento</div>
+      </div>
       <div class="tile" id="tileClientes" onclick="openClientes()"><div class="ico">🏡</div><div class="tlab">Clientes</div><div class="tsub">y estancias</div></div>
       <div class="tile" id="tileHistorial" onclick="openHistorial()"><div class="ico">🗂️</div><div class="tlab">Historial</div><div class="tsub">de visitas</div></div>
       <div class="tile" id="tileOT" onclick="openOTList()" style="display:none"><div class="ico">🏭</div><div class="tlab">Órdenes de Trabajo</div><div class="tsub">producción</div></div>
@@ -393,9 +396,55 @@ textarea{resize:vertical;min-height:66px}
     <button class="btn btn-amber btn-block" onclick="guardarVisita(true)">✓ Guardar e imprimir informe</button>
   </div>
 
+  <!-- VISITA COMERCIAL -->
+  <div class="screen" id="sVisitaComercial">
+    <div class="card"><div class="card-h">Datos de la visita comercial</div><div class="card-b">
+      <label class="fl">Cliente / prospecto</label>
+      <input type="search" id="vcClienteBuscar" placeholder="🔎 Buscar cliente…" oninput="filtrarClientesComercial()" autocomplete="off" style="margin-bottom:6px">
+      <select id="vcCliente"></select>
+      <label class="fl">…o prospecto nuevo <span style="color:var(--gray-400);font-weight:400">(si todavía no es cliente)</span></label>
+      <input id="vcProspecto" placeholder="Nombre del establecimiento / productor" autocomplete="off">
+      <div class="row2">
+        <div><label class="fl">Fecha</label><input type="date" id="vcFecha"></div>
+        <div><label class="fl">Comercial</label><input id="vcComercial" placeholder="Nombre"></div>
+      </div>
+    </div></div>
+    <div class="card"><div class="card-h">Operativa y manejo</div><div class="card-b">
+      <textarea id="vcOperativa" placeholder="Cómo manejan la operación: personal, infraestructura, asesoramiento actual, sistema productivo…"></textarea>
+    </div></div>
+    <div class="card"><div class="card-h">Campos / estancias (general)</div><div class="card-b">
+      <div class="row2"><div><label class="fl">Cantidad de establecimientos</label><input type="number" id="vcEstCant" inputmode="numeric" placeholder="0"></div><div><label class="fl">Hectáreas (total)</label><input type="number" id="vcHa" inputmode="numeric" placeholder="0"></div></div>
+      <label class="fl">Zona / departamento</label><input id="vcZona" placeholder="ej: Chaco, Concepción…" autocomplete="off">
+    </div></div>
+    <div class="card"><div class="card-h">Hacienda y categorías de producción</div><div class="card-b">
+      <div id="vcHaciendaRows"></div>
+      <button class="btn btn-ghost btn-block" style="margin-top:2px" onclick="vcAddHacienda()">＋ Agregar categoría</button>
+    </div></div>
+    <div class="card"><div class="card-h">Nutrición actual</div><div class="card-b">
+      <textarea id="vcNutricion" placeholder="Qué usan hoy (producto propio / de la competencia), marca, precio de referencia…"></textarea>
+    </div></div>
+    <div class="card"><div class="card-h">Productos a recomendar / cotizar</div><div class="card-b">
+      <datalist id="vcProdList"></datalist>
+      <div id="vcRecoRows"></div>
+      <button class="btn btn-ghost btn-block" style="margin-top:2px" onclick="vcAddReco()">＋ Agregar producto</button>
+    </div></div>
+    <div class="card"><div class="card-h">Cierre</div><div class="card-b">
+      <label class="fl">Nivel de interés</label><select id="vcInteres"><option>Alto</option><option selected>Medio</option><option>Bajo</option></select>
+      <label class="fl">Próximo paso</label><input id="vcProxPaso" placeholder="ej: enviar cotización, segunda visita…" autocomplete="off">
+      <label class="fl">Fecha de seguimiento (opcional)</label><input type="date" id="vcProxima">
+      <label class="fl">Observaciones</label><textarea id="vcObs" placeholder="Comentarios generales…"></textarea>
+    </div></div>
+    <div class="row2" style="margin-bottom:10px">
+      <button class="btn btn-sec" onclick="goHome()">Cancelar</button>
+      <button class="btn btn-primary" onclick="guardarVisitaComercial(false)">✓ Guardar</button>
+    </div>
+    <button class="btn btn-amber btn-block" onclick="guardarVisitaComercial(true)">✓ Guardar e imprimir</button>
+  </div>
+
   <!-- HISTORIAL -->
   <div class="screen" id="sHistorial">
     <div style="display:flex;gap:8px;margin-bottom:8px">
+      <select id="hFiltroTipo" onchange="renderHistorial()" style="flex:1"><option value="">Todas</option><option value="tecnica">Técnicas</option><option value="comercial">Comerciales</option></select>
       <select id="hFiltroTec" onchange="renderHistorial()" style="flex:1"></select>
       <select id="hFiltroCat" onchange="renderHistorial()" style="flex:1"></select>
     </div>
@@ -847,6 +896,7 @@ async function cambiarPass(){
 function applyRoleUI(){
   const showEl=(id,show)=>{ const el=gs(id); if(el) el.style.display=show?'':'none'; };
   showEl('tileVisita', puedeVer('visita') && canEdit());
+  showEl('tileVisitaCom', puedeVer('visita') && canEdit());
   showEl('tileClientes', puedeVer('clientes'));
   showEl('tileHistorial', puedeVer('historial'));
   showEl('tileCrm', puedeVer('crm'));
@@ -870,12 +920,12 @@ function cliRow(c){ return { id:c.id, nombre:c.nombre||'', codigo:c.codigo||'', 
 function rowCli(r){ return { id:r.id, nombre:r.nombre||'', codigo:r.codigo||'', ruc:r.ruc||'', direccion:r.direccion||'', contacto:r.contacto||'', tel:r.tel||'', email:r.email||'', ubicacion:r.ubicacion||'', obs:r.obs||'', estado:r.estado||'', prioridad:r.prioridad||'', comercial:r.comercial||'', prox_fecha:r.prox_fecha||'', prox_nota:r.prox_nota||'', seguimientos:(typeof r.seguimientos==='string'?(()=>{try{return JSON.parse(r.seguimientos)}catch{return[]}})():(r.seguimientos||[])), ts:r.ts }; }
 function estRow(e){ return { id:e.id, cliente_id:e.cliente_id||'', nombre:e.nombre||'', zona:e.zona||'', hato:e.hato||[], lotes:e.lotes||[], obs:e.obs||'', ts:e.ts }; }
 function rowEst(r){ const p=x=>typeof x==='string'?(()=>{try{return JSON.parse(x)}catch{return[]}})():(x||[]); return { id:r.id, cliente_id:r.cliente_id||'', nombre:r.nombre||'', zona:r.zona||'', hato:p(r.hato), lotes:p(r.lotes), obs:r.obs||'', ts:r.ts }; }
-function visRow(v){ return { id:v.id, cliente_id:v.cliente_id||'', estancia_id:v.estancia_id||'', fecha:v.fecha||null, tecnico:v.tecnico||'', evaluaciones:(v.evaluaciones||visitaEvals(v)), diagnostico:v.diagnostico||'', recomendacion:v.recomendacion||'', proxima:v.proxima||null, ts:v.ts }; }
-function rowVis(r){ const p=x=>typeof x==='string'?(()=>{try{return JSON.parse(x)}catch{return[]}})():(x||[]); return { id:r.id, cliente_id:r.cliente_id||'', estancia_id:r.estancia_id||'', fecha:r.fecha||'', tecnico:r.tecnico||'', evaluaciones:p(r.evaluaciones), diagnostico:r.diagnostico||'', recomendacion:r.recomendacion||'', proxima:r.proxima||'', ts:r.ts }; }
+function visRow(v){ return { id:v.id, tipo:v.tipo||'tecnica', cliente_id:v.cliente_id||'', estancia_id:v.estancia_id||'', fecha:v.fecha||null, tecnico:v.tecnico||'', evaluaciones:(v.evaluaciones||visitaEvals(v)), comercial:(v.comercial||null), diagnostico:v.diagnostico||'', recomendacion:v.recomendacion||'', proxima:v.proxima||null, ts:v.ts }; }
+function rowVis(r){ const pj=x=>typeof x==='string'?(()=>{try{return JSON.parse(x)}catch{return null}})():x; const p=x=>{ const v=pj(x); return Array.isArray(v)?v:[]; }; return { id:r.id, tipo:r.tipo||'tecnica', cliente_id:r.cliente_id||'', estancia_id:r.estancia_id||'', fecha:r.fecha||'', tecnico:r.tecnico||'', evaluaciones:p(r.evaluaciones), comercial:(pj(r.comercial)||null), diagnostico:r.diagnostico||'', recomendacion:r.recomendacion||'', proxima:r.proxima||'', ts:r.ts }; }
 const SYNC_DEFS = {
   clientes:{ get:getClientes, save:saveClientes, table:'clientes', toRow:cliRow, fromRow:rowCli, toRowSafe:(c)=>{ const r=cliRow(c); ['codigo','estado','prioridad','comercial','prox_fecha','prox_nota','seguimientos'].forEach(k=>delete r[k]); return r; } },
   estancias:{ get:getEstancias, save:saveEstancias, table:'estancias', toRow:estRow, fromRow:rowEst },
-  visitas:{ get:getVisitas, save:saveVisitas, table:'visitas', toRow:visRow, fromRow:rowVis },
+  visitas:{ get:getVisitas, save:saveVisitas, table:'visitas', toRow:visRow, fromRow:rowVis, toRowSafe:(v)=>{ const r=visRow(v); delete r.tipo; delete r.comercial; return r; } },
   ot:{ get:getOTs, save:saveOTs, table:'bio_ot', toRow:otRow, fromRow:rowOT },
   mov:{ get:getMovs, save:saveMovs, table:'bio_mov', toRow:movRow, fromRow:rowMov, toRowSafe:(m)=>{ const r=movRow(m); delete r.moneda; delete r.costo_orig; delete r.tc; return r; } },
   caja:{ get:getCaja, save:saveCaja, table:'bio_caja', toRow:cajaRow, fromRow:rowCaja },
@@ -997,12 +1047,21 @@ function renderHome(){
   cont.innerHTML = ult.length? ult.map(v=>visitaLi(v)).join('') : '<div class="empty">Todavía no hay visitas cargadas.<br>Tocá <b>Nueva visita técnica</b> para empezar.</div>';
 }
 function visitaLi(v){
-  const c=clienteById(v.cliente_id), e=estanciaById(v.estancia_id);
+  const c=clienteById(v.cliente_id);
+  if(v.tipo==='comercial'){ const com=v.comercial||{}; const nom=(c&&c.nombre)||com.prospecto||'—';
+    const cabs=(com.hacienda||[]).reduce((a,h)=>a+(Number(h.cabezas)||0),0);
+    const intCol={Alto:'var(--green)',Medio:'var(--amber)',Bajo:'var(--red)'}[com.interes]||'var(--gray-400)';
+    return `<div class="li" onclick="verVisita('${v.id}')">
+      <div style="min-width:0"><div class="li-t">${esc(nom)} <span class="chip" style="background:#dbeafe;color:#1e3f63">Comercial</span>${(!c&&com.prospecto)?' <span style="font-size:10px;color:var(--amber)">prospecto</span>':''}</div>
+      <div class="li-s">${fmtFecha(v.fecha)}${cabs?' · '+cabs.toLocaleString('es-PY')+' cab.':''}${com.interes?' · interés <b style="color:'+intCol+'">'+esc(com.interes)+'</b>':''}</div></div>
+      <div class="li-chev">›</div></div>`;
+  }
+  const e=estanciaById(v.estancia_id);
   const evs=visitaEvals(v); const cats=[...new Set(evs.map(x=>x.categoria))];
   const chips=cats.slice(0,3).map(ct=>`<span class="chip ${catClass(ct)}">${esc(ct)}</span>`).join(' ');
   const nL=evs.length;
   return `<div class="li" onclick="verVisita('${v.id}')">
-    <div style="min-width:0"><div class="li-t">${esc(c?c.nombre:'—')} ${chips}</div>
+    <div style="min-width:0"><div class="li-t">${esc(c?c.nombre:'—')} <span class="chip" style="background:#dcfce7;color:#166534">Técnica</span> ${chips}</div>
     <div class="li-s">${esc(e?e.nombre:'')}${e?' · ':''}${fmtFecha(v.fecha)} · ${nL} lote${nL!==1?'s':''}</div></div>
     <div class="li-chev">›</div></div>`;
 }
@@ -1377,6 +1436,7 @@ function guardarVisita(imprimir){
 }
 function verVisita(id){
   const v=getVisitas().find(x=>x.id===id); if(!v) return;
+  if(v.tipo==='comercial'){ verVisitaComercial(v); return; }
   const c=clienteById(v.cliente_id), e=estanciaById(v.estancia_id);
   const bloques=visitaEvals(v).map(ev=>{
     const filas=(ev.kpis||[]).map(k=>`<tr><td>${esc(k.k)}</td><td style="text-align:center">${k.valor||'—'} ${esc(unidadCorta(k.u))}</td><td style="text-align:center">${semHtmlMini(k.estado)}</td></tr>`).join('');
@@ -1392,6 +1452,25 @@ function verVisita(id){
     ${v.diagnostico?'<div class="sect-t">Diagnóstico general</div><div style="font-size:12px">'+esc(v.diagnostico)+'</div>':''}
     ${v.recomendacion?'<div class="sect-t">Recomendación general</div><div style="font-size:12px">'+esc(v.recomendacion)+'</div>':''}
     <div class="row2" style="margin-top:14px">${canEdit()?`<button class="btn btn-sec" onclick="editarVisita('${v.id}')">✎ Editar</button>`:''}<button class="btn btn-amber" onclick="informePDF('${v.id}')" style="${canEdit()?'':'flex:1'}">🖨️ Informe</button></div>
+    ${canEdit()?`<button class="btn btn-sec btn-block" style="margin-top:8px;color:var(--red)" onclick="borrarVisita('${v.id}')">Borrar visita</button>`:''}
+    <button class="btn btn-ghost btn-block" style="margin-top:8px" onclick="cerrarModal()">Cerrar</button>`;
+  gs('modal').classList.add('show');
+}
+function verVisitaComercial(v){
+  const c=clienteById(v.cliente_id); const com=v.comercial||{}; const nom=(c&&c.nombre)||com.prospecto||'—';
+  const hac=(com.hacienda||[]).filter(h=>h.cabezas).map(h=>`<span class="chip ${catClass(h.categoria)}">${esc(h.categoria)} ${Number(h.cabezas).toLocaleString('es-PY')}</span>`).join(' ');
+  const reco=(com.recomendados||[]).filter(r=>r.producto).map(r=>`<li>${esc(r.producto)}${r.nota?' <span style="color:var(--gray-500)">— '+esc(r.nota)+'</span>':''}</li>`).join('');
+  const sec=(t,b)=>b?`<div class="sect-t">${t}</div><div style="font-size:12px;white-space:pre-wrap">${b}</div>`:'';
+  gs('modalBox').innerHTML=`<h3>${esc(nom)} <span class="chip" style="background:#dbeafe;color:#1e3f63;font-size:11px">Comercial</span></h3>
+    <div style="font-size:12px;color:var(--gray-600)">${fmtFecha(v.fecha)}${v.tecnico?' · '+esc(v.tecnico):''}${com.zona?' · '+esc(com.zona):''}${(!c&&com.prospecto)?' · <span style="color:var(--amber)">prospecto</span>':''}</div>
+    ${(com.est_cant||com.ha)?`<div style="font-size:12px;margin-top:6px">${com.est_cant?com.est_cant+' establecimiento'+(com.est_cant!=1?'s':''):''}${(com.est_cant&&com.ha)?' · ':''}${com.ha?Number(com.ha).toLocaleString('es-PY')+' ha':''}</div>`:''}
+    ${hac?`<div style="margin-top:8px">${hac}</div>`:''}
+    ${sec('Operativa y manejo',esc(com.operativa))}
+    ${sec('Nutrición actual',esc(com.nutricion))}
+    ${reco?`<div class="sect-t">Productos a recomendar / cotizar</div><ul style="font-size:12px;margin:2px 0 0;padding-left:18px">${reco}</ul>`:''}
+    ${(com.interes||com.proximo_paso||v.proxima)?`<div class="sect-t">Cierre</div><div style="font-size:12px">${com.interes?'Interés: <b>'+esc(com.interes)+'</b>':''}${com.proximo_paso?'<br>Próximo paso: '+esc(com.proximo_paso):''}${v.proxima?'<br>Seguimiento: <b>'+fmtFecha(v.proxima)+'</b>':''}</div>`:''}
+    ${sec('Observaciones',esc(com.observaciones))}
+    <div class="row2" style="margin-top:14px">${canEdit()?`<button class="btn btn-sec" onclick="editarVisitaComercial('${v.id}')">✎ Editar</button>`:''}<button class="btn btn-amber" onclick="informeComercialPDF('${v.id}')" style="${canEdit()?'':'flex:1'}">🖨️ Informe</button></div>
     ${canEdit()?`<button class="btn btn-sec btn-block" style="margin-top:8px;color:var(--red)" onclick="borrarVisita('${v.id}')">Borrar visita</button>`:''}
     <button class="btn btn-ghost btn-block" style="margin-top:8px" onclick="cerrarModal()">Cerrar</button>`;
   gs('modal').classList.add('show');
@@ -1437,14 +1516,64 @@ function editarVisita(id){ if(!canEdit()){ showToast('Sin permiso'); return; } c
 }
 function borrarVisita(id){ if(!canEdit()){ showToast('Sin permiso'); return; } if(!confirm('¿Borrar esta visita?'))return; saveVisitas(getVisitas().filter(v=>v.id!==id)); cloudDelete('visitas',id); cerrarModal(); renderHome(); if(curCliente&&gs('sCliente').classList.contains('active'))abrirCliente(curCliente); else if(gs('sHistorial').classList.contains('active'))renderHistorial(); else goHome(); }
 
+// ══ VISITA COMERCIAL (prospección / relevamiento) ══
+const CATEG_COM=['Cría','Recría','Terminación','Invernada','Tambo','Otros'];
+function poblarClientesComercial(term){ const q=(term||'').trim().toLowerCase(); let cl=getClientes().slice().sort((a,b)=>a.nombre.localeCompare(b.nombre)); if(q) cl=cl.filter(c=>(c.nombre||'').toLowerCase().includes(q)); const cur=gs('vcCliente')?gs('vcCliente').value:''; gs('vcCliente').innerHTML='<option value="">— Elegir (opcional) —</option>'+cl.map(c=>`<option value="${c.id}">${esc(c.nombre)}</option>`).join(''); if(cur && cl.some(c=>c.id===cur)) gs('vcCliente').value=cur; }
+function filtrarClientesComercial(){ poblarClientesComercial(gs('vcClienteBuscar').value); }
+function vcFillProdList(){ const dl=gs('vcProdList'); if(dl) dl.innerHTML=precioList().map(p=>`<option value="${esc(p.n)}">`).join(''); }
+function vcAddHacienda(cat,cab){ const row=document.createElement('div'); row.className='vcHaRow'; row.style.cssText='display:flex;gap:6px;margin-bottom:5px';
+  row.innerHTML=`<select class="vcHaCat" style="flex:0 0 130px">${CATEG_COM.map(c=>`<option ${cat===c?'selected':''}>${c}</option>`).join('')}</select><input class="vcHaCab" type="number" inputmode="numeric" placeholder="cabezas" value="${cab!=null&&cab!==''?cab:''}" style="flex:1;min-width:0"><span onclick="this.parentNode.remove()" style="cursor:pointer;color:var(--red);align-self:center;padding:0 3px">✕</span>`;
+  gs('vcHaciendaRows').appendChild(row); }
+function vcReadHacienda(){ const out=[]; document.querySelectorAll('#vcHaciendaRows .vcHaRow').forEach(r=>{ const cab=num(r.querySelector('.vcHaCab').value); if(cab==null) return; out.push({ categoria:r.querySelector('.vcHaCat').value, cabezas:cab }); }); return out; }
+function vcAddReco(prod,nota){ const row=document.createElement('div'); row.className='vcRecoRow'; row.style.cssText='display:flex;gap:6px;margin-bottom:5px';
+  row.innerHTML=`<input class="vcRecoProd" list="vcProdList" placeholder="Producto" autocomplete="off" value="${prod?esc(prod):''}" style="flex:1;min-width:0"><input class="vcRecoNota" placeholder="nota (kg, obs…)" autocomplete="off" value="${nota?esc(nota):''}" style="flex:1;min-width:0"><span onclick="this.parentNode.remove()" style="cursor:pointer;color:var(--red);align-self:center;padding:0 3px">✕</span>`;
+  gs('vcRecoRows').appendChild(row); }
+function vcReadReco(){ const out=[]; document.querySelectorAll('#vcRecoRows .vcRecoRow').forEach(r=>{ const p=(r.querySelector('.vcRecoProd').value||'').trim(); if(!p) return; out.push({ producto:p, nota:(r.querySelector('.vcRecoNota').value||'').trim() }); }); return out; }
+function nuevaVisitaComercial(){ if(!puedeVer('visita')||!canEdit()){ showToast('Sin permiso'); return; } editVisitaId=null; abrirFormComercial(null); }
+function nuevaVisitaComercialCliente(cid){ if(!canEdit()){ showToast('Tu rol es de solo lectura'); return; } editVisitaId=null; abrirFormComercial(cid); }
+function abrirFormComercial(clienteId){
+  showScreen('sVisitaComercial','Visita comercial','Prospección y relevamiento',true);
+  if(gs('vcClienteBuscar')) gs('vcClienteBuscar').value=''; poblarClientesComercial(''); vcFillProdList();
+  gs('vcCliente').value=clienteId||''; gs('vcProspecto').value='';
+  gs('vcFecha').value=hoy(); gs('vcComercial').value=(getSession()&&getSession().nombre)||localStorage.getItem('bio:tecnico')||'';
+  ['vcOperativa','vcEstCant','vcHa','vcZona','vcNutricion','vcProxPaso','vcProxima','vcObs'].forEach(id=>{ if(gs(id)) gs(id).value=''; });
+  if(gs('vcInteres')) gs('vcInteres').value='Medio';
+  gs('vcHaciendaRows').innerHTML=''; vcAddHacienda('Cría',''); vcAddHacienda('Recría','');
+  gs('vcRecoRows').innerHTML=''; vcAddReco('','');
+}
+function guardarVisitaComercial(imprimir){
+  if(!canEdit()){ showToast('Sin permiso'); return; }
+  const cid=gs('vcCliente').value; const prospecto=(gs('vcProspecto').value||'').trim();
+  if(!cid && !prospecto){ showToast('Elegí un cliente o poné el nombre del prospecto'); return; }
+  const com={ prospecto, operativa:gs('vcOperativa').value.trim(), est_cant:num(gs('vcEstCant').value), ha:num(gs('vcHa').value), zona:gs('vcZona').value.trim(), hacienda:vcReadHacienda(), nutricion:gs('vcNutricion').value.trim(), recomendados:vcReadReco(), interes:gs('vcInteres').value, proximo_paso:gs('vcProxPaso').value.trim(), observaciones:gs('vcObs').value.trim() };
+  const prev=editVisitaId?getVisitas().find(x=>x.id===editVisitaId):null;
+  const v={ id: editVisitaId||('VC-'+Date.now()), tipo:'comercial', cliente_id:cid, estancia_id:'', fecha:gs('vcFecha').value||hoy(), tecnico:gs('vcComercial').value.trim(), evaluaciones:[], comercial:com, diagnostico:'', recomendacion:'', proxima:gs('vcProxima').value||'', ts:new Date().toISOString(), pending:true };
+  if(gs('vcComercial').value.trim()) localStorage.setItem('bio:tecnico',gs('vcComercial').value.trim());
+  let vs=getVisitas(); if(editVisitaId){ vs=vs.map(x=>x.id===editVisitaId?v:x); } else { vs.unshift(v); }
+  saveVisitas(vs); cloudPush('visitas', v); editVisitaId=null;
+  showToast('✓ Visita comercial guardada');
+  if(imprimir) informeComercialPDF(v.id);
+  if(curCliente) abrirCliente(curCliente); else goHome();
+}
+function editarVisitaComercial(id){ if(!canEdit()){ showToast('Sin permiso'); return; } const v=getVisitas().find(x=>x.id===id); if(!v)return; cerrarModal(); editVisitaId=id; abrirFormComercial(v.cliente_id);
+  const com=v.comercial||{};
+  gs('vcProspecto').value=com.prospecto||''; gs('vcFecha').value=v.fecha||hoy(); gs('vcComercial').value=v.tecnico||'';
+  gs('vcOperativa').value=com.operativa||''; gs('vcEstCant').value=(com.est_cant!=null?com.est_cant:''); gs('vcHa').value=(com.ha!=null?com.ha:''); gs('vcZona').value=com.zona||'';
+  gs('vcNutricion').value=com.nutricion||''; gs('vcInteres').value=com.interes||'Medio'; gs('vcProxPaso').value=com.proximo_paso||''; gs('vcProxima').value=v.proxima||''; gs('vcObs').value=com.observaciones||'';
+  gs('vcHaciendaRows').innerHTML=''; (com.hacienda&&com.hacienda.length?com.hacienda:[{categoria:'Cría',cabezas:''}]).forEach(h=>vcAddHacienda(h.categoria,h.cabezas));
+  gs('vcRecoRows').innerHTML=''; (com.recomendados&&com.recomendados.length?com.recomendados:[{producto:'',nota:''}]).forEach(r=>vcAddReco(r.producto,r.nota));
+}
+
 // ── HISTORIAL ──
 function renderHistorial(){
   const cat=gs('hFiltroCat').value, q=(gs('hBuscar').value||'').trim().toLowerCase();
   const tec=gs('hFiltroTec')?gs('hFiltroTec').value:'';
+  const tipo=gs('hFiltroTipo')?gs('hFiltroTipo').value:'';
   let vs=getVisitas().slice().sort((a,b)=>String(b.fecha||'').localeCompare(String(a.fecha||'')));
-  if(cat) vs=vs.filter(v=>visitaEvals(v).some(ev=>ev.categoria===cat));
+  if(tipo) vs=vs.filter(v=>(v.tipo||'tecnica')===tipo);
+  if(cat) vs=vs.filter(v=>(v.tipo!=='comercial')&&visitaEvals(v).some(ev=>ev.categoria===cat));
   if(tec) vs=vs.filter(v=>(v.tecnico||'Sin técnico')===tec);
-  if(q) vs=vs.filter(v=>{ const c=clienteById(v.cliente_id); return String(c&&c.nombre||'').toLowerCase().includes(q); });
+  if(q) vs=vs.filter(v=>{ const c=clienteById(v.cliente_id); const nom=(c&&c.nombre)||(v.comercial&&v.comercial.prospecto)||''; return nom.toLowerCase().includes(q); });
   gs('hCount').textContent=vs.length?vs.length+' visitas':'';
   if(!vs.length){ gs('histList').innerHTML='<div class="empty">Sin visitas.</div>'; return; }
   // separadas por técnico comercial
@@ -2436,6 +2565,62 @@ function ptAddFromOT(o){ if(!o||!o.bolsas) return; const key=precioKey({c:o.prod
 function ptRemoveFromOT(id){ getPtMovs().filter(m=>m.ot_id===id).forEach(m=>{ if(typeof cloudDelete==='function') cloudDelete('ptmov',m.id); }); savePtMovs(getPtMovs().filter(m=>m.ot_id!==id)); }
 
 // ── INFORME PDF (molde del .docx) ──
+function informeComercialPDF(id){
+  const v=getVisitas().find(x=>x.id===id); if(!v){ showToast('Visita no encontrada'); return; }
+  const c=clienteById(v.cliente_id)||{}; const com=v.comercial||{}; const nom=(c.nombre)||com.prospecto||'—';
+  const hacFilas=(com.hacienda||[]).filter(h=>h.cabezas).map(h=>`<tr><td>${esc(h.categoria)}</td><td class="c b">${Number(h.cabezas).toLocaleString('es-PY')}</td></tr>`).join('')||'<tr><td colspan="2" class="na">—</td></tr>';
+  const recoFilas=(com.recomendados||[]).filter(r=>r.producto).map(r=>`<tr><td>${esc(r.producto)}</td><td>${esc(r.nota||'')}</td></tr>`).join('')||'<tr><td colspan="2" class="na">—</td></tr>';
+  const totalCab=(com.hacienda||[]).reduce((a,h)=>a+(Number(h.cabezas)||0),0);
+  const sec=(t,b)=>b?`<h2>${t}</h2><div class="diag">${esc(b)}</div>`:'';
+  const w=window.open('','_blank'); if(!w){ showToast('Permití las ventanas emergentes'); return; }
+  const fname='Visita-Comercial-'+String(nom).replace(/[^\w\-]+/g,'_')+'-'+String(v.fecha||'').replace(/[^\w\-]+/g,'')+'.pdf';
+  w.document.write(`<html><head><meta charset="utf-8"><title>Visita comercial — ${esc(nom)}</title><style>
+    *{box-sizing:border-box} body{font-family:Arial,Helvetica,sans-serif;color:#1a202c;margin:0;font-size:12.5px}
+    .wrap{max-width:780px;margin:0 auto;padding:26px}
+    .top{background:#fff;border:1px solid #cbd5e0;padding:14px 22px;border-radius:12px;margin-bottom:16px;text-align:center}
+    .top img{height:52px} .top p{margin:6px 0 0;font-size:12px;color:#1e3f63;font-weight:600}
+    h2{font-size:13px;color:#1e3f63;border-bottom:2px solid #1e3f63;padding-bottom:3px;margin:18px 0 8px}
+    table{width:100%;border-collapse:collapse;margin-bottom:6px} td,th{border:1px solid #cbd5e0;padding:6px 8px}
+    .datos td{border:none;padding:4px 6px} .datos .k{color:#718096;font-size:11px;width:130px} .datos .v{font-weight:600}
+    th{background:#eaf0f7;font-size:11px;text-align:left} .c{text-align:center} .b{font-weight:700}
+    .diag{background:#f7fafc;border-left:3px solid #1e3f63;padding:10px 12px;border-radius:6px;white-space:pre-wrap}
+    .na{color:#a0aec0} .foot{margin-top:26px;border-top:1px solid #cbd5e0;padding-top:10px;color:#718096;font-size:10.5px;text-align:center}
+    @media print{.wrap{padding:12mm} .noprint{display:none}}
+  </style></head><body><div class="wrap">
+    <div class="top"><img src="${location.origin}${location.pathname.replace(/[^/]*$/,'')}logo.jpg" alt="BioInnova"><p>VISITA COMERCIAL · Prospección y relevamiento</p></div>
+    <h2>Datos</h2>
+    <table class="datos"><tr><td class="k">Cliente / prospecto</td><td class="v">${esc(nom)}${(!c.nombre&&com.prospecto)?' (prospecto)':''}</td><td class="k">Fecha</td><td class="v">${fmtFecha(v.fecha)}</td></tr>
+      <tr><td class="k">Comercial</td><td class="v">${esc(v.tecnico||'—')}</td><td class="k">Zona</td><td class="v">${esc(com.zona||'—')}</td></tr>
+      <tr><td class="k">Establecimientos</td><td class="v">${com.est_cant!=null&&com.est_cant!==''?com.est_cant:'—'}</td><td class="k">Hectáreas</td><td class="v">${com.ha?Number(com.ha).toLocaleString('es-PY'):'—'}</td></tr></table>
+    ${sec('Operativa y manejo',com.operativa)}
+    <h2>Hacienda y categorías de producción${totalCab?' — '+totalCab.toLocaleString('es-PY')+' cab.':''}</h2>
+    <table><thead><tr><th>Categoría</th><th class="c">Cabezas</th></tr></thead><tbody>${hacFilas}</tbody></table>
+    ${sec('Nutrición actual',com.nutricion)}
+    <h2>Productos a recomendar / cotizar</h2>
+    <table><thead><tr><th>Producto</th><th>Nota</th></tr></thead><tbody>${recoFilas}</tbody></table>
+    <h2>Cierre</h2>
+    <table class="datos"><tr><td class="k">Nivel de interés</td><td class="v">${esc(com.interes||'—')}</td><td class="k">Seguimiento</td><td class="v">${v.proxima?fmtFecha(v.proxima):'—'}</td></tr>
+      <tr><td class="k">Próximo paso</td><td class="v" colspan="3">${esc(com.proximo_paso||'—')}</td></tr></table>
+    ${sec('Observaciones',com.observaciones)}
+    <div class="foot">Bioinnova S.A.  ·  Nutrición de bovinos de corte  ·  Informe generado el ${fmtFecha(hoy())}</div>
+    <div class="noprint" style="display:flex;gap:8px;justify-content:center;margin-top:18px">
+      <button onclick="guardarPDF(this)" style="background:#16a34a;color:#fff;border:none;padding:10px 20px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">📄 Guardar PDF</button>
+      <button onclick="window.print()" style="background:#1e3f63;color:#fff;border:none;padding:10px 20px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">🖨️ Imprimir</button>
+    </div>
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.2/dist/html2pdf.bundle.min.js"><\/script>
+  <script>
+  var PDF_NAME=${JSON.stringify(fname)};
+  function guardarPDF(btn){ if(typeof html2pdf==='undefined'){ alert('No se pudo cargar el generador de PDF. Verificá tu conexión.'); return; }
+    var t=btn?btn.textContent:''; if(btn){ btn.textContent='Generando…'; btn.disabled=true; }
+    var el=document.querySelector('.wrap');
+    var opt={ margin:8, filename:PDF_NAME, image:{type:'jpeg',quality:0.95}, html2canvas:{scale:2,useCORS:true,backgroundColor:'#ffffff'}, jsPDF:{unit:'mm',format:'a4',orientation:'portrait'}, pagebreak:{mode:['css','legacy']} };
+    var done=function(){ if(btn){ btn.textContent=t; btn.disabled=false; } };
+    html2pdf().set(opt).from(el).save().then(done).catch(function(){ done(); alert('No se pudo generar el PDF.'); });
+  }
+  <\/script></body></html>`);
+  w.document.close();
+}
 function informePDF(id){
   const v=getVisitas().find(x=>x.id===id); if(!v){ showToast('Visita no encontrada'); return; }
   const c=clienteById(v.cliente_id)||{}, e=estanciaById(v.estancia_id)||{};
