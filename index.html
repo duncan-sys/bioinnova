@@ -1698,7 +1698,10 @@ function fmAddRow(nombre, pct){ const row=document.createElement('div'); row.cla
   gs('fmRows').appendChild(row); }
 function fmReadRows(){ const out=[]; document.querySelectorAll('#fmRows .fmRow').forEach(r=>{ const nom=(r.querySelector('.fmIns').value||'').trim(); if(!nom) return; const p=num(r.querySelector('.fmPct').value); const ins=insumosAll().find(x=>String(x.n).toLowerCase()===nom.toLowerCase()); out.push({ c:ins?ins.c:('X-'+nom.toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,12)), n:ins?ins.n:nom, p:p||0, t:'p' }); }); return out; }
 function fmRecalc(){ const rows=fmReadRows(); const tot=rows.reduce((a,x)=>a+(Number(x.p)||0),0);
-  const el=gs('fmTot'); if(el) el.innerHTML=`Total ingredientes: <b style="color:${Math.abs(tot-100)<0.5?'var(--green)':'var(--amber)'}">${tot.toFixed(1)}%</b>${Math.abs(tot-100)<0.5?' ✓':' <span style="color:var(--gray-400)">(idealmente 100%)</span>'}`;
+  const el=gs('fmTot'); if(el){ const ok=Math.abs(tot-100)<0.5; const diff=Math.round((100-tot)*10)/10;
+    const bg=ok?'var(--green-lt)':'#fdecec', col=ok?'var(--green-d)':'#b91c1c';
+    const msg=ok?'✓ Suma 100%':(diff>0?('Faltan '+diff.toFixed(1)+'%'):('Sobran '+Math.abs(diff).toFixed(1)+'%'));
+    el.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;background:${bg};border-radius:8px;padding:8px 12px;font-weight:700;font-size:13px;color:${col}"><span>Total: ${tot.toFixed(1)}%</span><span>${msg}</span></div>`; }
   const kg=num(gs('fmKg').value)||30; const f={ c:(gs('fmC').value||'').trim(), n:(gs('fmN').value||'').trim(), kg, ins:rows };
   const pe=gs('fmPrecio'); if(pe){ if(rows.length){ const base=costoBaseFormula(f); const p0=precioBaseKg(f,'p0',margenDe(f.c,f.n)); pe.textContent=`Costo base insumos: ${gsFmt(Math.round(base))}/kg · Precio contado estimado: ${gsFmt(p0)}/kg (margen ${(margenDe(f.c,f.n)*100).toFixed(0)}%)`; } else pe.textContent=''; } }
 function formulaGuardar(orig){ if(!puedeEditarFormula()){ showToast('Sin permiso'); return; }
