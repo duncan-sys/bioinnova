@@ -362,6 +362,7 @@ textarea{resize:vertical;min-height:66px}
       <div class="card-h">Datos de la visita</div>
       <div class="card-b">
         <label class="fl">Cliente</label>
+        <input type="search" id="vClienteBuscar" placeholder="🔎 Buscar cliente…" oninput="filtrarClientesSelect()" autocomplete="off" style="margin-bottom:6px">
         <select id="vCliente" onchange="visitaClienteChange()"></select>
         <label class="fl">Estancia</label>
         <select id="vEstancia" onchange="renderEvals()"></select>
@@ -429,15 +430,16 @@ const KPIS={
    {k:'Consumo del producto',u:'g/an/día',min:90,max:120},
    {k:'GMD ternero pre-destete',u:'kg/día',min:0.7,max:1.0},
    {k:'Peso al destete',u:'kg',min:180,max:240},
-   {k:'Tasa de preñez',u:'%',min:85,max:95},
+   {k:'Tasa de preñez',u:'%',min:70,max:95},
+   {k:'Tasa de marcación',u:'%',min:65,max:92},
    {k:'Mortandad de terneros',u:'%',min:0,max:3},
  ],
  'Recría':[
-   {k:'Peso de entrada',u:'kg',min:180,max:240},
+   {k:'Peso de entrada',u:'kg',min:160,max:240},
    {k:'GMD',u:'kg/día',min:0.4,max:0.8},
    {k:'Consumo suplemento',u:'% PV',min:0.3,max:0.5},
    {k:'Condición corporal',u:'escala 1–5',min:3,max:3.5},
-   {k:'Uniformidad del lote (CV)',u:'%',min:0,max:12},
+   {k:'Uniformidad del lote (CV)',u:'%',min:0,max:10},
    {k:'Disponibilidad de pastura',u:'kg MS/ha',min:1500,max:3000},
  ],
  'Terminación':[
@@ -1216,7 +1218,7 @@ function borrarEstancia(id){
 // ── VISITA ──
 function nuevaVisita(){ if(!puedeVer('visita')||!canEdit()){ showToast('Sin permiso'); return; } editVisitaId=null; abrirFormVisita(null); }
 function nuevaVisitaCliente(){ if(!canEdit()){ showToast('Tu rol es de solo lectura'); return; } editVisitaId=null; abrirFormVisita(curCliente); }
-function nuevoEval(){ return { categoria:CATEGORIAS[0], lote:'', producto:'', presentacion:'', consumo:'', dias:'', animales:'', kpis:{}, comentario:'' }; }
+function nuevoEval(){ return { categoria:CATEGORIAS[0], lote:'', producto:'', presentacion:'', consumo:'', peso:'', consumo_g:'', dias:'', animales:'', kpis:{}, comentario:'' }; }
 // convierte una visita (nueva con evaluaciones, o vieja con categoría única) a un array de evaluaciones
 function visitaEvals(v){
   if(v.evaluaciones && v.evaluaciones.length) return v.evaluaciones;
@@ -1227,20 +1229,34 @@ function abrirFormVisita(clienteId){
   const cl=getClientes();
   if(!cl.length){ showToast('Primero cargá un cliente'); openClientes(); return; }
   showScreen('sVisita','Nueva visita','Cargá los datos y KPIs',true);
-  gs('vCliente').innerHTML='<option value="">— Elegir —</option>'+cl.slice().sort((a,b)=>a.nombre.localeCompare(b.nombre)).map(c=>`<option value="${c.id}">${esc(c.nombre)}</option>`).join('');
+  if(gs('vClienteBuscar')) gs('vClienteBuscar').value='';
+  poblarClientesSelect('');
   gs('vFecha').value=hoy(); gs('vTecnico').value=(getSession()&&getSession().nombre)||localStorage.getItem('bio:tecnico')||'';
   gs('vDiag').value=''; gs('vReco').value=''; gs('vProxima').value='';
   gs('vCliente').value=clienteId||'';
   _evals=[ nuevoEval() ];
   visitaClienteChange();
 }
+function poblarClientesSelect(term){ const q=(term||'').trim().toLowerCase(); let cl=getClientes().slice().sort((a,b)=>a.nombre.localeCompare(b.nombre)); if(q) cl=cl.filter(c=>(c.nombre||'').toLowerCase().includes(q)); const cur=gs('vCliente')?gs('vCliente').value:''; gs('vCliente').innerHTML='<option value="">— Elegir —</option>'+cl.map(c=>`<option value="${c.id}">${esc(c.nombre)}</option>`).join(''); if(cur && cl.some(c=>c.id===cur)) gs('vCliente').value=cur; }
+function filtrarClientesSelect(){ poblarClientesSelect(gs('vClienteBuscar').value); const s=gs('vCliente'); if(s && s.value==='' && s.options.length===2){ s.selectedIndex=1; visitaClienteChange(); } }
 function visitaClienteChange(){
   const cid=gs('vCliente').value; const ests=estanciasDe(cid);
   gs('vEstancia').innerHTML = ests.length? ests.map(e=>`<option value="${e.id}">${esc(e.nombre)}</option>`).join('') : '<option value="">(sin estancias — cargalas en el cliente)</option>';
   renderEvals();
 }
 // ── Bloques de evaluación (categoría + lote) ──
-function renderEvals(){ const wrap=gs('evalsWrap'); if(!wrap) return; wrap.innerHTML=consumoDatalistHtml()+_evals.map((ev,i)=>evalBlockHtml(ev,i)).join(''); }
+function renderEvals(){ const wrap=gs('evalsWrap'); if(!wrap) return; wrap.innerHTML=consumoDatalistHtml()+_evals.map((ev,i)=>evalBlockHtml(ev,i)).join(''); _evals.forEach((ev,i)=>{ evalPesoLive(i); evalMermaLive(i); }); }
+// % del peso vivo = (gramos/1000) / peso × 100
+function evalPesoLive(i){ const el=gs('ev'+i+'_pv'); if(!el) return; const peso=num(gs('ev'+i+'_peso')?gs('ev'+i+'_peso').value:''); const g=num(gs('ev'+i+'_consg')?gs('ev'+i+'_consg').value:'');
+  if(peso&&g){ const pv=(g/1000)/peso*100; el.innerHTML='= <b>'+pv.toFixed(2)+' % del peso vivo</b> <span style="color:var(--gray-400)">('+g+' g ÷ '+peso+' kg)</span>'; } else el.textContent=''; }
+function _kpiIdx(cat,name){ return (KPIS[cat]||[]).findIndex(d=>d.k===name); }
+// Merma preñez→marcación (Cría) = % preñez − % marcación
+function evalMermaLive(i){ const el=gs('ev'+i+'_merma'); if(!el) return; const cat=gs('ev'+i+'_cat')?gs('ev'+i+'_cat').value:''; if(cat!=='Cría'){ el.textContent=''; return; }
+  const jp=_kpiIdx('Cría','Tasa de preñez'), jm=_kpiIdx('Cría','Tasa de marcación');
+  const pr=num(gs('ev'+i+'_kv'+jp)?gs('ev'+i+'_kv'+jp).value:''); const ma=num(gs('ev'+i+'_kv'+jm)?gs('ev'+i+'_kv'+jm).value:'');
+  if(pr==null||ma==null){ el.innerHTML='<span style="color:var(--gray-400)">Merma preñez→marcación: cargá preñez y marcación</span>'; return; }
+  const merma=Math.round((pr-ma)*10)/10; const col=(merma<0)?'var(--amber)':(merma<=8?'var(--green)':'var(--red)');
+  el.innerHTML='Merma preñez→marcación: <b style="color:'+col+'">'+merma+'%</b> <span style="color:var(--gray-400)">('+pr+'% − '+ma+'%)</span>'; }
 function evalBlockHtml(ev,i){
   const cat=ev.categoria||CATEGORIAS[0];
   const est=estanciaById(gs('vEstancia').value);
@@ -1277,6 +1293,11 @@ function evalBlockHtml(ev,i){
         <div><label class="fl">Presentación</label><input type="text" id="ev${i}_pres" value="${esc(ev.presentacion)}" placeholder="—"></div>
         <div><label class="fl">Consumo observado</label><input type="text" id="ev${i}_cons" list="consumoList" value="${esc(ev.consumo)}" placeholder="elegí o escribí…" autocomplete="off"></div>
       </div>
+      <div class="row2">
+        <div><label class="fl">Peso actual del animal (kg)</label><input type="number" id="ev${i}_peso" inputmode="decimal" value="${ev.peso!=null?ev.peso:''}" placeholder="ej: 220" oninput="evalPesoLive(${i})"></div>
+        <div><label class="fl">Consumo del producto (g/animal/día)</label><input type="number" id="ev${i}_consg" inputmode="numeric" value="${ev.consumo_g!=null?ev.consumo_g:''}" placeholder="ej: 300" oninput="evalPesoLive(${i})"></div>
+      </div>
+      <div id="ev${i}_pv" style="font-size:12px;color:var(--green);margin:-4px 0 8px;min-height:14px"></div>
       ${cat==='Terminación'?`
       <div style="font-size:12px;font-weight:700;color:var(--gray-700);margin:10px 0 2px">💰 Costo / beneficio (opcional)</div>
       <div class="row2">
@@ -1287,6 +1308,7 @@ function evalBlockHtml(ev,i){
       <input type="number" id="ev${i}_precioc" inputmode="numeric" value="${ev.precio_kg_carne!=null?ev.precio_kg_carne:''}" placeholder="ej: 12000">`:''}
       <div style="font-size:12px;font-weight:700;color:var(--gray-700);margin:10px 0 2px">KPIs — ${esc(cat)}</div>
       ${kpisHtml}
+      ${cat==='Cría'?`<div id="ev${i}_merma" style="font-size:12px;margin:4px 0 6px;min-height:16px"></div>`:''}
       <label class="fl">Comentario / diagnóstico de este lote <span style="color:var(--gray-400);font-weight:400">(opcional)</span></label>
       <textarea id="ev${i}_com" placeholder="Hallazgos y recomendación de este lote…">${esc(ev.comentario)}</textarea>
     </div>
@@ -1301,6 +1323,8 @@ function syncEvals(){
       producto: gs('ev'+i+'_prod')?gs('ev'+i+'_prod').value:ev.producto,
       presentacion: gs('ev'+i+'_pres')?gs('ev'+i+'_pres').value:ev.presentacion,
       consumo: gs('ev'+i+'_cons')?gs('ev'+i+'_cons').value:ev.consumo,
+      peso: gs('ev'+i+'_peso')?gs('ev'+i+'_peso').value:ev.peso,
+      consumo_g: gs('ev'+i+'_consg')?gs('ev'+i+'_consg').value:ev.consumo_g,
       dias: gs('ev'+i+'_dias')?gs('ev'+i+'_dias').value:ev.dias,
       animales: gs('ev'+i+'_anim')?gs('ev'+i+'_anim').value:ev.animales,
       precio_kg_carne: gs('ev'+i+'_precioc')?gs('ev'+i+'_precioc').value:ev.precio_kg_carne,
@@ -1318,7 +1342,7 @@ function evalLoteChange(i){ const sel=gs('ev'+i+'_lote'); const val=sel.value;
 function evalProdChange(i){ const sel=gs('ev'+i+'_prod'); const val=sel.value;
   if(val==='__otro'){ sel.selectedIndex=0; const nom=prompt('Nombre del producto:'); if(nom&&nom.trim()){ syncEvals(); _evals[i].producto=nom.trim(); _evals[i].presentacion=''; renderEvals(); } return; }
   const opt=sel.options[sel.selectedIndex]; if(opt&&opt.dataset.p){ const p=gs('ev'+i+'_pres'); if(p) p.value=opt.dataset.p; } }
-function evalKpiLive(i,j){ const cat=gs('ev'+i+'_cat').value; const d=KPIS[cat][j]; const st=kpiEstado(gs('ev'+i+'_kv'+j).value,d); const el=gs('ev'+i+'_ks'+j); el.className='sem '+st.cls; el.textContent=st.txt; }
+function evalKpiLive(i,j){ const cat=gs('ev'+i+'_cat').value; const d=KPIS[cat][j]; const st=kpiEstado(gs('ev'+i+'_kv'+j).value,d); const el=gs('ev'+i+'_ks'+j); el.className='sem '+st.cls; el.textContent=st.txt; if(cat==='Cría') evalMermaLive(i); }
 function guardarVisita(imprimir){
   if(!canEdit()){ showToast('Sin permiso'); return; }
   const cid=gs('vCliente').value; if(!cid){ showToast('Elegí el cliente'); return; }
@@ -1328,8 +1352,8 @@ function guardarVisita(imprimir){
     const kpis=(KPIS[cat]||[]).map((d,j)=>{ const val=String((ev.kpis&&ev.kpis[j]!=null)?ev.kpis[j]:'').trim(); return {k:d.k,u:d.u,min:d.min,max:d.max,valor:val,estado:kpiEstado(val,d).rep}; });
     const consumo=String(ev.consumo||'').trim(); addConsumo(consumo);
     const esT=cat==='Terminación';
-    return { categoria:cat, lote:(ev.lote||''), producto:(ev.producto||''), presentacion:String(ev.presentacion||'').trim(), consumo, dias_sistema:num(ev.dias), n_animales:num(ev.animales), precio_kg_carne:(esT?num(ev.precio_kg_carne):null), consumo_kg:(esT?num(ev.consumo_kg):null), costo_producto:(esT?num(ev.costo_producto):null), kpis, comentario:String(ev.comentario||'').trim() };
-  }).filter(ev=> ev.lote || ev.producto || ev.n_animales!=null || ev.comentario || ev.precio_kg_carne!=null || ev.consumo_kg!=null || ev.costo_producto!=null || ev.kpis.some(k=>k.valor));
+    return { categoria:cat, lote:(ev.lote||''), producto:(ev.producto||''), presentacion:String(ev.presentacion||'').trim(), consumo, peso:num(ev.peso), consumo_g:num(ev.consumo_g), dias_sistema:num(ev.dias), n_animales:num(ev.animales), precio_kg_carne:(esT?num(ev.precio_kg_carne):null), consumo_kg:(esT?num(ev.consumo_kg):null), costo_producto:(esT?num(ev.costo_producto):null), kpis, comentario:String(ev.comentario||'').trim() };
+  }).filter(ev=> ev.lote || ev.producto || ev.n_animales!=null || ev.comentario || ev.peso!=null || ev.consumo_g!=null || ev.precio_kg_carne!=null || ev.consumo_kg!=null || ev.costo_producto!=null || ev.kpis.some(k=>k.valor));
   if(!evaluaciones.length){ showToast('Cargá al menos una categoría/lote con datos'); return; }
   const estId=gs('vEstancia').value||'';
   const v={
@@ -1405,7 +1429,7 @@ function editarVisita(id){ if(!canEdit()){ showToast('Sin permiso'); return; } c
   _evals = visitaEvals(v).map(ev=>{
     const defs=KPIS[ev.categoria]||[]; const kpisObj={};
     (ev.kpis||[]).forEach(k=>{ const j=defs.findIndex(d=>d.k===k.k); if(j>=0) kpisObj[j]=k.valor||''; });
-    return { categoria:ev.categoria, lote:ev.lote||'', producto:ev.producto||'', presentacion:ev.presentacion||'', consumo:ev.consumo||'', dias:(ev.dias_sistema!=null?ev.dias_sistema:''), animales:(ev.n_animales!=null?ev.n_animales:''), precio_kg_carne:(ev.precio_kg_carne!=null?ev.precio_kg_carne:''), consumo_kg:(ev.consumo_kg!=null?ev.consumo_kg:''), costo_producto:(ev.costo_producto!=null?ev.costo_producto:''), kpis:kpisObj, comentario:ev.comentario||'' };
+    return { categoria:ev.categoria, lote:ev.lote||'', producto:ev.producto||'', presentacion:ev.presentacion||'', consumo:ev.consumo||'', peso:(ev.peso!=null?ev.peso:''), consumo_g:(ev.consumo_g!=null?ev.consumo_g:''), dias:(ev.dias_sistema!=null?ev.dias_sistema:''), animales:(ev.n_animales!=null?ev.n_animales:''), precio_kg_carne:(ev.precio_kg_carne!=null?ev.precio_kg_carne:''), consumo_kg:(ev.consumo_kg!=null?ev.consumo_kg:''), costo_producto:(ev.costo_producto!=null?ev.costo_producto:''), kpis:kpisObj, comentario:ev.comentario||'' };
   });
   if(!_evals.length) _evals=[nuevoEval()];
   renderEvals();
@@ -2418,10 +2442,15 @@ function informePDF(id){
   const secciones=visitaEvals(v).map(ev=>{
     const filas=(ev.kpis||[]).map(k=>{ const cls=k.estado&&k.estado.includes('rango')?'ok':(k.estado&&k.estado!=='—'?'warn':'na');
       return `<tr><td>${esc(k.k)}</td><td class="c">${esc(k.u||'')}</td><td class="c">${k.min!=null?k.min:'—'}</td><td class="c">${k.max!=null?k.max:'—'}</td><td class="c b">${k.valor||'—'}</td><td class="c ${cls}">${esc(k.estado||'—')}</td></tr>`; }).join('');
+    const pvTxt=(ev.peso&&ev.consumo_g)?((ev.consumo_g/1000)/ev.peso*100).toFixed(2)+'% PV':'';
+    const consProd=ev.consumo_g?(ev.consumo_g+' g/día'+(pvTxt?' ('+pvTxt+')':'')):'—';
+    const mermaHtml=(()=>{ if(ev.categoria!=='Cría') return ''; const kv=nm=>{ const k=(ev.kpis||[]).find(x=>x.k===nm); const n=k?num(k.valor):null; return n; }; const pr=kv('Tasa de preñez'), ma=kv('Tasa de marcación'); if(pr==null||ma==null) return ''; const m=Math.round((pr-ma)*10)/10; return `<div class="diag" style="margin-top:6px;border-color:#c8820a"><b>Merma preñez→marcación:</b> ${m}% <span style="color:#718096">(${pr}% preñez − ${ma}% marcación)</span></div>`; })();
     return `<h3 class="cat">${esc(ev.categoria)}${ev.lote?' — Lote: '+esc(ev.lote):''}</h3>
       <table class="datos"><tr><td class="k">Nº de animales</td><td class="v">${ev.n_animales!=null?ev.n_animales:'—'}</td><td class="k">Días en sistema</td><td class="v">${ev.dias_sistema!=null?ev.dias_sistema:'—'}</td></tr>
-      <tr><td class="k">Producto</td><td class="v">${esc(ev.producto||'—')}</td><td class="k">Consumo</td><td class="v">${esc(ev.consumo||'—')}</td></tr></table>
+      <tr><td class="k">Producto</td><td class="v">${esc(ev.producto||'—')}</td><td class="k">Consumo obs.</td><td class="v">${esc(ev.consumo||'—')}</td></tr>
+      <tr><td class="k">Peso actual</td><td class="v">${ev.peso?esc(ev.peso)+' kg':'—'}</td><td class="k">Consumo producto</td><td class="v">${esc(consProd)}</td></tr></table>
       <table><thead><tr><th>KPI</th><th class="c">Unidad</th><th class="c">Obj. Mín</th><th class="c">Obj. Máx</th><th class="c">Medido</th><th class="c">Estado</th></tr></thead><tbody>${filas}</tbody></table>
+      ${mermaHtml}
       ${(()=>{ const h=gananciaDiariaHtml(ev); return h? '<div class="diag" style="margin-top:6px;border-color:#2f7d3b">'+h.replace(/<div[^>]*>/,'').replace(/<\/div>$/,'')+'</div>':''; })()}
       ${ev.comentario?`<div class="diag" style="margin-top:6px">${esc(ev.comentario)}</div>`:''}`;
   }).join('');
@@ -2455,8 +2484,22 @@ function informePDF(id){
     <h2>4. Cierre</h2>
     <div class="firma"><div>Próxima visita: <b>${v.proxima?fmtFecha(v.proxima):'____ / ____ / ______'}</b></div><div>Firma del técnico: __________________</div></div>
     <div class="foot">Bioinnova S.A.  ·  Nutrición de bovinos de corte  ·  Informe generado el ${fmtFecha(hoy())}</div>
-    <div class="noprint" style="text-align:center;margin-top:18px"><button onclick="window.print()" style="background:#2f7d3b;color:#fff;border:none;padding:10px 22px;border-radius:8px;font-size:14px;cursor:pointer">🖨️ Imprimir / Guardar PDF</button></div>
-  </div></body></html>`);
+    <div class="noprint" style="display:flex;gap:8px;justify-content:center;margin-top:18px">
+      <button onclick="guardarPDF(this)" style="background:#16a34a;color:#fff;border:none;padding:10px 20px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">📄 Guardar PDF</button>
+      <button onclick="window.print()" style="background:#2f7d3b;color:#fff;border:none;padding:10px 20px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">🖨️ Imprimir</button>
+    </div>
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.2/dist/html2pdf.bundle.min.js"><\/script>
+  <script>
+  var PDF_NAME=${JSON.stringify('Informe-'+String(c.nombre||'').replace(/[^\w\-]+/g,'_')+'-'+String(v.fecha||'').replace(/[^\w\-]+/g,'')+'.pdf')};
+  function guardarPDF(btn){ if(typeof html2pdf==='undefined'){ alert('No se pudo cargar el generador de PDF. Verificá tu conexión.'); return; }
+    var t=btn?btn.textContent:''; if(btn){ btn.textContent='Generando…'; btn.disabled=true; }
+    var el=document.querySelector('.wrap');
+    var opt={ margin:8, filename:PDF_NAME, image:{type:'jpeg',quality:0.95}, html2canvas:{scale:2,useCORS:true,backgroundColor:'#ffffff'}, jsPDF:{unit:'mm',format:'a4',orientation:'portrait'}, pagebreak:{mode:['css','legacy']} };
+    var done=function(){ if(btn){ btn.textContent=t; btn.disabled=false; } };
+    html2pdf().set(opt).from(el).save().then(done).catch(function(){ done(); alert('No se pudo generar el PDF. Probá con Imprimir → Guardar como PDF.'); });
+  }
+  <\/script></body></html>`);
   w.document.close();
 }
 
