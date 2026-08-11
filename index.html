@@ -497,7 +497,7 @@ textarea{resize:vertical;min-height:66px}
       <button class="fintab" id="finT_banco" onclick="finSetTab('banco')">🏦 Banco</button>
       <button class="fintab" id="finT_flujo" onclick="finSetTab('flujo')">📊 Flujo</button>
     </div>
-    <div style="font-size:9px;color:var(--gray-400);text-align:right;margin:-6px 0 8px">BioInnova <span id="finVer">v72</span></div>
+    <div style="font-size:9px;color:var(--gray-400);text-align:right;margin:-6px 0 8px">BioInnova <span id="finVer">v73</span></div>
     <div id="finW_ventas">
       <button class="btn btn-primary btn-block" style="margin-bottom:8px" onclick="finVentaModal()">＋ Nueva venta</button>
       <input type="search" id="finVBuscar" placeholder="🔎 Buscar cliente / factura…" oninput="finRenderVentas()" style="margin-bottom:8px">
@@ -974,7 +974,7 @@ const ROL_MODULOS = {
 function puedeVer(mod){ if(!currentRol) return true; if(currentAccesos&&Object.prototype.hasOwnProperty.call(currentAccesos,mod)) return !!currentAccesos[mod]; return (ROL_MODULOS[currentRol]||[]).includes(mod); }
 // Acceso efectivo de un usuario dado (rol + overrides) — para el cuadro de Usuarios
 function accesoEfectivo(rol, accesos, mod){ if(accesos&&Object.prototype.hasOwnProperty.call(accesos,mod)) return !!accesos[mod]; return (ROL_MODULOS[rol]||[]).includes(mod); }
-const MODULOS_LBL=[['visita','Visitas'],['clientes','Clientes'],['historial','Historial'],['crm','CRM'],['viaticos','Viáticos'],['cotizaciones','Cotizaciones'],['ot','OT'],['formulas','Formulaciones'],['inventario','Inventario'],['caja','Caja chica'],['usuarios','Usuarios']];
+const MODULOS_LBL=[['visita','Visitas'],['clientes','Clientes'],['historial','Historial'],['crm','CRM'],['viaticos','Viáticos'],['cotizaciones','Cotizaciones'],['agenda','Agenda'],['ot','OT'],['formulas','Formulaciones'],['inventario','Inventario'],['caja','Caja chica'],['finanzas','Finanzas'],['usuarios','Usuarios']];
 function esPlanta(){ return puedeVer('ot'); }   // compat (usado por funciones de OT)
 let currentUser=null, currentRol=null, currentAccesos=null;   // accesos = overrides por-usuario {mod:true|false}
 function rolLabel(r){ return (ROLES[r]&&ROLES[r].label)||r; }
@@ -3387,11 +3387,15 @@ function finRenderFlujo(){ const modo=_finFluModo; const per=ds=>{ if(!ds)return
       (cu.abonos||[]).forEach(a=>{ if(String(a.fecha)>=start){ const g=finGs(su,a.monto); add(per(a.fecha),'pagR',g); gPagR+=g; } }); }); });
   chList.forEach(ch=>{ const g=finGs(ch,ch.monto); add(perRoll(ch.fecha),'cheq',g); gCheq+=g; });
   getPrestamos().forEach(pr=>{ if(pr.estado==='pagado') return; _prestamoFechas(pr).forEach(c=>{ const g=finGs(pr,c.monto); add(perRoll(c.fecha),'banco',g); gBanco+=g; }); });
-  // ventas proyectadas (estimado mensual, neto de las ventas reales ya facturadas ese mes) + costo de producción (% del proyectado)
+  // facturas de insumos de producción reales por mes (para descontar del costo proyectado)
+  const insumoMes={}; const _esInsumo=c=>{ const cat=(c.categoria||'').toLowerCase(); return cat.indexOf('nsumo')>=0 || cat.indexOf('ateria prima')>=0; };
+  getCompras().forEach(c=>{ if(_esInsumo(c)){ const mk=String(c.fecha||'').slice(0,7); if(mk) insumoMes[mk]=(insumoMes[mk]||0)+finGs(c,c.monto); } });
+  // ventas proyectadas (estimado mensual, neto de ventas reales facturadas) y costo de producción (% del estimado, neto de facturas de insumo reales). Se distribuyen luego entre los períodos del mes.
+  const projByMonth={};
   if(ventasMes>0){ const monthAdd=(ym,n)=>{ let [y,m]=ym.split('-').map(Number); m+=n; y+=Math.floor((m-1)/12); m=((m-1)%12+12)%12+1; return y+'-'+String(m).padStart(2,'0'); };
     const sm=(start>hoyS?start:hoyS).slice(0,7); let mdm=sm; Object.keys(P).forEach(k=>{ const km=k.slice(0,7); if(km>mdm) mdm=km; });
     const horizon=(monthAdd(sm,11)>mdm)?monthAdd(sm,11):mdm; let M=sm, guard=0;
-    while(M<=horizon && guard++<60){ const proj=Math.max(0,ventasMes-(salesMes[M]||0)); const cost=Math.round(costoPct/100*proj); const pk=perRoll(M+'-01'); if(proj){ add(pk,'vproy',proj); gVproy+=proj; } if(cost){ add(pk,'cprod',cost); gCprod+=cost; } M=monthAdd(M,1); } }
+    while(M<=horizon && guard++<60){ const proj=Math.max(0,ventasMes-(salesMes[M]||0)); const cost=Math.max(0,Math.round(costoPct/100*ventasMes)-(insumoMes[M]||0)); projByMonth[M]={proj,cost}; gVproy+=proj; gCprod+=cost; touch(perRoll(M+'-01')); M=monthAdd(M,1); } }
   // tarjetas resumen
   const porCobrar=gCxc, porPagar=gCxp+gSue+gCheq+gBanco, saldoFin=saldoIni+(gVproy+gCxc+gCobR)-(gCprod+gCxp+gPagR+gCheq+gBanco+gSue);
   if(gs('finFluResumen')) gs('finFluResumen').innerHTML=`<div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -3401,6 +3405,9 @@ function finRenderFlujo(){ const modo=_finFluModo; const per=ds=>{ if(!ds)return
   // períodos continuos desde el arranque hacia adelante
   const set={...P}; set[startPer]=set[startPer]||1; set[curK]=set[curK]||1; let ks=Object.keys(set).sort();
   let periods=[]; if(ks.length){ if(modo==='sem'){ let d=_fluDate(ks[0]); const e=_fluDate(ks[ks.length-1]); let g=0; while(d<=e && g++<200){ periods.push(_fluKey(d)); d.setDate(d.getDate()+7); } } else { let [y,m]=ks[0].split('-').map(Number); const [ye,me]=ks[ks.length-1].split('-').map(Number); let g=0; while((y<ye||(y===ye&&m<=me)) && g++<200){ periods.push(y+'-'+String(m).padStart(2,'0')); m++; if(m>12){m=1;y++;} } } }
+  // distribuir el proyectado mensual (ventas y costos) entre los períodos de cada mes
+  if(ventasMes>0){ const byMonth={}; periods.forEach(k=>{ const mo=k.slice(0,7); (byMonth[mo]=byMonth[mo]||[]).push(k); });
+    Object.keys(projByMonth).forEach(M=>{ const wks=byMonth[M]||[]; if(!wks.length) return; const pm=projByMonth[M]; const pv=Math.round(pm.proj/wks.length), pc=Math.round(pm.cost/wks.length); wks.forEach(k=>{ P[k]=P[k]||{vproy:0,cxc:0,cobR:0,cprod:0,cxp:0,pagR:0,cheq:0,banco:0,sue:0}; P[k].vproy=(P[k].vproy||0)+pv; P[k].cprod=(P[k].cprod||0)+pc; }); }); }
   periods.forEach(k=>{ const p=P[k]||{vproy:0,cxc:0,cobR:0,cprod:0,cxp:0,pagR:0,cheq:0,banco:0,sue:0}; p.totIn=(p.vproy||0)+p.cxc+(p.cobR||0); p.totEg=(p.cprod||0)+p.cxp+(p.pagR||0)+p.cheq+p.banco+p.sue; p.neto=p.totIn-p.totEg; P[k]=p; });
   let ac=saldoIni; periods.forEach(k=>{ ac+=P[k].neto; P[k].acum=ac; });
   // toggle
