@@ -528,6 +528,33 @@ const KPIS={
    {k:'Mortandad/morbilidad',u:'%',min:0,max:2},
  ]
 };
+// Cría se subdivide en 3 componentes con suplementación y KPIs independientes.
+const KPIS_CRIA={
+ vacas:[
+   {k:'Condición corporal de la vaca',u:'escala 1–5',min:3,max:3.5},
+   {k:'Consumo del producto',u:'g/an/día',min:90,max:120},
+   {k:'Tasa de preñez',u:'%',min:70,max:95},
+   {k:'Tasa de marcación',u:'%',min:65,max:92},
+   {k:'Mortandad de vacas',u:'%',min:0,max:2},
+ ],
+ terneros:[
+   {k:'Peso al nacimiento',u:'kg',min:30,max:40},
+   {k:'GMD pre-destete',u:'kg/día',min:0.5,max:0.8},
+   {k:'Peso al destete',u:'kg',min:150,max:240},
+   {k:'Peso de venta',u:'kg',min:null,max:null},
+   {k:'Mortandad de terneros',u:'%',min:0,max:3},
+ ],
+ toros:[
+   {k:'Condición corporal',u:'escala 1–5',min:3,max:3.5},
+   {k:'Circunferencia escrotal',u:'cm',min:32,max:50},
+   {k:'Motilidad espermática',u:'%',min:60,max:100},
+   {k:'Morfología (% normales)',u:'%',min:70,max:100},
+   {k:'Libido / capacidad de servicio',u:'escala 1–5',min:3,max:5},
+ ]
+};
+const CRIA_COMPS=[['vacas','🐄 Vacas (madres)'],['terneros','🐮 Terneros'],['toros','🐂 Toros (padres)']];
+function compLabel(c){ return {vacas:'Vacas (madres)',terneros:'Terneros',toros:'Toros (padres)'}[c]||''; }
+function kpisDe(cat, comp){ if(cat==='Cría') return KPIS_CRIA[comp||'vacas']||KPIS_CRIA.vacas; return KPIS[cat]||[]; }
 const PRODUCTOS={
  'Cría':[
    {n:'PRO - Bioinnova Creep Feeding - 30kg',l:'Proteinados',p:'Bolsa 30 kg'},
@@ -566,12 +593,31 @@ const PRODUCTOS={
    {n:'NPF - Bioinnova Confi 4 U',l:'Núcleos',p:'Bolsa 25 kg'},
  ]
 };
+// Suplemento recomendado por componente de Cría
+const PRODUCTOS_CRIA={
+ vacas:[
+   {n:'SM - Bioinnova Cría 90 - 30kg',l:'Sales Minerales',p:'Bolsa 30 kg'},
+   {n:'PRO - Bioinnova Secas - 30kg',l:'Proteinados',p:'Bolsa 30 kg'},
+   {n:'PRO - Bioinnova Aguas - 30kg',l:'Proteinados',p:'Bolsa 30 kg'},
+ ],
+ terneros:[
+   {n:'PRO - Bioinnova Creep Feeding - 30kg',l:'Proteinados',p:'Bolsa 30 kg'},
+   {n:'BAL - Desmamante Precoz 22% CL - 40kg',l:'Balanceados',p:'Bolsa 40 kg'},
+   {n:'BAL - Desmamante Campo 18% - 40kg',l:'Balanceados',p:'Bolsa 40 kg'},
+   {n:'BAL - Desmamante Campo 18% CL - 40kg',l:'Balanceados',p:'Bolsa 40 kg'},
+ ],
+ toros:[
+   {n:'Bioinnova Reproductor 19% - 40kg',l:'Balanceados',p:'Bolsa 40 kg'},
+   {n:'SM - Bioinnova Cría 90 - 30kg',l:'Sales Minerales',p:'Bolsa 30 kg'},
+ ]
+};
 function catClass(c){ return c==='Cría'?'chip-cria':c==='Recría'?'chip-recria':'chip-terminacion'; }
 // Productos para el desplegable de visitas: recomendados de la categoría + TODO el resto del catálogo (sin duplicar).
 // Así el técnico siempre encuentra cualquier producto, aunque no esté en la lista curada de la categoría.
 function _prodNorm(n){ return String(n||'').replace(/^\s*[A-Za-zÁÉÍÓÚÑ]{2,4}\s*-\s*/,'').replace(/\s+/g,' ').trim().toLowerCase(); }
-function productosVisita(cat){
-  const rec=(PRODUCTOS[cat]||[]).map(p=>({n:p.n,p:p.p||'',rec:true}));
+function productosVisita(cat, comp){
+  const base = (cat==='Cría') ? (PRODUCTOS_CRIA[comp||'vacas']||PRODUCTOS_CRIA.vacas) : (PRODUCTOS[cat]||[]);
+  const rec=base.map(p=>({n:p.n,p:p.p||'',rec:true}));
   const seen=new Set(rec.map(p=>_prodNorm(p.n)));
   const extra=[];
   try{ precioList().forEach(p=>{ if(!p||!p.n) return; const nn=_prodNorm(p.n); if(seen.has(nn)) return; seen.add(nn); extra.push({n:p.n, p:(p.kg?('Bolsa '+p.kg+' kg'):''), rec:false}); }); }catch{}
@@ -1309,7 +1355,7 @@ function borrarEstancia(id){
 // ── VISITA ──
 function nuevaVisita(){ if(!puedeVer('visita')||!canEdit()){ showToast('Sin permiso'); return; } editVisitaId=null; abrirFormVisita(null); }
 function nuevaVisitaCliente(){ if(!canEdit()){ showToast('Tu rol es de solo lectura'); return; } editVisitaId=null; abrirFormVisita(curCliente); }
-function nuevoEval(){ return { categoria:CATEGORIAS[0], lote:'', producto:'', presentacion:'', consumo:'', peso:'', consumo_g:'', dias:'', animales:'', kpis:{}, comentario:'' }; }
+function nuevoEval(){ return { categoria:CATEGORIAS[0], componente:'vacas', lote:'', producto:'', presentacion:'', consumo:'', peso:'', consumo_g:'', dias:'', animales:'', kpis:{}, comentario:'' }; }
 // convierte una visita (nueva con evaluaciones, o vieja con categoría única) a un array de evaluaciones
 function visitaEvals(v){
   if(v.evaluaciones && v.evaluaciones.length) return v.evaluaciones;
@@ -1343,38 +1389,41 @@ function evalPesoLive(i){ const el=gs('ev'+i+'_pv'); if(!el) return; const peso=
   else if(g&&!peso){ el.innerHTML='<span style="color:var(--amber)">⚠ Cargá el <b>peso</b> para calcular el % del peso vivo</span>'; }
   else if(peso&&!g){ el.innerHTML='<span style="color:var(--amber)">⚠ Cargá el <b>consumo del producto (g/día)</b> para calcular el % PV</span>'; }
   else el.textContent=''; }
-function _kpiIdx(cat,name){ return (KPIS[cat]||[]).findIndex(d=>d.k===name); }
-// Merma preñez→marcación (Cría) = % preñez − % marcación
-function evalMermaLive(i){ const el=gs('ev'+i+'_merma'); if(!el) return; const cat=gs('ev'+i+'_cat')?gs('ev'+i+'_cat').value:''; if(cat!=='Cría'){ el.textContent=''; return; }
-  const jp=_kpiIdx('Cría','Tasa de preñez'), jm=_kpiIdx('Cría','Tasa de marcación');
+function _kpiIdx(cat,comp,name){ return kpisDe(cat,comp).findIndex(d=>d.k===name); }
+// Merma preñez→marcación (Cría · Vacas) = % preñez − % marcación
+function evalMermaLive(i){ const el=gs('ev'+i+'_merma'); if(!el) return; const cat=gs('ev'+i+'_cat')?gs('ev'+i+'_cat').value:''; const comp=gs('ev'+i+'_comp')?gs('ev'+i+'_comp').value:'vacas'; if(cat!=='Cría'||comp!=='vacas'){ el.textContent=''; return; }
+  const jp=_kpiIdx('Cría','vacas','Tasa de preñez'), jm=_kpiIdx('Cría','vacas','Tasa de marcación');
   const pr=num(gs('ev'+i+'_kv'+jp)?gs('ev'+i+'_kv'+jp).value:''); const ma=num(gs('ev'+i+'_kv'+jm)?gs('ev'+i+'_kv'+jm).value:'');
   if(pr==null||ma==null){ el.innerHTML='<span style="color:var(--gray-400)">Merma preñez→marcación: cargá preñez y marcación</span>'; return; }
   const merma=Math.round((pr-ma)*10)/10; const col=(merma<0)?'var(--amber)':(merma<=8?'var(--green)':'var(--red)');
   el.innerHTML='Merma preñez→marcación: <b style="color:'+col+'">'+merma+'%</b> <span style="color:var(--gray-400)">('+pr+'% − '+ma+'%)</span>'; }
 function evalBlockHtml(ev,i){
   const cat=ev.categoria||CATEGORIAS[0];
+  const comp = cat==='Cría' ? (ev.componente||'vacas') : '';
   const est=estanciaById(gs('vEstancia').value);
   const lotes=((est&&est.lotes)||[]).filter(l=>l.categoria===cat);
   const loteOpts='<option value="">Toda la categoría</option>'
     + lotes.map(l=>`<option value="${esc(l.nombre)}" ${ev.lote===l.nombre?'selected':''} data-cab="${l.cabezas!=null?l.cabezas:''}">${esc(l.nombre)}${l.cabezas!=null?' ('+l.cabezas+' cab.)':''}</option>`).join('')
     + (ev.lote && !lotes.some(l=>l.nombre===ev.lote)?`<option value="${esc(ev.lote)}" selected>${esc(ev.lote)}</option>`:'')
     + '<option value="__otro">➕ Otro lote…</option>';
-  const pv=productosVisita(cat);
+  const pv=productosVisita(cat, comp);
   const prodOpt=p=>`<option value="${esc(p.n)}" ${ev.producto===p.n?'selected':''} data-p="${esc(p.p||'')}">${esc(p.n)}</option>`;
   const yaEsta = pv.rec.some(p=>p.n===ev.producto) || pv.extra.some(p=>p.n===ev.producto);
+  const recoLbl = cat==='Cría' ? ('Cría · '+compLabel(comp)) : cat;
   const prodOpts='<option value="">— Elegir —</option>'
-    + (pv.rec.length?`<optgroup label="Recomendados — ${esc(cat)}">${pv.rec.map(prodOpt).join('')}</optgroup>`:'')
+    + (pv.rec.length?`<optgroup label="Recomendados — ${esc(recoLbl)}">${pv.rec.map(prodOpt).join('')}</optgroup>`:'')
     + (pv.extra.length?`<optgroup label="Otros productos">${pv.extra.map(prodOpt).join('')}</optgroup>`:'')
     + (ev.producto && !yaEsta?`<option value="${esc(ev.producto)}" selected>${esc(ev.producto)}</option>`:'')
     + '<option value="__otro">➕ Otro…</option>';
-  const kpisHtml=(KPIS[cat]||[]).map((d,j)=>{ const val=(ev.kpis&&ev.kpis[j]!=null)?ev.kpis[j]:''; const st=kpiEstado(val,d);
+  const kpisHtml=kpisDe(cat,comp).map((d,j)=>{ const val=(ev.kpis&&ev.kpis[j]!=null)?ev.kpis[j]:''; const st=kpiEstado(val,d);
     return `<div class="kpi"><div class="kpi-top"><span class="kpi-n">${esc(d.k)}</span><span class="kpi-ref">🟢 ${esc(refTxt(d))}</span></div>
     <div class="kpi-in"><input type="text" inputmode="decimal" id="ev${i}_kv${j}" value="${esc(val)}" placeholder="valor" oninput="evalKpiLive(${i},${j})"><span id="ev${i}_ks${j}" class="sem ${st.cls}">${st.txt}</span></div></div>`; }).join('');
   return `<div class="card">
-    <div class="card-h"><span>Evaluación ${i+1} <span class="chip ${catClass(cat)}">${esc(cat)}</span></span>${_evals.length>1?`<span onclick="removeEval(${i})" title="Quitar" style="cursor:pointer;color:var(--red);font-size:18px">✕</span>`:''}</div>
+    <div class="card-h"><span>Evaluación ${i+1} <span class="chip ${catClass(cat)}">${esc(cat)}${cat==='Cría'?' · '+esc(compLabel(comp)):''}</span></span>${_evals.length>1?`<span onclick="removeEval(${i})" title="Quitar" style="cursor:pointer;color:var(--red);font-size:18px">✕</span>`:''}</div>
     <div class="card-b">
       <label class="fl">Categoría / rubro</label>
       <select id="ev${i}_cat" onchange="evalCatChange(${i})">${CATEGORIAS.map(c=>`<option ${cat===c?'selected':''}>${c}</option>`).join('')}</select>
+      ${cat==='Cría'?`<label class="fl">Componente de la Cría</label><select id="ev${i}_comp" onchange="evalCompChange(${i})">${CRIA_COMPS.map(c=>`<option value="${c[0]}" ${comp===c[0]?'selected':''}>${c[1]}</option>`).join('')}</select>`:''}
       <label class="fl">Lote <span style="color:var(--gray-400);font-weight:400">(opcional — cabecera, media, cola…)</span></label>
       <select id="ev${i}_lote" onchange="evalLoteChange(${i})">${loteOpts}</select>
       <div class="row2">
@@ -1400,9 +1449,9 @@ function evalBlockHtml(ev,i){
       </div>
       <label class="fl">Precio del kg de carne (Gs) <span style="color:var(--gray-400);font-weight:400">(lo que cobra el productor, sobre carcasa)</span></label>
       <input type="number" id="ev${i}_precioc" inputmode="numeric" value="${ev.precio_kg_carne!=null?ev.precio_kg_carne:''}" placeholder="ej: 12000">`:''}
-      <div style="font-size:12px;font-weight:700;color:var(--gray-700);margin:10px 0 2px">KPIs — ${esc(cat)}</div>
+      <div style="font-size:12px;font-weight:700;color:var(--gray-700);margin:10px 0 2px">KPIs — ${esc(cat==='Cría'?('Cría · '+compLabel(comp)):cat)}</div>
       ${kpisHtml}
-      ${cat==='Cría'?`<div id="ev${i}_merma" style="font-size:12px;margin:4px 0 6px;min-height:16px"></div>`:''}
+      ${(cat==='Cría'&&comp==='vacas')?`<div id="ev${i}_merma" style="font-size:12px;margin:4px 0 6px;min-height:16px"></div>`:''}
       <label class="fl">Comentario / diagnóstico de este lote <span style="color:var(--gray-400);font-weight:400">(opcional)</span></label>
       <textarea id="ev${i}_com" placeholder="Hallazgos y recomendación de este lote…">${esc(ev.comentario)}</textarea>
     </div>
@@ -1411,8 +1460,9 @@ function evalBlockHtml(ev,i){
 function syncEvals(){
   _evals=_evals.map((ev,i)=>{
     const cat=gs('ev'+i+'_cat')?gs('ev'+i+'_cat').value:ev.categoria;
-    const kpis={}; (KPIS[cat]||[]).forEach((d,j)=>{ const el=gs('ev'+i+'_kv'+j); if(el) kpis[j]=el.value; });
-    return { categoria:cat,
+    const comp = cat==='Cría' ? (gs('ev'+i+'_comp')?gs('ev'+i+'_comp').value:(ev.componente||'vacas')) : '';
+    const kpis={}; kpisDe(cat,comp).forEach((d,j)=>{ const el=gs('ev'+i+'_kv'+j); if(el) kpis[j]=el.value; });
+    return { categoria:cat, componente:comp,
       lote: gs('ev'+i+'_lote')?gs('ev'+i+'_lote').value:ev.lote,
       producto: gs('ev'+i+'_prod')?gs('ev'+i+'_prod').value:ev.producto,
       presentacion: gs('ev'+i+'_pres')?gs('ev'+i+'_pres').value:ev.presentacion,
@@ -1429,24 +1479,25 @@ function syncEvals(){
 }
 function addEval(){ syncEvals(); _evals.push(nuevoEval()); renderEvals(); const w=gs('evalsWrap'); if(w&&w.lastElementChild) w.lastElementChild.scrollIntoView({behavior:'smooth',block:'center'}); }
 function removeEval(i){ syncEvals(); _evals.splice(i,1); if(!_evals.length) _evals=[nuevoEval()]; renderEvals(); }
-function evalCatChange(i){ syncEvals(); _evals[i].categoria=gs('ev'+i+'_cat').value; _evals[i].lote=''; _evals[i].producto=''; _evals[i].presentacion=''; _evals[i].kpis={}; renderEvals(); }
+function evalCatChange(i){ syncEvals(); const nc=gs('ev'+i+'_cat').value; _evals[i].categoria=nc; _evals[i].componente=(nc==='Cría'?'vacas':''); _evals[i].lote=''; _evals[i].producto=''; _evals[i].presentacion=''; _evals[i].kpis={}; renderEvals(); }
+function evalCompChange(i){ syncEvals(); _evals[i].componente=gs('ev'+i+'_comp').value; _evals[i].producto=''; _evals[i].presentacion=''; _evals[i].kpis={}; renderEvals(); }
 function evalLoteChange(i){ const sel=gs('ev'+i+'_lote'); const val=sel.value;
   if(val==='__otro'){ sel.selectedIndex=0; const nom=prompt('Nombre del lote:'); if(nom&&nom.trim()){ syncEvals(); _evals[i].lote=nom.trim(); renderEvals(); } return; }
   const opt=sel.options[sel.selectedIndex]; if(opt&&opt.dataset.cab){ const a=gs('ev'+i+'_anim'); if(a) a.value=opt.dataset.cab; } }
 function evalProdChange(i){ const sel=gs('ev'+i+'_prod'); const val=sel.value;
   if(val==='__otro'){ sel.selectedIndex=0; const nom=prompt('Nombre del producto:'); if(nom&&nom.trim()){ syncEvals(); _evals[i].producto=nom.trim(); _evals[i].presentacion=''; renderEvals(); } return; }
   const opt=sel.options[sel.selectedIndex]; if(opt&&opt.dataset.p){ const p=gs('ev'+i+'_pres'); if(p) p.value=opt.dataset.p; } }
-function evalKpiLive(i,j){ const cat=gs('ev'+i+'_cat').value; const d=KPIS[cat][j]; const st=kpiEstado(gs('ev'+i+'_kv'+j).value,d); const el=gs('ev'+i+'_ks'+j); el.className='sem '+st.cls; el.textContent=st.txt; if(cat==='Cría') evalMermaLive(i); }
+function evalKpiLive(i,j){ const cat=gs('ev'+i+'_cat').value; const comp=gs('ev'+i+'_comp')?gs('ev'+i+'_comp').value:''; const d=kpisDe(cat,comp)[j]; if(!d) return; const st=kpiEstado(gs('ev'+i+'_kv'+j).value,d); const el=gs('ev'+i+'_ks'+j); el.className='sem '+st.cls; el.textContent=st.txt; if(cat==='Cría'&&comp==='vacas') evalMermaLive(i); }
 function guardarVisita(imprimir){
   if(!canEdit()){ showToast('Sin permiso'); return; }
   const cid=gs('vCliente').value; if(!cid){ showToast('Elegí el cliente'); return; }
   syncEvals();
   const evaluaciones=_evals.map(ev=>{
-    const cat=ev.categoria;
-    const kpis=(KPIS[cat]||[]).map((d,j)=>{ const val=String((ev.kpis&&ev.kpis[j]!=null)?ev.kpis[j]:'').trim(); return {k:d.k,u:d.u,min:d.min,max:d.max,valor:val,estado:kpiEstado(val,d).rep}; });
+    const cat=ev.categoria; const comp=cat==='Cría'?(ev.componente||'vacas'):'';
+    const kpis=kpisDe(cat,comp).map((d,j)=>{ const val=String((ev.kpis&&ev.kpis[j]!=null)?ev.kpis[j]:'').trim(); return {k:d.k,u:d.u,min:d.min,max:d.max,valor:val,estado:kpiEstado(val,d).rep}; });
     const consumo=String(ev.consumo||'').trim(); addConsumo(consumo);
     const esT=cat==='Terminación';
-    return { categoria:cat, lote:(ev.lote||''), producto:(ev.producto||''), presentacion:String(ev.presentacion||'').trim(), consumo, peso:num(ev.peso), consumo_g:num(ev.consumo_g), dias_sistema:num(ev.dias), n_animales:num(ev.animales), precio_kg_carne:(esT?num(ev.precio_kg_carne):null), consumo_kg:(esT?num(ev.consumo_kg):null), costo_producto:(esT?num(ev.costo_producto):null), kpis, comentario:String(ev.comentario||'').trim() };
+    return { categoria:cat, componente:comp, lote:(ev.lote||''), producto:(ev.producto||''), presentacion:String(ev.presentacion||'').trim(), consumo, peso:num(ev.peso), consumo_g:num(ev.consumo_g), dias_sistema:num(ev.dias), n_animales:num(ev.animales), precio_kg_carne:(esT?num(ev.precio_kg_carne):null), consumo_kg:(esT?num(ev.consumo_kg):null), costo_producto:(esT?num(ev.costo_producto):null), kpis, comentario:String(ev.comentario||'').trim() };
   }).filter(ev=> ev.lote || ev.producto || ev.n_animales!=null || ev.comentario || ev.peso!=null || ev.consumo_g!=null || ev.precio_kg_carne!=null || ev.consumo_kg!=null || ev.costo_producto!=null || ev.kpis.some(k=>k.valor));
   if(!evaluaciones.length){ showToast('Cargá al menos una categoría/lote con datos'); return; }
   const estId=gs('vEstancia').value||'';
@@ -1476,7 +1527,7 @@ function verVisita(id){
   const bloques=visitaEvals(v).map(ev=>{
     const filas=(ev.kpis||[]).map(k=>`<tr><td>${esc(k.k)}</td><td style="text-align:center">${k.valor||'—'} ${esc(unidadCorta(k.u))}</td><td style="text-align:center">${semHtmlMini(k.estado)}</td></tr>`).join('');
     return `<div style="margin-top:10px;border-top:1px solid var(--gray-200);padding-top:8px">
-      <div style="font-size:12px;font-weight:700"><span class="chip ${catClass(ev.categoria)}">${esc(ev.categoria)}</span>${ev.lote?' Lote '+esc(ev.lote):''} <span style="color:var(--gray-400);font-weight:400">· ${ev.n_animales||0} an.${ev.producto?' · '+esc(ev.producto):''}</span></div>
+      <div style="font-size:12px;font-weight:700"><span class="chip ${catClass(ev.categoria)}">${esc(ev.categoria)}${(ev.categoria==='Cría'&&ev.componente)?' · '+esc(compLabel(ev.componente)):''}</span>${ev.lote?' Lote '+esc(ev.lote):''} <span style="color:var(--gray-400);font-weight:400">· ${ev.n_animales||0} an.${ev.producto?' · '+esc(ev.producto):''}</span></div>
       <table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:4px"><tbody>${filas}</tbody></table>
       ${gananciaDiariaHtml(ev)}
       ${ev.comentario?'<div style="font-size:11px;color:var(--gray-600);margin-top:3px">💬 '+esc(ev.comentario)+'</div>':''}</div>`;
@@ -1541,9 +1592,10 @@ function editarVisita(id){ if(!canEdit()){ showToast('Sin permiso'); return; } c
   gs('vFecha').value=v.fecha; gs('vTecnico').value=v.tecnico||'';
   gs('vDiag').value=v.diagnostico||''; gs('vReco').value=v.recomendacion||''; gs('vProxima').value=v.proxima||'';
   _evals = visitaEvals(v).map(ev=>{
-    const defs=KPIS[ev.categoria]||[]; const kpisObj={};
+    const comp = ev.categoria==='Cría' ? (ev.componente||'vacas') : '';
+    const defs=kpisDe(ev.categoria,comp); const kpisObj={};
     (ev.kpis||[]).forEach(k=>{ const j=defs.findIndex(d=>d.k===k.k); if(j>=0) kpisObj[j]=k.valor||''; });
-    return { categoria:ev.categoria, lote:ev.lote||'', producto:ev.producto||'', presentacion:ev.presentacion||'', consumo:ev.consumo||'', peso:(ev.peso!=null?ev.peso:''), consumo_g:(ev.consumo_g!=null?ev.consumo_g:''), dias:(ev.dias_sistema!=null?ev.dias_sistema:''), animales:(ev.n_animales!=null?ev.n_animales:''), precio_kg_carne:(ev.precio_kg_carne!=null?ev.precio_kg_carne:''), consumo_kg:(ev.consumo_kg!=null?ev.consumo_kg:''), costo_producto:(ev.costo_producto!=null?ev.costo_producto:''), kpis:kpisObj, comentario:ev.comentario||'' };
+    return { categoria:ev.categoria, componente:comp, lote:ev.lote||'', producto:ev.producto||'', presentacion:ev.presentacion||'', consumo:ev.consumo||'', peso:(ev.peso!=null?ev.peso:''), consumo_g:(ev.consumo_g!=null?ev.consumo_g:''), dias:(ev.dias_sistema!=null?ev.dias_sistema:''), animales:(ev.n_animales!=null?ev.n_animales:''), precio_kg_carne:(ev.precio_kg_carne!=null?ev.precio_kg_carne:''), consumo_kg:(ev.consumo_kg!=null?ev.consumo_kg:''), costo_producto:(ev.costo_producto!=null?ev.costo_producto:''), kpis:kpisObj, comentario:ev.comentario||'' };
   });
   if(!_evals.length) _evals=[nuevoEval()];
   renderEvals();
@@ -2901,7 +2953,7 @@ function informePDF(id){
     else if(!ev.consumo_g && ev.peso) consProd=_amber+'⚠ falta el consumo (g/día) para calcular % PV</span>';
     else consProd='—';
     const mermaHtml=(()=>{ if(ev.categoria!=='Cría') return ''; const kv=nm=>{ const k=(ev.kpis||[]).find(x=>x.k===nm); const n=k?num(k.valor):null; return n; }; const pr=kv('Tasa de preñez'), ma=kv('Tasa de marcación'); if(pr==null||ma==null) return ''; const m=Math.round((pr-ma)*10)/10; return `<div class="diag" style="margin-top:6px;border-color:#c8820a"><b>Merma preñez→marcación:</b> ${m}% <span style="color:#718096">(${pr}% preñez − ${ma}% marcación)</span></div>`; })();
-    return `<h3 class="cat">${esc(ev.categoria)}${ev.lote?' — Lote: '+esc(ev.lote):''}</h3>
+    return `<h3 class="cat">${esc(ev.categoria)}${(ev.categoria==='Cría'&&ev.componente)?' · '+esc(compLabel(ev.componente)):''}${ev.lote?' — Lote: '+esc(ev.lote):''}</h3>
       <table class="datos"><tr><td class="k">Nº de animales</td><td class="v">${ev.n_animales!=null?ev.n_animales:'—'}</td><td class="k">Días en sistema</td><td class="v">${ev.dias_sistema!=null?ev.dias_sistema:'—'}</td></tr>
       <tr><td class="k">Producto</td><td class="v">${esc(ev.producto||'—')}</td><td class="k">Consumo obs.</td><td class="v">${esc(ev.consumo||'—')}</td></tr>
       <tr><td class="k">Peso actual</td><td class="v">${ev.peso?esc(ev.peso)+' kg':'—'}</td><td class="k">Consumo producto</td><td class="v">${consProd}</td></tr></table>
