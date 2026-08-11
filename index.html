@@ -1339,7 +1339,10 @@ function visitaClienteChange(){
 function renderEvals(){ const wrap=gs('evalsWrap'); if(!wrap) return; wrap.innerHTML=consumoDatalistHtml()+_evals.map((ev,i)=>evalBlockHtml(ev,i)).join(''); _evals.forEach((ev,i)=>{ evalPesoLive(i); evalMermaLive(i); }); }
 // % del peso vivo = (gramos/1000) / peso × 100
 function evalPesoLive(i){ const el=gs('ev'+i+'_pv'); if(!el) return; const peso=num(gs('ev'+i+'_peso')?gs('ev'+i+'_peso').value:''); const g=num(gs('ev'+i+'_consg')?gs('ev'+i+'_consg').value:'');
-  if(peso&&g){ const pv=(g/1000)/peso*100; el.innerHTML='= <b>'+pv.toFixed(2)+' % del peso vivo</b> <span style="color:var(--gray-400)">('+g+' g ÷ '+peso+' kg)</span>'; } else el.textContent=''; }
+  if(peso&&g){ const pv=(g/1000)/peso*100; el.innerHTML='= <b>'+pv.toFixed(2)+' % del peso vivo</b> <span style="color:var(--gray-400)">('+g+' g ÷ '+peso+' kg)</span>'; }
+  else if(g&&!peso){ el.innerHTML='<span style="color:var(--amber)">⚠ Cargá el <b>peso</b> para calcular el % del peso vivo</span>'; }
+  else if(peso&&!g){ el.innerHTML='<span style="color:var(--amber)">⚠ Cargá el <b>consumo del producto (g/día)</b> para calcular el % PV</span>'; }
+  else el.textContent=''; }
 function _kpiIdx(cat,name){ return (KPIS[cat]||[]).findIndex(d=>d.k===name); }
 // Merma preñez→marcación (Cría) = % preñez − % marcación
 function evalMermaLive(i){ const el=gs('ev'+i+'_merma'); if(!el) return; const cat=gs('ev'+i+'_cat')?gs('ev'+i+'_cat').value:''; if(cat!=='Cría'){ el.textContent=''; return; }
@@ -2891,13 +2894,17 @@ function informePDF(id){
   const secciones=visitaEvals(v).map(ev=>{
     const filas=(ev.kpis||[]).map(k=>{ const cls=k.estado&&k.estado.includes('rango')?'ok':(k.estado&&k.estado!=='—'?'warn':'na');
       return `<tr><td>${esc(k.k)}</td><td class="c">${esc(k.u||'')}</td><td class="c">${k.min!=null?k.min:'—'}</td><td class="c">${k.max!=null?k.max:'—'}</td><td class="c b">${k.valor||'—'}</td><td class="c ${cls}">${esc(k.estado||'—')}</td></tr>`; }).join('');
-    const pvTxt=(ev.peso&&ev.consumo_g)?((ev.consumo_g/1000)/ev.peso*100).toFixed(2)+'% PV':'';
-    const consProd=ev.consumo_g?(ev.consumo_g+' g/día'+(pvTxt?' ('+pvTxt+')':'')):'—';
+    const _amber='<span style="color:#c8820a">';
+    let consProd;
+    if(ev.consumo_g && ev.peso) consProd=ev.consumo_g+' g/día ('+((ev.consumo_g/1000)/ev.peso*100).toFixed(2)+'% PV)';
+    else if(ev.consumo_g && !ev.peso) consProd=ev.consumo_g+' g/día · '+_amber+'⚠ falta el peso para calcular % PV</span>';
+    else if(!ev.consumo_g && ev.peso) consProd=_amber+'⚠ falta el consumo (g/día) para calcular % PV</span>';
+    else consProd='—';
     const mermaHtml=(()=>{ if(ev.categoria!=='Cría') return ''; const kv=nm=>{ const k=(ev.kpis||[]).find(x=>x.k===nm); const n=k?num(k.valor):null; return n; }; const pr=kv('Tasa de preñez'), ma=kv('Tasa de marcación'); if(pr==null||ma==null) return ''; const m=Math.round((pr-ma)*10)/10; return `<div class="diag" style="margin-top:6px;border-color:#c8820a"><b>Merma preñez→marcación:</b> ${m}% <span style="color:#718096">(${pr}% preñez − ${ma}% marcación)</span></div>`; })();
     return `<h3 class="cat">${esc(ev.categoria)}${ev.lote?' — Lote: '+esc(ev.lote):''}</h3>
       <table class="datos"><tr><td class="k">Nº de animales</td><td class="v">${ev.n_animales!=null?ev.n_animales:'—'}</td><td class="k">Días en sistema</td><td class="v">${ev.dias_sistema!=null?ev.dias_sistema:'—'}</td></tr>
       <tr><td class="k">Producto</td><td class="v">${esc(ev.producto||'—')}</td><td class="k">Consumo obs.</td><td class="v">${esc(ev.consumo||'—')}</td></tr>
-      <tr><td class="k">Peso actual</td><td class="v">${ev.peso?esc(ev.peso)+' kg':'—'}</td><td class="k">Consumo producto</td><td class="v">${esc(consProd)}</td></tr></table>
+      <tr><td class="k">Peso actual</td><td class="v">${ev.peso?esc(ev.peso)+' kg':'—'}</td><td class="k">Consumo producto</td><td class="v">${consProd}</td></tr></table>
       <table><thead><tr><th>KPI</th><th class="c">Unidad</th><th class="c">Obj. Mín</th><th class="c">Obj. Máx</th><th class="c">Medido</th><th class="c">Estado</th></tr></thead><tbody>${filas}</tbody></table>
       ${mermaHtml}
       ${(()=>{ const h=gananciaDiariaHtml(ev); return h? '<div class="diag" style="margin-top:6px;border-color:#2f7d3b">'+h.replace(/<div[^>]*>/,'').replace(/<\/div>$/,'')+'</div>':''; })()}
