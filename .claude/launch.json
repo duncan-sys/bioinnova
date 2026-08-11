@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "bioinnova",
+      "runtimeExecutable": "powershell",
+      "runtimeArgs": ["-ExecutionPolicy", "Bypass", "-File", "C:\\Users\\HP\\.claude\\sessions\\serve-bio.ps1"],
+      "port": 8124
+    }
+  ]
+}
