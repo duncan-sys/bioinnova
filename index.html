@@ -2733,15 +2733,18 @@ function agActModal(fecha, id){ if(!canEdit()){ showToast('Tu rol es de solo lec
     <div class="row2"><div><label class="fl">Fecha</label><input type="date" id="agFecha" value="${a?a.fecha:fecha}"></div><div><label class="fl">Hora</label><input type="time" id="agHora" value="${a?a.hora:''}"></div></div>
     <label class="fl">Tipo</label><select id="agTipoSel">${AG_TIPOS.map(t=>`<option value="${t[0]}" ${a&&a.tipo===t[0]?'selected':''}>${t[1]}</option>`).join('')}</select>
     <label class="fl">Cliente <span style="color:var(--gray-400);font-weight:400">(opcional)</span></label>
-    <select id="agCliente" onchange="agClienteChange()"><option value="">— Libre / sin cliente —</option>${getClientes().slice().sort((x,y)=>x.nombre.localeCompare(y.nombre)).map(c=>`<option value="${c.id}" ${a&&a.cliente_id===c.id?'selected':''}>${esc(c.nombre)}</option>`).join('')}</select>
+    <input type="search" id="agCliBuscar" placeholder="🔎 Buscar cliente…" oninput="agFiltrarCli()" autocomplete="off" style="margin-bottom:6px">
+    <select id="agCliente" onchange="agClienteChange()"></select>
     <div id="agEstWrap" style="display:none"><label class="fl">Estancia a visitar</label><select id="agEstancia"></select></div>
     <label class="fl">Título / descripción</label><input id="agTitulo" value="${esc(a&&a.titulo)}" placeholder="opcional si elegís un cliente" autocomplete="off">
     <label class="fl">Lugar</label><input id="agLugar" value="${esc(a&&a.lugar)}" placeholder="zona / ciudad" autocomplete="off">
     <label class="fl">Comercial</label><input id="agComercial" value="${esc(a?a.comercial:miNombre())}" autocomplete="off">
     <label class="fl">Nota</label><textarea id="agNota" placeholder="opcional">${esc(a&&a.nota)}</textarea>
     <div class="row2" style="margin-top:10px">${a?`<button class="btn btn-sec" onclick="agBorrar('${a.id}')" style="color:var(--red)">Borrar</button>`:'<button class="btn btn-sec" onclick="cerrarModal()">Cancelar</button>'}<button class="btn btn-primary" onclick="agGuardar('${a?a.id:''}')">Guardar</button></div>`;
-  gs('modal').classList.add('show'); agClienteChange(a&&a.estancia_id);
+  gs('modal').classList.add('show'); agPoblarCli(''); if(a&&a.cliente_id) gs('agCliente').value=a.cliente_id; agClienteChange(a&&a.estancia_id);
 }
+function agPoblarCli(term){ const q=(term||'').trim().toLowerCase(); let cl=getClientes().slice().sort((a,b)=>a.nombre.localeCompare(b.nombre)); if(q) cl=cl.filter(c=>(c.nombre||'').toLowerCase().includes(q)); const sel=gs('agCliente'); if(!sel) return; const cur=sel.value; sel.innerHTML='<option value="">— Libre / sin cliente —</option>'+cl.map(c=>`<option value="${c.id}">${esc(c.nombre)}</option>`).join(''); if(cur && cl.some(c=>c.id===cur)) sel.value=cur; }
+function agFiltrarCli(){ agPoblarCli(gs('agCliBuscar').value); agClienteChange(); }
 function agClienteChange(selEst){ const cid=gs('agCliente')?gs('agCliente').value:''; const ests=cid?estanciasDe(cid):[]; const wrap=gs('agEstWrap'); const sel=gs('agEstancia'); if(!wrap||!sel) return;
   if(cid && ests.length){ wrap.style.display=''; sel.innerHTML='<option value="">Toda la estancia / sin especificar</option>'+ests.map(e=>`<option value="${e.id}" ${selEst===e.id?'selected':''}>${esc(e.nombre)}${e.zona?' ('+esc(e.zona)+')':''}</option>`).join(''); }
   else { wrap.style.display='none'; sel.innerHTML=''; }
