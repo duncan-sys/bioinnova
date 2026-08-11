@@ -332,7 +332,9 @@ textarea{resize:vertical;min-height:66px}
   <!-- COTIZACIÓN (armador) -->
   <div class="screen" id="sCotizNueva">
     <div class="card"><div class="card-h">Datos de la cotización</div><div class="card-b">
-      <label class="fl">Cliente</label><input id="czCliente" list="czClienteList" placeholder="Nombre del cliente" autocomplete="off"><datalist id="czClienteList"></datalist>
+      <label class="fl">Cliente</label>
+      <input type="search" id="czClienteBuscar" placeholder="🔎 Buscar cliente…" oninput="czFiltrarClientes()" autocomplete="off" style="margin-bottom:6px">
+      <select id="czCliente" onchange="czClienteChange()"></select>
       <label class="fl">Estancia / lugar de entrega <span style="color:var(--gray-400)">(opcional)</span></label><input id="czLugar" placeholder="Ej: Estancia Ita Pora / Retirado" autocomplete="off">
       <div class="row2"><div><label class="fl">Condición de pago</label><select id="czCond" onchange="cotizCondChange()"></select></div><div><label class="fl">Fecha</label><input type="date" id="czFecha"></div></div>
       <div class="row2"><div><label class="fl">Validez (días)</label><input type="number" id="czValidez" value="7" inputmode="numeric"></div><div><label class="fl">Vendedor</label><input id="czVendedor"></div></div>
@@ -1874,12 +1876,23 @@ function renderCotizList(){
   gs('cotizCount').textContent=cs.length?cs.length+' cotiz.':'';
   gs('cotizList').innerHTML=cs.length? cs.map(c=>`<div class="li" onclick="cotizVer('${c.id}')"><div style="min-width:0"><div class="li-t">N° ${c.num} · ${esc(c.cliente||'—')}</div><div class="li-s">${fmtFecha(c.fecha)} · ${(c.items||[]).length} ítem(s) · ${COND_LBL[c.condicion]||''}${c.vendedor?' · '+esc(c.vendedor):''}</div></div><div style="text-align:right;flex-shrink:0;font-weight:700">${gsFmt(c.total)}</div></div>`).join('') : '<div class="empty">Sin cotizaciones. Tocá ＋ Nueva cotización.</div>';
 }
-function fillClientesDatalist(){ const dl=gs('czClienteList'); if(!dl) return; dl.innerHTML=getClientes().slice().sort((a,b)=>String(a.nombre||'').localeCompare(String(b.nombre||''))).map(c=>`<option value="${esc(c.nombre)}">`).join(''); }
+let _czNombre='';
+function czPoblarClientes(term){ const sel=gs('czCliente'); if(!sel) return; const q=(term||'').trim().toLowerCase(); let cl=getClientes().slice().sort((a,b)=>a.nombre.localeCompare(b.nombre)); if(q) cl=cl.filter(c=>(c.nombre||'').toLowerCase().includes(q)); const cur=_czNombre||'';
+  sel.innerHTML='<option value="">— Elegir cliente —</option>'+cl.map(c=>`<option value="${c.id}" ${cur&&cur.toLowerCase()===String(c.nombre).toLowerCase()?'selected':''}>${esc(c.nombre)}</option>`).join('')+'<option value="__otro">➕ Otro (escribir nombre)…</option>';
+  if(cur && !cl.some(c=>String(c.nombre).toLowerCase()===cur.toLowerCase())){ const o=document.createElement('option'); o.value='__free'; o.textContent=cur; o.selected=true; sel.insertBefore(o, sel.lastChild); } }
+function czFiltrarClientes(){ czPoblarClientes(gs('czClienteBuscar')?gs('czClienteBuscar').value:''); }
+function czClienteChange(){ const sel=gs('czCliente'); if(!sel) return; const v=sel.value;
+  if(v==='__otro'){ const nom=prompt('Nombre del cliente / prospecto:'); if(nom&&nom.trim()) _czNombre=nom.trim(); czPoblarClientes(gs('czClienteBuscar')?gs('czClienteBuscar').value:''); return; }
+  if(v==='__free') return;
+  if(v===''){ _czNombre=''; return; }
+  const c=getClientes().find(x=>x.id===v); _czNombre=c?c.nombre:''; }
+function czClienteNombre(){ return _czNombre||''; }
+function fillClientesDatalist(){ czPoblarClientes(''); }
 function cotizNueva(){ if(!puedeVer('cotizaciones')) return; curCotizId=null; _cotizLineas=[];
   showScreen('sCotizNueva','Nueva cotización','',true);
   gs('czCond').innerHTML=COND_ORDER.map(k=>`<option value="${k}">${COND_LBL[k]}</option>`).join('');
   gs('czCliente').value=''; gs('czLugar').value=''; gs('czFecha').value=hoy(); gs('czValidez').value='7'; gs('czVendedor').value=(getSession()&&getSession().nombre)||''; gs('czFlete').value=''; gs('czUsd').checked=false; gs('czDolarRow').style.display='none'; gs('czDolar').value=cotizDolar(); gs('czObs').value='';
-  fillClientesDatalist(); cotizRecalc();
+  _czNombre=''; if(gs('czClienteBuscar')) gs('czClienteBuscar').value=''; czPoblarClientes(''); cotizRecalc();
 }
 function cotizCondChange(){ const cond=gs('czCond').value;
   _cotizLineas.forEach(ln=>{ const f=PL_FORMULAS.find(x=>precioKey(x)===ln.key); if(f){ const m=(ln.margen!=null)?ln.margen:margenDe(f.c,f.n); ln.precio_kg=precioBaseKg(f,cond,m); } else { const p=precioList().find(x=>x.n===ln.nombre); if(p) ln.precio_kg=p[cond]||p.p0; } });
@@ -1925,7 +1938,7 @@ function cotizRecalc(){
     : `<div style="display:flex;justify-content:space-between;font-size:15px"><span>Total · ${COND_LBL[gs('czCond').value]||''}</span><b>${gsFmt(total)}</b></div>${fleteKg?`<div style="font-size:10px;color:var(--gray-400);margin-top:2px">incluye flete ${gsFmt(fleteKg)}/kg · margen por producto</div>`:''}${usd?`<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--gray-500);margin-top:3px"><span>En dólares (₲ ${dol.toLocaleString('es-PY')}/US$)</span><b>US$ ${(total/dol).toLocaleString('es-PY',{maximumFractionDigits:2})}</b></div>`:''}`;
 }
 function cotizGuardar(imprimir){ if(!puedeVer('cotizaciones')) return;
-  const cliente=(gs('czCliente').value||'').trim(); if(!cliente){ showToast('Poné el cliente'); return; }
+  const cliente=czClienteNombre().trim(); if(!cliente){ showToast('Elegí el cliente'); return; }
   if(!_cotizLineas.length){ showToast('Agregá al menos un producto'); return; }
   const cond=gs('czCond').value; const usd=gs('czUsd').checked; const dol=num(gs('czDolar').value)||cotizDolar();
   const cli=getClientes().find(x=>String(x.nombre||'').toLowerCase()===cliente.toLowerCase());
@@ -1949,7 +1962,7 @@ function cotizVer(id){ const c=getCotiz().find(x=>x.id===id); if(!c) return;
   gs('modal').classList.add('show');
 }
 function cotizEditar(id){ const c=getCotiz().find(x=>x.id===id); if(!c) return; cerrarModal(); cotizNueva(); curCotizId=id;
-  gs('czCliente').value=c.cliente||''; gs('czLugar').value=c.lugar||''; gs('czCond').value=c.condicion||'p0'; gs('czFecha').value=c.fecha; gs('czValidez').value=c.validez||7; gs('czVendedor').value=c.vendedor||''; gs('czFlete').value=c.flete_kg||''; gs('czObs').value=c.obs||''; gs('czUsd').checked=c.moneda==='USD'; gs('czDolar').value=c.dolar||cotizDolar();
+  _czNombre=c.cliente||''; if(gs('czClienteBuscar')) gs('czClienteBuscar').value=''; czPoblarClientes(''); gs('czLugar').value=c.lugar||''; gs('czCond').value=c.condicion||'p0'; gs('czFecha').value=c.fecha; gs('czValidez').value=c.validez||7; gs('czVendedor').value=c.vendedor||''; gs('czFlete').value=c.flete_kg||''; gs('czObs').value=c.obs||''; gs('czUsd').checked=c.moneda==='USD'; gs('czDolar').value=c.dolar||cotizDolar();
   _cotizLineas=(c.items||[]).map(i=>({ key:i.key, nombre:i.nombre, kg_bolsa:i.kg_bolsa, precio_kg:(i.precio_base!=null?i.precio_base:((Number(i.precio_kg)||0)-(c.flete_kg||0))), unidad:i.unidad, cantidad:i.cantidad, margen:(i.margen!=null?i.margen:null) }));
   showScreen('sCotizNueva','Editar cotización','',true); cotizRecalc();
 }
