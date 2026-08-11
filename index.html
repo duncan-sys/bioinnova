@@ -531,7 +531,7 @@ textarea{resize:vertical;min-height:66px}
     </div>
     <div id="finW_flujo" style="display:none">
       <div id="finFluResumen" style="margin-bottom:10px"></div>
-      <div class="card"><div class="card-h">Flujo de caja mensual</div><div id="finFluTabla" style="padding:6px 10px 12px;overflow-x:auto"></div></div>
+      <div class="card"><div class="card-h">Flujo de caja proyectado</div><div id="finFluTabla" style="padding:6px 10px 12px;overflow-x:auto"></div></div>
     </div>
   </div>
 
@@ -3085,30 +3085,81 @@ function _finRepData(tipo){ const hoyS=hoy(); const out=[]; // {cliente,factura,
   }
   return out;
 }
+function _finRepMeta(tipo){ const M={cobrar:['Cuentas por Cobrar','Cliente'],pagar:['Cuentas por Pagar','Proveedor'],gastos:['Gastos','Proveedor']}[tipo]||['Ventas','Cliente'];
+  const FL={ ventas:({todas:'Todas',mes:'Del mes',pend:'Pendientes',cobr:'Cobradas'})[_finVFiltro],
+             cobrar:({todas:'Todas',venc:'Vencidas',porvencer:'A vencer'})[_finCobFiltro],
+             gastos:({todas:'Todos',mes:'Del mes',pend:'Pendientes',pag:'Pagados'})[_finGFiltro],
+             pagar:({todas:'Todas',venc:'Vencidas',porvencer:'A vencer'})[_finPagFiltro] }[tipo]||'Todas';
+  const CL={ ventas:['Total facturado','Saldo pendiente','Vencido'], cobrar:['Total','Por cobrar','Vencido'], gastos:['Total gastos','Saldo pendiente','Vencido'], pagar:['Total','Por pagar','Vencido'] }[tipo]||['Total','Saldo','Vencido'];
+  return {titulo:M[0], colName:M[1], filtLbl:FL, cardLbl:CL};
+}
+function _finCur(g,u){ const s=[]; if(g||(!g&&!u)) s.push('₲ '+Math.round(g).toLocaleString('es-PY')); if(u) s.push('US$ '+u.toLocaleString('es-PY',{maximumFractionDigits:2})); return s.join(' + '); }
 function finReporteCSV(tipo){ const data=_finRepData(tipo); if(!data.length){ showToast('Nada para exportar'); return; }
-  const sep=';'; const esc2=s=>{ s=String(s==null?'':s); return /[";\n]/.test(s)?('"'+s.replace(/"/g,'""')+'"'):s; };
-  const esProv=(tipo==='gastos'||tipo==='pagar'); const head=[esProv?'Proveedor':'Cliente','Factura','Fecha','Vencimiento','Monto','Moneda','Saldo','Estado'];
-  const lines=[head.join(sep)].concat(data.map(d=>[d.cliente,d.factura,fmtFecha(d.fecha),fmtFecha(d.venc),Math.round(d.monto),d.moneda==='USD'?'USD':'GS',Math.round(d.saldo),d.estado].map(esc2).join(sep)));
-  const blob=new Blob(['﻿'+lines.join('\r\n')],{type:'text/csv;charset=utf-8'});
+  const mt=_finRepMeta(tipo); const hoyS=hoy(); let totMG=0,totMU=0,totSG=0,totSU=0;
+  const nf=m=>m==='USD'?"mso-number-format:'#,##0.00'":"mso-number-format:'\\#\\,\\#\\#0'";
+  const trs=data.map((d,i)=>{ if(d.moneda==='USD'){totMU+=d.monto;totSU+=d.saldo;}else{totMG+=d.monto;totSG+=d.saldo;}
+    const bg=i%2?' bgcolor="#eef4fb"':''; const vd=String(d.venc)<hoyS && d.estado!=='Cobrada' && d.estado!=='Pagada';
+    const mv=d.moneda==='USD'?d.monto:Math.round(d.monto), sv=d.moneda==='USD'?d.saldo:Math.round(d.saldo);
+    return `<tr${bg}><td style="border:.5pt solid #cbd5e0">${esc(d.cliente)}</td><td style="border:.5pt solid #cbd5e0">${esc(d.factura)}</td><td style="border:.5pt solid #cbd5e0" align="center">${fmtFecha(d.fecha)}</td><td style="border:.5pt solid #cbd5e0;${vd?'color:#b91c1c;font-weight:bold':''}" align="center">${fmtFecha(d.venc)}</td><td style="border:.5pt solid #cbd5e0;${nf(d.moneda)}" align="right">${mv}</td><td style="border:.5pt solid #cbd5e0" align="center">${d.moneda==='USD'?'USD':'GS'}</td><td style="border:.5pt solid #cbd5e0;${nf(d.moneda)}" align="right">${sv}</td><td style="border:.5pt solid #cbd5e0" align="center">${esc(d.estado)}</td></tr>`; }).join('');
+  const head=['<th style="background:#1e3f63;color:#fff;border:.5pt solid #1e3f63;padding:4px">'+
+    [mt.colName,'Factura','Fecha','Vencimiento','Monto','Moneda','Saldo','Estado'].join('</th><th style="background:#1e3f63;color:#fff;border:.5pt solid #1e3f63;padding:4px">')+'</th>'].join('');
+  const html='<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="utf-8"></head><body>'+
+    '<table style="border-collapse:collapse;font-family:Calibri,Arial;font-size:11pt">'+
+    '<tr><td colspan="8" style="background:#1e3f63;color:#fff;font-size:16pt;font-weight:bold;padding:8px 10px">BIOINNOVA S.A.</td></tr>'+
+    '<tr><td colspan="8" style="background:#dbe6f2;color:#1e3f63;font-weight:bold;padding:5px 10px">Reporte de '+mt.titulo+'  ·  Filtro: '+mt.filtLbl+'  ·  Generado '+fmtFecha(hoyS)+'</td></tr>'+
+    '<tr><td colspan="8"></td></tr>'+
+    '<tr>'+head+'</tr>'+trs+
+    '<tr><td colspan="4" style="background:#1e3f63;color:#fff;font-weight:bold;border:.5pt solid #1e3f63;padding:5px" align="right">TOTAL</td>'+
+    '<td colspan="4" style="background:#1e3f63;color:#fff;font-weight:bold;border:.5pt solid #1e3f63;padding:5px">'+_finCur(totMG,totMU)+'  (saldo '+_finCur(totSG,totSU)+')</td></tr>'+
+    '</table></body></html>';
+  const blob=new Blob(['﻿'+html],{type:'application/vnd.ms-excel;charset=utf-8'});
   const nom={cobrar:'Cuentas-por-cobrar',pagar:'Cuentas-por-pagar',gastos:'Gastos'}[tipo]||'Ventas';
-  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=nom+'-'+hoy()+'.csv'; document.body.appendChild(a); a.click(); a.remove();
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=nom+'-'+hoy()+'.xls'; document.body.appendChild(a); a.click(); a.remove();
   showToast('✓ Excel descargado');
 }
-function finReportePDF(tipo){ const data=_finRepData(tipo); const base=`${location.origin}${location.pathname.replace(/[^/]*$/,'')}logo.jpg`;
-  const titulo={cobrar:'Cuentas por Cobrar',pagar:'Cuentas por Pagar',gastos:'Gastos'}[tipo]||'Ventas'; const hoyS=hoy();
+function finReportePDF(tipo){ const data=_finRepData(tipo); if(!data.length){ showToast('Nada para exportar'); return; }
+  const base=`${location.origin}${location.pathname.replace(/[^/]*$/,'')}logo.jpg`;
+  const mt=_finRepMeta(tipo); const titulo=mt.titulo, hoyS=hoy();
   const byCli={}; data.forEach(d=>{ (byCli[d.cliente]=byCli[d.cliente]||[]).push(d); });
-  let totG=0, totU=0;
-  const secc=Object.keys(byCli).sort().map(cli=>{ const arr=byCli[cli]; let sg=0,su=0;
-    const filas=arr.map(d=>{ if(d.moneda==='USD') su+=d.saldo; else sg+=d.saldo; const vd=String(d.venc)<hoyS && d.estado!=='Cobrada' && d.estado!=='Pagada';
-      return `<tr><td>${esc(d.factura)}</td><td class="c">${fmtFecha(d.fecha)}</td><td class="c" style="${vd?'color:#b91c1c;font-weight:700':''}">${fmtFecha(d.venc)}</td><td class="r">${finFmt(d.monto,d.moneda)}</td><td class="r">${finFmt(d.saldo,d.moneda)}</td><td class="c" style="${vd?'color:#b91c1c':''}">${esc(d.estado)}</td></tr>`; }).join('');
-    totG+=sg; totU+=su;
-    return `<tr class="cli"><td colspan="6">${esc(cli)}</td></tr>${filas}<tr class="sub"><td colspan="4" class="r">Subtotal ${esc(cli)}</td><td class="r">${sg?('₲ '+Math.round(sg).toLocaleString('es-PY')):''}${su?(' US$ '+su.toLocaleString('es-PY',{maximumFractionDigits:2})):''}</td><td></td></tr>`; }).join('');
+  let totMG=0,totMU=0,totSG=0,totSU=0,vG=0,vU=0,nrows=0;
+  const secc=Object.keys(byCli).sort().map(cli=>{ const arr=byCli[cli]; let sg=0,su=0,mg=0,mu=0;
+    const filas=arr.map((d,i)=>{ nrows++; const paid=(d.estado==='Cobrada'||d.estado==='Pagada'); const vd=String(d.venc)<hoyS && !paid;
+      if(d.moneda==='USD'){ su+=d.saldo; mu+=d.monto; if(vd)vU+=d.saldo; } else { sg+=d.saldo; mg+=d.monto; if(vd)vG+=d.saldo; }
+      const badge = paid?`<span class="bg ok">${esc(d.estado)}</span>` : vd?`<span class="bg vc">${esc(d.estado)}</span>` : `<span class="bg pd">${esc(d.estado)}</span>`;
+      return `<tr class="${i%2?'alt':''}"><td>${d.factura?esc(d.factura):'<span class=mut>—</span>'}</td><td class="c">${fmtFecha(d.fecha)}</td><td class="c" style="${vd?'color:#b91c1c;font-weight:700':''}">${d.venc?fmtFecha(d.venc):'—'}</td><td class="r">${finFmt(d.monto,d.moneda)}</td><td class="r b">${finFmt(d.saldo,d.moneda)}</td><td class="c">${badge}</td></tr>`; }).join('');
+    totMG+=mg;totMU+=mu;totSG+=sg;totSU+=su;
+    return `<tr class="cli"><td colspan="5">${esc(cli)} <span class="cnt">${arr.length}</span></td><td class="r">${_finCur(sg,su)}</td></tr>${filas}`; }).join('');
+  const card=(l,v,c)=>`<div class="card"><div class="cl">${l}</div><div class="cv" style="color:${c}">${v}</div></div>`;
   const w=window.open('','_blank'); if(!w){ showToast('Permití las ventanas emergentes'); return; }
-  w.document.write(`<html><head><meta charset="utf-8"><title>${titulo} — BioInnova</title><style>*{box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;color:#1a202c;font-size:11.5px;margin:0}.wrap{max-width:800px;margin:0 auto;padding:22px}.hd{display:flex;align-items:center;gap:14px;border-bottom:3px solid #2e5b8a;padding-bottom:8px}.hd img{height:44px}.hd .t1{font-size:16px;font-weight:800}.hd .t2{font-size:11px;color:#555}table{width:100%;border-collapse:collapse;margin-top:10px}th,td{border:1px solid #cbd5e0;padding:5px 7px}th{background:#eaf0f7;font-size:10px;text-align:left}.c{text-align:center}.r{text-align:right;white-space:nowrap}tr.cli td{background:#2e5b8a;color:#fff;font-weight:700;font-size:11px}tr.sub td{background:#eef2f7;font-weight:700}.tot{margin-top:12px;text-align:right;font-size:13px;font-weight:800}@media print{.wrap{padding:8mm}.noprint{display:none}}</style></head><body><div class="wrap">
-   <div class="hd"><img src="${base}" onerror="this.style.display='none'"><div><div class="t1">BIOINNOVA S.A.</div><div class="t2">Reporte de ${titulo} · Generado ${fmtFecha(hoyS)}</div></div></div>
-   <table><thead><tr><th>Factura</th><th class="c">Fecha</th><th class="c">Vencimiento</th><th class="r">Monto</th><th class="r">Saldo</th><th class="c">Estado</th></tr></thead><tbody>${secc||'<tr><td colspan="6" class="c">Sin datos</td></tr>'}</tbody></table>
-   <div class="tot">TOTAL: ₲ ${Math.round(totG).toLocaleString('es-PY')}${totU?(' + US$ '+totU.toLocaleString('es-PY',{maximumFractionDigits:2})):''}</div>
-   <div class="noprint" style="display:flex;gap:8px;justify-content:center;margin-top:16px"><button onclick="window.print()" style="background:#2e5b8a;color:#fff;border:none;padding:10px 20px;border-radius:8px;font-weight:700;cursor:pointer">🖨️ Imprimir / Guardar PDF</button><button onclick="window.close()" style="background:#e2e8f0;color:#334155;border:none;padding:10px 20px;border-radius:8px;font-weight:700;cursor:pointer">← Volver</button></div>
+  w.document.write(`<html><head><meta charset="utf-8"><title>${titulo} — BioInnova</title><style>
+    *{box-sizing:border-box}html,body{margin:0}body{font-family:Arial,Helvetica,sans-serif;color:#1a202c;font-size:11px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    .wrap{max-width:840px;margin:0 auto;padding:22px}
+    .band{background:#1e3f63;color:#fff;border-radius:12px;padding:16px 20px;display:flex;align-items:center;gap:16px}
+    .band img{height:46px;background:#fff;border-radius:8px;padding:4px}
+    .band .t1{font-size:19px;font-weight:800;letter-spacing:.5px}.band .t2{font-size:11.5px;opacity:.85;margin-top:2px}
+    .band .rt{margin-left:auto;text-align:right;font-size:10.5px;opacity:.9;line-height:1.5}
+    .cards{display:flex;gap:10px;margin:14px 0}
+    .card{flex:1;border:1px solid #e2e8f0;border-radius:10px;padding:10px 13px;background:#f8fafc}
+    .card .cl{font-size:9.5px;color:#64748b;text-transform:uppercase;letter-spacing:.5px}.card .cv{font-size:15px;font-weight:800;margin-top:3px}
+    table{width:100%;border-collapse:collapse;margin-top:4px}
+    th{background:#1e3f63;color:#fff;font-size:9.5px;text-transform:uppercase;letter-spacing:.3px;padding:7px 8px;text-align:left}
+    td{padding:6px 8px;border-bottom:1px solid #eef2f7}
+    tr.alt td{background:#f8fafc}
+    .c{text-align:center}.r{text-align:right;white-space:nowrap}.b{font-weight:700}.mut{color:#a0aec0}
+    tr.cli td{background:#dbe6f2;color:#1e3f63;font-weight:800;font-size:11px;border-top:2px solid #1e3f63;padding:6px 8px}
+    .cnt{background:#1e3f63;color:#fff;border-radius:10px;padding:1px 7px;font-size:8.5px;margin-left:5px;vertical-align:middle}
+    .bg{border-radius:10px;padding:2px 8px;font-size:9px;font-weight:700}
+    .bg.ok{background:#dcfce7;color:#166534}.bg.vc{background:#fee2e2;color:#b91c1c}.bg.pd{background:#fef3c7;color:#92400e}
+    .tot{margin-top:14px;background:#1e3f63;color:#fff;border-radius:10px;padding:13px 18px;display:flex;justify-content:space-between;align-items:center;font-size:14px;font-weight:800}
+    .foot{margin-top:18px;border-top:1px solid #e2e8f0;padding-top:9px;color:#94a3b8;font-size:9px;text-align:center}
+    @media print{.wrap{padding:6mm}.noprint{display:none}}
+  </style></head><body><div class="wrap">
+   <div class="band"><img src="${base}" onerror="this.style.display='none'"><div><div class="t1">BIOINNOVA S.A.</div><div class="t2">Reporte de ${titulo}</div></div><div class="rt">Generado ${fmtFecha(hoyS)}<br>Filtro: <b>${esc(mt.filtLbl)}</b><br>${nrows} registro(s)</div></div>
+   <div class="cards">${card(mt.cardLbl[0],_finCur(totMG,totMU),'#1a202c')}${card(mt.cardLbl[1],_finCur(totSG,totSU),'#b45309')}${card(mt.cardLbl[2],_finCur(vG,vU),(vG||vU)?'#b91c1c':'#166534')}</div>
+   <table><thead><tr><th>${esc(mt.colName)} / Factura</th><th class="c">Fecha</th><th class="c">Vencimiento</th><th class="r">Monto</th><th class="r">Saldo</th><th class="c">Estado</th></tr></thead><tbody>${secc||'<tr><td colspan="6" class="c">Sin datos</td></tr>'}</tbody></table>
+   <div class="tot"><span>TOTAL ${esc(titulo)}</span><span>${_finCur(totMG,totMU)}${(totSG||totSU)?(' · saldo '+_finCur(totSG,totSU)):''}</span></div>
+   <div class="foot">BioInnova S.A. · Documento generado automáticamente el ${fmtFecha(hoyS)} · Sistema de gestión BioInnova</div>
+   <div class="noprint" style="display:flex;gap:8px;justify-content:center;margin-top:16px"><button onclick="window.print()" style="background:#1e3f63;color:#fff;border:none;padding:11px 22px;border-radius:8px;font-weight:700;cursor:pointer">🖨️ Imprimir / Guardar PDF</button><button onclick="window.close()" style="background:#e2e8f0;color:#334155;border:none;padding:11px 22px;border-radius:8px;font-weight:700;cursor:pointer">← Volver</button></div>
    </div></body></html>`);
   w.document.close();
 }
@@ -3173,22 +3224,52 @@ function finSueldoGuardar(id){ if(!canEdit()) return; const emp=(gs('finSEmp').v
 }
 function finSueldoBorrar(id){ if(!canEdit()) return; if(!confirm('¿Borrar este pago de sueldo?')) return; saveSueldos(getSueldos().filter(x=>x.id!==id)); cloudDelete('sueldo',id); cerrarModal(); finSetTab(_finTab); }
 // ---- Flujo de caja ----
-function finRenderFlujo(){ const map={}; const ym=d=>String(d||'').slice(0,7); const add=(k,f,val)=>{ if(!k)return; map[k]=map[k]||{inR:0,egR:0,inP:0,egP:0}; map[k][f]+=val; };
-  getVentas().forEach(v=>{ (v.cuotas||[]).forEach(cu=>{ (cu.abonos||[]).forEach(a=>add(ym(a.fecha),'inR',finGs(v,a.monto))); const s=finCuotaSaldo(cu); if(s>0) add(ym(cu.venc),'inP',finGs(v,s)); }); });
-  getCompras().forEach(c=>{ (c.cuotas||[]).forEach(cu=>{ (cu.abonos||[]).forEach(a=>add(ym(a.fecha),'egR',finGs(c,a.monto))); const s=finCuotaSaldo(cu); if(s>0) add(ym(cu.venc),'egP',finGs(c,s)); }); });
-  getSueldos().forEach(su=>{ (su.cuotas||[]).forEach(cu=>{ (cu.abonos||[]).forEach(a=>add(ym(a.fecha),'egR',finGs(su,a.monto))); const s=finCuotaSaldo(cu); if(s>0) add(ym(cu.venc),'egP',finGs(su,s)); }); });
-  const hoyM=hoy().slice(0,7); const keys=Object.keys(map).sort();
-  const saldoReal=keys.reduce((a,k)=>a+(map[k].inR-map[k].egR),0);
-  const porCobrar=keys.reduce((a,k)=>a+map[k].inP,0), porPagar=keys.reduce((a,k)=>a+map[k].egP,0);
+let _finFluModo='sem';
+function finFluModo(m){ _finFluModo=m; finRenderFlujo(); }
+function _fluDate(k){ const p=String(k).split('-'); return new Date(+p[0],(+p[1])-1,+(p[2]||1)); }
+function _fluWkStart(ds){ const d=_fluDate(ds); const dow=(d.getDay()+6)%7; d.setDate(d.getDate()-dow); return d; }
+function _fluKey(d){ const z=n=>String(n).padStart(2,'0'); return d.getFullYear()+'-'+z(d.getMonth()+1)+'-'+z(d.getDate()); }
+function _fluFmt(v){ if(!v) return ''; const n=Math.round(v), a=Math.abs(n); if(a>=1e6) return (n/1e6).toLocaleString('es-PY',{maximumFractionDigits:1})+' M'; if(a>=1e4) return Math.round(n/1e3).toLocaleString('es-PY')+' k'; return n.toLocaleString('es-PY'); }
+const _FLU_MESES=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+function finRenderFlujo(){ const modo=_finFluModo; const per=ds=>{ if(!ds)return''; return modo==='sem'?_fluKey(_fluWkStart(ds)):String(ds).slice(0,7); };
+  const P={}; const touch=k=>{ if(k) P[k]=P[k]||{venCob:0,cxc:0,gPag:0,cxp:0,sue:0}; return k; };
+  const add=(k,f,val)=>{ if(!k||!val)return; touch(k); P[k][f]+=val; };
+  let gVenCob=0,gCxc=0,gGpag=0,gCxp=0,gSueR=0,gSueP=0;
+  getVentas().forEach(v=>{ (v.cuotas||[]).forEach(cu=>{ (cu.abonos||[]).forEach(a=>{ const g=finGs(v,a.monto); add(per(a.fecha),'venCob',g); gVenCob+=g; }); const s=finCuotaSaldo(cu); if(s>0){ const g=finGs(v,s); add(per(cu.venc),'cxc',g); gCxc+=g; } }); });
+  getCompras().forEach(c=>{ (c.cuotas||[]).forEach(cu=>{ (cu.abonos||[]).forEach(a=>{ const g=finGs(c,a.monto); add(per(a.fecha),'gPag',g); gGpag+=g; }); const s=finCuotaSaldo(cu); if(s>0){ const g=finGs(c,s); add(per(cu.venc),'cxp',g); gCxp+=g; } }); });
+  getSueldos().forEach(su=>{ (su.cuotas||[]).forEach(cu=>{ (cu.abonos||[]).forEach(a=>{ const g=finGs(su,a.monto); add(per(a.fecha),'sue',g); gSueR+=g; }); const s=finCuotaSaldo(cu); if(s>0){ const g=finGs(su,s); add(per(cu.venc),'sue',g); gSueP+=g; } }); });
+  // tarjetas resumen
+  const saldoReal=gVenCob-gGpag-gSueR, porCobrar=gCxc, porPagar=gCxp+gSueP;
   if(gs('finFluResumen')) gs('finFluResumen').innerHTML=`<div style="display:flex;gap:8px;flex-wrap:wrap">
     <div style="flex:1;min-width:120px;background:var(--gray-100);border-radius:10px;padding:10px;text-align:center"><div style="font-size:10px;color:var(--gray-500)">Caja realizada</div><div style="font-size:18px;font-weight:800;color:${saldoReal<0?'var(--red)':'var(--green)'}">${finGsFmt(saldoReal)}</div></div>
     <div style="flex:1;min-width:110px;background:var(--gray-100);border-radius:10px;padding:10px;text-align:center"><div style="font-size:10px;color:var(--gray-500)">Por cobrar</div><div style="font-size:15px;font-weight:700;color:var(--amber)">${finGsFmt(porCobrar)}</div></div>
     <div style="flex:1;min-width:110px;background:var(--gray-100);border-radius:10px;padding:10px;text-align:center"><div style="font-size:10px;color:var(--gray-500)">Por pagar</div><div style="font-size:15px;font-weight:700;color:var(--red)">${finGsFmt(porPagar)}</div></div></div>`;
-  let acum=0;
-  const filas=keys.map(k=>{ const m=map[k]; const ingr=m.inR+m.inP, egr=m.egR+m.egP, neto=ingr-egr; acum+=neto; const fut=k>hoyM, proy=(m.inP||m.egP);
-    const nota=(fut||proy)?' <span style="font-size:9px;color:var(--gray-400)">proy</span>':'';
-    return `<tr style="${k===hoyM?'background:var(--green-lt)':''}"><td style="padding:5px 6px;border-top:1px solid var(--gray-200)">${finMesLbl(k)}${nota}</td><td style="text-align:right;color:var(--green);border-top:1px solid var(--gray-200)">${ingr?finGsFmt(ingr):'—'}</td><td style="text-align:right;color:var(--red);border-top:1px solid var(--gray-200)">${egr?finGsFmt(egr):'—'}</td><td style="text-align:right;font-weight:700;color:${neto<0?'var(--red)':'var(--gray-800)'};border-top:1px solid var(--gray-200)">${finGsFmt(neto)}</td><td style="text-align:right;font-weight:700;color:${acum<0?'var(--red)':'var(--gray-800)'};border-top:1px solid var(--gray-200)">${finGsFmt(acum)}</td></tr>`; }).join('')||'<tr><td colspan="5" style="color:var(--gray-400);padding:10px;text-align:center">Sin movimientos.</td></tr>';
-  gs('finFluTabla').innerHTML=`<table style="width:100%;border-collapse:collapse;font-size:11.5px"><thead><tr style="color:var(--gray-500);font-size:10px"><th style="text-align:left;padding:4px 6px">Mes</th><th style="text-align:right">Ingresos</th><th style="text-align:right">Egresos</th><th style="text-align:right">Neto</th><th style="text-align:right">Acumulado</th></tr></thead><tbody>${filas}</tbody></table>`;
+  // períodos continuos
+  const hoyS=hoy(); const curK=per(hoyS); const set={...P}; set[curK]=set[curK]||1; let ks=Object.keys(set).sort();
+  let periods=[]; if(ks.length){ if(modo==='sem'){ let d=_fluDate(ks[0]); const e=_fluDate(ks[ks.length-1]); let g=0; while(d<=e && g++<160){ periods.push(_fluKey(d)); d.setDate(d.getDate()+7); } } else { let [y,m]=ks[0].split('-').map(Number); const [ye,me]=ks[ks.length-1].split('-').map(Number); let g=0; while((y<ye||(y===ye&&m<=me)) && g++<160){ periods.push(y+'-'+String(m).padStart(2,'0')); m++; if(m>12){m=1;y++;} } } }
+  periods.forEach(k=>{ const p=P[k]||{venCob:0,cxc:0,gPag:0,cxp:0,sue:0}; p.totIn=p.venCob+p.cxc; p.totEg=p.gPag+p.cxp+p.sue; p.neto=p.totIn-p.totEg; P[k]=p; });
+  let ac=0; periods.forEach(k=>{ ac+=P[k].neto; P[k].acum=ac; });
+  // toggle
+  const chip=(mm,l)=>`<button class="finchip${modo===mm?' on':''}" onclick="finFluModo('${mm}')">${l}</button>`;
+  const bar=`<div style="display:flex;gap:6px;margin-bottom:8px;align-items:center"><span style="font-size:11px;color:var(--gray-500)">Ver por:</span>${chip('sem','Semana')}${chip('mes','Mes')}<span style="margin-left:auto;font-size:9px;color:var(--gray-400)">montos en ₲ · k=mil · M=millón</span></div>`;
+  if(!periods.length){ gs('finFluTabla').innerHTML=bar+'<div class="empty">Sin movimientos.</div>'; return; }
+  // encabezado
+  let head1='', head2='';
+  if(modo==='sem'){ let grp=[]; periods.forEach(k=>{ const d=_fluDate(k); const ym=d.getFullYear()+'-'+String(d.getMonth()+1); const lbl=_FLU_MESES[d.getMonth()]+' '+d.getFullYear(); const last=grp[grp.length-1]; if(last&&last.ym===ym) last.n++; else grp.push({ym,lbl,n:1}); });
+    head1='<tr><th class="corner" rowspan="2">Concepto</th>'+grp.map(g=>`<th class="mth" colspan="${g.n}">${g.lbl}</th>`).join('')+'</tr>';
+    head2='<tr>'+periods.map(k=>{ const d=_fluDate(k); const e=new Date(d); e.setDate(e.getDate()+6); const z=n=>String(n).padStart(2,'0'); return `<th class="wk${k===curK?' now':''}" title="Semana ${z(d.getDate())} ${_FLU_MESES[d.getMonth()]} al ${z(e.getDate())} ${_FLU_MESES[e.getMonth()]}"><span class="d">${z(d.getDate())}–${z(e.getDate())}</span></th>`; }).join('')+'</tr>';
+  } else { head1='<tr><th class="corner">Concepto</th>'+periods.map(k=>`<th class="mth${k===curK?' now':''}">${finMesLbl(k)}</th>`).join('')+'</tr>'; }
+  // filas
+  const cell=(k,v,col)=>`<td class="num${k===curK?' now':''}" title="${finGsFmt(v)}"${col?` style="color:${col}"`:''}>${v?_fluFmt(v):'<span class=z>·</span>'}</td>`;
+  const dataRow=(cls,label,f,col)=>`<tr class="${cls}"><td class="lbl">${label}</td>${periods.map(k=>cell(k,P[k][f],col)).join('')}</tr>`;
+  const secRow=label=>`<tr class="sec"><td class="lbl secl">${label}</td><td class="secbar" colspan="${periods.length}"></td></tr>`;
+  const netoRow=`<tr class="neto"><td class="lbl">Neto del período</td>${periods.map(k=>{ const v=P[k].neto; return `<td class="num${k===curK?' now':''}" title="${finGsFmt(v)}" style="color:${v<0?'var(--red)':'var(--green)'}">${v?_fluFmt(v):'<span class=z>·</span>'}</td>`; }).join('')}</tr>`;
+  const acumRow=`<tr class="acum"><td class="lbl">Saldo acumulado</td>${periods.map(k=>{ const v=P[k].acum; return `<td class="num${k===curK?' now':''}" title="${finGsFmt(v)}">${_fluFmt(v)||'0'}</td>`; }).join('')}</tr>`;
+  const body=secRow('INGRESOS')+dataRow('','Ventas cobradas','venCob','var(--green)')+dataRow('','Por cobrar (estim.)','cxc','var(--amber)')+dataRow('totin','Total ingresos','totIn','')+
+    secRow('EGRESOS')+dataRow('','Gastos pagados','gPag','var(--red)')+dataRow('','Por pagar','cxp','var(--red)')+dataRow('','Sueldos','sue','var(--red)')+dataRow('toteg','Total egresos','totEg','')+
+    netoRow+acumRow;
+  const css=`<style>.flu{border-collapse:separate;border-spacing:0;font-size:10.5px;white-space:nowrap}.flu th,.flu td{padding:5px 8px;border-bottom:1px solid var(--gray-200)}.flu .lbl{position:sticky;left:0;background:#fff;text-align:left;font-weight:600;min-width:148px;box-shadow:1px 0 0 var(--gray-200);z-index:2}.flu .corner{position:sticky;left:0;z-index:3;background:#1e3f63;color:#fff;text-align:left}.flu .mth{background:#eef2f7;color:#1e3f63;font-weight:700;text-align:center;font-size:10px}.flu .wk{text-align:center;color:var(--gray-600);font-size:9.5px}.flu .wk .d{font-weight:700;color:var(--gray-800);font-size:10.5px}.flu td.num{text-align:right;font-variant-numeric:tabular-nums}.flu td.now,.flu th.now{background:var(--green-lt)}.flu tr.sec .secl{background:#1e3f63;color:#fff;font-weight:800;font-size:10px;letter-spacing:.5px}.flu tr.sec .secbar{background:#1e3f63}.flu tr.totin .lbl,.flu tr.totin td.num{background:#eaf7ee;font-weight:800}.flu tr.toteg .lbl,.flu tr.toteg td.num{background:#fdecec;font-weight:800}.flu tr.neto .lbl,.flu tr.neto td.num{background:#f8fafc;font-weight:800}.flu tr.acum .lbl,.flu tr.acum td.num{background:#1e3f63;color:#fff;font-weight:800}.flu tr.totin td.now,.flu tr.toteg td.now,.flu tr.neto td.now{background:#dff0e6}.flu .z{color:var(--gray-300)}</style>`;
+  gs('finFluTabla').innerHTML=bar+css+`<table class="flu"><thead>${head1}${head2}</thead><tbody>${body}</tbody></table>`;
 }
 
 // ── INFORME PDF (molde del .docx) ──
