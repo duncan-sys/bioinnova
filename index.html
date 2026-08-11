@@ -3282,12 +3282,14 @@ function finChequeBorrar(id){ if(!canEdit()) return; if(!confirm('¿Borrar este 
 // ---- Flujo de caja ----
 function finCajaModal(){ if(!canEdit()){ showToast('Sin permiso'); return; } const fc=getFinCaja();
   gs('modalBox').innerHTML=`<h3>Saldo inicial de caja</h3>
-    <div style="font-size:12px;color:var(--gray-600);margin-bottom:8px">Dinero disponible a la fecha de arranque. Desde ahí el flujo arrastra el saldo sumando lo que falta cobrar y restando lo que falta pagar.</div>
-    <div class="row2"><div><label class="fl">Fecha de arranque</label><input type="date" id="finCajaFecha" value="${fc&&fc.fecha?fc.fecha:hoy()}"></div><div><label class="fl">Monto disponible (₲)</label><input type="number" id="finCajaMonto" value="${fc?fc.monto:''}" placeholder="0"></div></div>
+    <div style="font-size:12px;color:var(--gray-600);margin-bottom:8px">Dinero disponible en bancos/caja a la fecha de arranque. Desde ahí el flujo arrastra el saldo sumando lo que falta cobrar y restando lo que falta pagar. El USD se convierte a ₲ con el TC.</div>
+    <label class="fl">Fecha de arranque</label><input type="date" id="finCajaFecha" value="${fc&&fc.fecha?fc.fecha:hoy()}">
+    <div class="row2"><div><label class="fl">Saldo en guaraníes (₲)</label><input type="number" id="finCajaMonto" value="${fc?fc.monto:''}" placeholder="0"></div><div><label class="fl">Saldo en dólares (US$)</label><input type="number" step="0.01" id="finCajaUsd" value="${fc&&fc.monto_usd?fc.monto_usd:''}" placeholder="0 (puede ser negativo)"></div></div>
+    <label class="fl">Tipo de cambio ₲/US$</label><input type="number" id="finCajaTc" value="${fc&&fc.tc?fc.tc:cotizDolar()}">
     <div class="row2" style="margin-top:12px">${fc?`<button class="btn btn-sec" onclick="finCajaBorrar()" style="color:var(--red)">Borrar</button>`:'<button class="btn btn-sec" onclick="cerrarModal()">Cancelar</button>'}<button class="btn btn-primary" onclick="finCajaGuardar()">Guardar</button></div>`;
   gs('modal').classList.add('show');
 }
-function finCajaGuardar(){ if(!canEdit()) return; const fecha=gs('finCajaFecha').value; const monto=num(gs('finCajaMonto').value); if(!fecha){ showToast('Poné la fecha'); return; } setFinCaja({fecha,monto:Math.round(monto||0),ts:new Date().toISOString()}); pushFinCaja(); cerrarModal(); showToast('✓ Saldo inicial guardado'); finSetTab('flujo'); }
+function finCajaGuardar(){ if(!canEdit()) return; const fecha=gs('finCajaFecha').value; const monto=num(gs('finCajaMonto').value); const usd=num(gs('finCajaUsd').value); const tc=num(gs('finCajaTc').value)||0; if(!fecha){ showToast('Poné la fecha'); return; } if(usd&&!tc){ showToast('Cargá el tipo de cambio'); return; } setFinCaja({fecha,monto:Math.round(monto||0),monto_usd:usd||0,tc:tc||null,ts:new Date().toISOString()}); pushFinCaja(); cerrarModal(); showToast('✓ Saldo inicial guardado'); finSetTab('flujo'); }
 function finCajaBorrar(){ if(!canEdit()) return; if(!confirm('¿Borrar el saldo inicial?')) return; localStorage.removeItem('bio:fincaja'); pushFinCaja(); cerrarModal(); finSetTab('flujo'); }
 let _finFluModo='sem';
 function finFluModo(m){ _finFluModo=m; finRenderFlujo(); }
@@ -3297,11 +3299,14 @@ function _fluKey(d){ const z=n=>String(n).padStart(2,'0'); return d.getFullYear(
 function _fluFmt(v){ if(!v) return ''; const n=Math.round(v), a=Math.abs(n); if(a>=1e6) return (n/1e6).toLocaleString('es-PY',{maximumFractionDigits:1})+' M'; if(a>=1e4) return Math.round(n/1e3).toLocaleString('es-PY')+' k'; return n.toLocaleString('es-PY'); }
 const _FLU_MESES=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
 function finRenderFlujo(){ const modo=_finFluModo; const per=ds=>{ if(!ds)return''; return modo==='sem'?_fluKey(_fluWkStart(ds)):String(ds).slice(0,7); };
-  const fc=getFinCaja(); const start=(fc&&fc.fecha)||hoy(); const saldoIni=(fc&&Number(fc.monto))||0;
+  const fc=getFinCaja(); const start=(fc&&fc.fecha)||hoy();
+  const saldoGs=(fc&&Number(fc.monto))||0, saldoUsd=(fc&&Number(fc.monto_usd))||0, tcIni=(fc&&Number(fc.tc))||cotizDolar()||0;
+  const saldoIni=Math.round(saldoGs+saldoUsd*tcIni);
   const hoyS=hoy(); const startPer=per(start<hoyS?start:hoyS); const curK=per(hoyS);
   const perRoll=ds=>{ const p=per(ds); return (p<startPer)?startPer:p; };
-  // barra de saldo inicial
-  if(gs('finFluCaja')) gs('finFluCaja').innerHTML=`<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:#eef4fb;border:1px solid #dbe6f2;border-radius:10px;padding:10px 13px"><div style="min-width:0"><div style="font-size:10px;color:var(--gray-500);text-transform:uppercase;letter-spacing:.4px">Saldo inicial de caja</div><div style="font-size:17px;font-weight:800;color:${saldoIni<0?'var(--red)':'#1e3f63'}">${fc?finGsFmt(saldoIni):'— sin cargar —'}</div>${fc?`<div style="font-size:10px;color:var(--gray-500)">se arrastra desde ${fmtFecha(start)}</div>`:'<div style="font-size:10px;color:var(--gray-500)">cargá el saldo y la fecha de arranque</div>'}</div><button class="btn btn-sec" style="margin-left:auto;font-size:12px;padding:8px 13px" onclick="finCajaModal()">${fc?'✎ Editar':'＋ Cargar saldo'}</button></div>`;
+  // barra de saldo inicial (Gs-equivalente; puede combinar Gs y USD)
+  const detBreak = fc?('₲ '+saldoGs.toLocaleString('es-PY')+(saldoUsd?' · US$ '+saldoUsd.toLocaleString('es-PY',{maximumFractionDigits:2})+' · TC '+tcIni.toLocaleString('es-PY'):'')):'';
+  if(gs('finFluCaja')) gs('finFluCaja').innerHTML=`<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:#eef4fb;border:1px solid #dbe6f2;border-radius:10px;padding:10px 13px"><div style="min-width:0"><div style="font-size:10px;color:var(--gray-500);text-transform:uppercase;letter-spacing:.4px">Saldo inicial de caja</div><div style="font-size:17px;font-weight:800;color:${saldoIni<0?'var(--red)':'#1e3f63'}">${fc?finGsFmt(saldoIni):'— sin cargar —'}</div>${fc?`<div style="font-size:10px;color:var(--gray-500)">${detBreak}</div><div style="font-size:10px;color:var(--gray-500)">se arrastra desde ${fmtFecha(start)}</div>`:'<div style="font-size:10px;color:var(--gray-500)">cargá el saldo y la fecha de arranque</div>'}</div><button class="btn btn-sec" style="margin-left:auto;font-size:12px;padding:8px 13px" onclick="finCajaModal()">${fc?'✎ Editar':'＋ Cargar saldo'}</button></div>`;
   const P={}; const touch=k=>{ if(k) P[k]=P[k]||{cxc:0,cxp:0,sue:0,cheq:0}; return k; };
   const add=(k,f,val)=>{ if(!k||!val)return; touch(k); P[k][f]+=val; };
   // cheques: una compra vinculada a un cheque (pendiente o ya caído) queda cubierta y no cuenta como pago pendiente; solo los cheques pendientes se proyectan como egreso el día que caen.
