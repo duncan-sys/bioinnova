@@ -190,7 +190,7 @@ textarea{resize:vertical;min-height:66px}
         <label class="fl">Email</label><input type="email" id="usrEmail" placeholder="tu@bioinnova.com" autocomplete="off">
         <label class="fl">Contraseña (mín. 6)</label><input type="text" id="usrPass" placeholder="clave inicial" autocomplete="off">
         <label class="fl">Rol</label>
-        <select id="usrRol"><option value="tecnico">Comercial</option><option value="planta">Planta</option><option value="supervisor">Supervisor de planta</option><option value="gerente">Gerente</option><option value="lectura">Solo lectura</option></select>
+        <select id="usrRol"><option value="tecnico">Comercial</option><option value="planta">Planta</option><option value="supervisor">Supervisor de planta</option><option value="asesor">Asesor Técnico Externo</option><option value="gerente">Gerente</option><option value="lectura">Solo lectura</option></select>
         <div id="usrMsg" style="display:none;font-size:12px;margin-top:10px;text-align:center"></div>
         <button class="btn btn-primary btn-block" style="margin-top:12px" onclick="crearUsuario()">Crear usuario</button>
       </div>
@@ -497,7 +497,7 @@ textarea{resize:vertical;min-height:66px}
       <button class="fintab" id="finT_banco" onclick="finSetTab('banco')">🏦 Banco</button>
       <button class="fintab" id="finT_flujo" onclick="finSetTab('flujo')">📊 Flujo</button>
     </div>
-    <div style="font-size:9px;color:var(--gray-400);text-align:right;margin:-6px 0 8px">BioInnova <span id="finVer">v70</span></div>
+    <div style="font-size:9px;color:var(--gray-400);text-align:right;margin:-6px 0 8px">BioInnova <span id="finVer">v71</span></div>
     <div id="finW_ventas">
       <button class="btn btn-primary btn-block" style="margin-bottom:8px" onclick="finVentaModal()">＋ Nueva venta</button>
       <input type="search" id="finVBuscar" placeholder="🔎 Buscar cliente / factura…" oninput="finRenderVentas()" style="margin-bottom:8px">
@@ -961,13 +961,14 @@ const sb = {
   async del(table,match){ let url=`${SUPABASE_URL}/rest/v1/${table}?`; for(const [k,v] of Object.entries(match)) url+=`${k}=eq.${v}&`; return sbRun(url,{method:'DELETE'}); },
   async upsert(table,data,onConflict){ const r=await sbRun(`${SUPABASE_URL}/rest/v1/${table}?on_conflict=${onConflict}`,{method:'POST',headers:{'Content-Type':'application/json',Prefer:'resolution=merge-duplicates,return=representation'},body:JSON.stringify(data)}); return r.json(); }
 };
-const ROLES = { gerente:{label:'Gerente',editar:true}, tecnico:{label:'Comercial',editar:true}, supervisor:{label:'Supervisor de planta',editar:true}, planta:{label:'Planta',editar:false}, lectura:{label:'Solo lectura',editar:false} };
+const ROLES = { gerente:{label:'Gerente',editar:true}, tecnico:{label:'Comercial',editar:true}, supervisor:{label:'Supervisor de planta',editar:true}, planta:{label:'Planta',editar:false}, asesor:{label:'Asesor Técnico Externo',editar:false}, lectura:{label:'Solo lectura',editar:false} };
 // Qué módulos ve cada rol. Editar acá para ajustar accesos.
 const ROL_MODULOS = {
   gerente:    ['visita','clientes','historial','crm','viaticos','cotizaciones','ot','formulas','inventario','caja','usuarios','agenda','finanzas'],
   tecnico:    ['visita','clientes','historial','crm','viaticos','cotizaciones','agenda'],
   supervisor: ['ot','formulas','inventario','caja'],
   planta:     ['inventario','caja'],
+  asesor:     ['formulas'],
   lectura:    ['clientes','historial','crm']
 };
 function puedeVer(mod){ if(!currentRol) return true; if(currentAccesos&&Object.prototype.hasOwnProperty.call(currentAccesos,mod)) return !!currentAccesos[mod]; return (ROL_MODULOS[currentRol]||[]).includes(mod); }
@@ -1105,6 +1106,11 @@ function getFinCaja(){ try{ const o=JSON.parse(localStorage.getItem('bio:fincaja
 function setFinCaja(o){ localStorage.setItem('bio:fincaja',JSON.stringify(o)); }
 async function pullFinCaja(){ if(!AUTH_ON) return; try{ const rows=await sb.query('bio_config',{id:'fincaja'}); if(rows&&rows[0]&&rows[0].data){ const d=(typeof rows[0].data==='string')?JSON.parse(rows[0].data):rows[0].data; if(d&&d.fecha) setFinCaja(d); } }catch(e){} }
 async function pushFinCaja(){ if(!AUTH_ON) return; try{ await sb.upsert('bio_config',{id:'fincaja',data:getFinCaja()||{},ts:new Date().toISOString()},'id'); }catch(e){} }
+// Proyección de ventas (fila única en bio_config id='finproy') — estimado mensual + % costo de producción
+function getFinProy(){ try{ const o=JSON.parse(localStorage.getItem('bio:finproy')||'null'); return (o&&typeof o==='object')?o:null; }catch(e){ return null; } }
+function setFinProy(o){ localStorage.setItem('bio:finproy',JSON.stringify(o)); }
+async function pullFinProy(){ if(!AUTH_ON) return; try{ const rows=await sb.query('bio_config',{id:'finproy'}); if(rows&&rows[0]&&rows[0].data){ const d=(typeof rows[0].data==='string')?JSON.parse(rows[0].data):rows[0].data; if(d) setFinProy(d); } }catch(e){} }
+async function pushFinProy(){ if(!AUTH_ON) return; try{ await sb.upsert('bio_config',{id:'finproy',data:getFinProy()||{},ts:new Date().toISOString()},'id'); }catch(e){} }
 function formulaRow(f){ return { id:f.id||('FM-'+(f.c||f.n)), c:f.c||'', n:f.n||'', kg:Number(f.kg)||0, ins:f.ins||[], ts:f.ts||null }; }
 function rowFormula(r){ let ins=r.ins; if(typeof ins==='string'){ try{ ins=JSON.parse(ins); }catch{ ins=[]; } } return { id:r.id, c:r.c||'', n:r.n||'', kg:Number(r.kg)||0, ins:Array.isArray(ins)?ins:[], custom:true, ts:r.ts }; }
 function insprecRow(o){ return { id:o.id||('IP-'+o.c), c:o.c||'', gskg:Number(o.gskg)||0, ts:o.ts||null }; }
@@ -1152,7 +1158,7 @@ async function cloudPull(name){
     d.save(Object.values(merged));
   }catch(e){}
 }
-async function cloudPullAll(){ if(!AUTH_ON) return; await cloudPull('clientes'); await cloudPull('estancias'); await cloudPull('visitas'); await cloudPull('ot'); await cloudPull('mov'); await cloudPull('caja'); await cloudPull('viat'); await cloudPull('insumo'); await cloudPull('precio'); await cloudPull('cotiz'); await cloudPull('insprec'); await cloudPull('formula'); await cloudPull('ptmov'); await cloudPull('garantia'); await cloudPull('agenda'); await cloudPull('venta'); await cloudPull('compra'); await cloudPull('sueldo'); await cloudPull('cheque'); await cloudPull('prestamo'); await pullFinCaja(); await pullPricingCfg(); refreshVista(); }
+async function cloudPullAll(){ if(!AUTH_ON) return; await cloudPull('clientes'); await cloudPull('estancias'); await cloudPull('visitas'); await cloudPull('ot'); await cloudPull('mov'); await cloudPull('caja'); await cloudPull('viat'); await cloudPull('insumo'); await cloudPull('precio'); await cloudPull('cotiz'); await cloudPull('insprec'); await cloudPull('formula'); await cloudPull('ptmov'); await cloudPull('garantia'); await cloudPull('agenda'); await cloudPull('venta'); await cloudPull('compra'); await cloudPull('sueldo'); await cloudPull('cheque'); await cloudPull('prestamo'); await pullFinCaja(); await pullFinProy(); await pullPricingCfg(); refreshVista(); }
 function refreshVista(){ const act=document.querySelector('.screen.active'); if(!act) return;
   if(act.id==='sHome') renderHome(); else if(act.id==='sClientes') renderClientes();
   else if(act.id==='sCliente'&&curCliente) abrirCliente(curCliente); else if(act.id==='sHistorial') renderHistorial();
@@ -1799,7 +1805,7 @@ async function renderUsuarios(){
       return `<div style="padding:10px 14px;border-bottom:1px solid var(--gray-200);${activo?'':'opacity:.55'}">
         <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start">
           <div style="min-width:0"><div class="li-t">${esc(u.nombre||'(sin nombre)')} ${activo?'':'<span style="font-size:9px;color:var(--red);font-weight:700">● INACTIVO</span>'}</div><div class="li-s">${esc(u.email||'')}</div></div>
-          <select onchange="cambiarRol('${u.id}',this.value)" style="font-size:12px;width:auto;padding:6px 8px">${['tecnico','planta','supervisor','gerente','lectura'].map(r=>`<option value="${r}" ${u.rol===r?'selected':''}>${rolLabel(r)}</option>`).join('')}</select>
+          <select onchange="cambiarRol('${u.id}',this.value)" style="font-size:12px;width:auto;padding:6px 8px">${['tecnico','planta','supervisor','asesor','gerente','lectura'].map(r=>`<option value="${r}" ${u.rol===r?'selected':''}>${rolLabel(r)}</option>`).join('')}</select>
         </div>
         <div style="display:flex;gap:6px;margin-top:8px">
           <button class="btn btn-sec" style="flex:1;font-size:11px;padding:6px" onclick="editarNombreUsuario('${u.id}','${nom}')">✏ Nombre</button>
@@ -3334,6 +3340,15 @@ function finCajaModal(){ if(!canEdit()){ showToast('Sin permiso'); return; } con
 }
 function finCajaGuardar(){ if(!canEdit()) return; const fecha=gs('finCajaFecha').value; const monto=num(gs('finCajaMonto').value); const usd=num(gs('finCajaUsd').value); const tc=num(gs('finCajaTc').value)||0; if(!fecha){ showToast('Poné la fecha'); return; } if(usd&&!tc){ showToast('Cargá el tipo de cambio'); return; } setFinCaja({fecha,monto:Math.round(monto||0),monto_usd:usd||0,tc:tc||null,ts:new Date().toISOString()}); pushFinCaja(); cerrarModal(); showToast('✓ Saldo inicial guardado'); finSetTab('flujo'); }
 function finCajaBorrar(){ if(!canEdit()) return; if(!confirm('¿Borrar el saldo inicial?')) return; localStorage.removeItem('bio:fincaja'); pushFinCaja(); cerrarModal(); finSetTab('flujo'); }
+function finProyModal(){ if(!canEdit()){ showToast('Sin permiso'); return; } const fp=getFinProy();
+  gs('modalBox').innerHTML=`<h3>Ventas proyectadas</h3>
+    <div style="font-size:12px;color:var(--gray-600);margin-bottom:8px">Estimado de ventas mensuales para proyectar el flujo hacia adelante. Cada mes, la parte que ya se concretó (cuentas por cobrar reales) se descuenta del estimado. El costo de producción se calcula como % de las ventas proyectadas y se va reemplazando por las facturas de compra reales.</div>
+    <div class="row2"><div><label class="fl">Ventas estimadas por mes (₲)</label><input type="number" id="finProyVtas" value="${fp&&fp.ventas_mes?fp.ventas_mes:''}" placeholder="750000000"></div><div><label class="fl">Costo de producción (%)</label><input type="number" id="finProyPct" value="${fp&&fp.costo_pct!=null?fp.costo_pct:70}" placeholder="70"></div></div>
+    <div class="row2" style="margin-top:12px">${fp?`<button class="btn btn-sec" onclick="finProyBorrar()" style="color:var(--red)">Borrar</button>`:'<button class="btn btn-sec" onclick="cerrarModal()">Cancelar</button>'}<button class="btn btn-primary" onclick="finProyGuardar()">Guardar</button></div>`;
+  gs('modal').classList.add('show');
+}
+function finProyGuardar(){ if(!canEdit()) return; const v=num(gs('finProyVtas').value)||0; let pct=num(gs('finProyPct').value); if(pct==null||isNaN(pct)) pct=70; setFinProy({ventas_mes:Math.round(v),costo_pct:pct,ts:new Date().toISOString()}); pushFinProy(); cerrarModal(); showToast('✓ Proyección guardada'); finSetTab('flujo'); }
+function finProyBorrar(){ if(!canEdit()) return; if(!confirm('¿Borrar la proyección de ventas?')) return; localStorage.removeItem('bio:finproy'); pushFinProy(); cerrarModal(); finSetTab('flujo'); }
 let _finFluModo='sem';
 function finFluModo(m){ _finFluModo=m; finRenderFlujo(); }
 function _fluDate(k){ const p=String(k).split('-'); return new Date(+p[0],(+p[1])-1,+(p[2]||1)); }
@@ -3347,21 +3362,32 @@ function finRenderFlujo(){ const modo=_finFluModo; const per=ds=>{ if(!ds)return
   const saldoIni=Math.round(saldoGs+saldoUsd*tcIni);
   const hoyS=hoy(); const startPer=per(start<hoyS?start:hoyS); const curK=per(hoyS);
   const perRoll=ds=>{ const p=per(ds); return (p<startPer)?startPer:p; };
-  // barra de saldo inicial (Gs-equivalente; puede combinar Gs y USD)
+  const fp=getFinProy(); const ventasMes=(fp&&Number(fp.ventas_mes))||0; const costoPct=(fp&&fp.costo_pct!=null)?Number(fp.costo_pct):70;
+  // barras de configuración: saldo inicial + ventas proyectadas
   const detBreak = fc?('₲ '+saldoGs.toLocaleString('es-PY')+(saldoUsd?' · US$ '+saldoUsd.toLocaleString('es-PY',{maximumFractionDigits:2})+' · TC '+tcIni.toLocaleString('es-PY'):'')):'';
-  if(gs('finFluCaja')) gs('finFluCaja').innerHTML=`<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:#eef4fb;border:1px solid #dbe6f2;border-radius:10px;padding:10px 13px"><div style="min-width:0"><div style="font-size:10px;color:var(--gray-500);text-transform:uppercase;letter-spacing:.4px">Saldo inicial de caja</div><div style="font-size:17px;font-weight:800;color:${saldoIni<0?'var(--red)':'#1e3f63'}">${fc?finGsFmt(saldoIni):'— sin cargar —'}</div>${fc?`<div style="font-size:10px;color:var(--gray-500)">${detBreak}</div><div style="font-size:10px;color:var(--gray-500)">se arrastra desde ${fmtFecha(start)}</div>`:'<div style="font-size:10px;color:var(--gray-500)">cargá el saldo y la fecha de arranque</div>'}</div><button class="btn btn-sec" style="margin-left:auto;font-size:12px;padding:8px 13px" onclick="finCajaModal()">${fc?'✎ Editar':'＋ Cargar saldo'}</button></div>`;
-  const P={}; const touch=k=>{ if(k) P[k]=P[k]||{cxc:0,cxp:0,sue:0,cheq:0,banco:0}; return k; };
+  if(gs('finFluCaja')){
+    const cajaRow=`<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:#eef4fb;border:1px solid #dbe6f2;border-radius:10px;padding:10px 13px"><div style="min-width:0"><div style="font-size:10px;color:var(--gray-500);text-transform:uppercase;letter-spacing:.4px">Saldo inicial de caja</div><div style="font-size:17px;font-weight:800;color:${saldoIni<0?'var(--red)':'#1e3f63'}">${fc?finGsFmt(saldoIni):'— sin cargar —'}</div>${fc?`<div style="font-size:10px;color:var(--gray-500)">${detBreak}</div><div style="font-size:10px;color:var(--gray-500)">se arrastra desde ${fmtFecha(start)}</div>`:'<div style="font-size:10px;color:var(--gray-500)">cargá el saldo y la fecha de arranque</div>'}</div><button class="btn btn-sec" style="margin-left:auto;font-size:12px;padding:8px 13px" onclick="finCajaModal()">${fc?'✎ Editar':'＋ Cargar saldo'}</button></div>`;
+    const proyRow=`<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:#f2f9f4;border:1px solid #d6ecdb;border-radius:10px;padding:9px 13px;margin-top:8px"><div style="min-width:0"><div style="font-size:10px;color:var(--gray-500);text-transform:uppercase;letter-spacing:.4px">Ventas proyectadas</div><div style="font-size:15px;font-weight:800;color:#1e3f63">${ventasMes?finGsFmt(ventasMes)+' /mes':'— sin cargar —'}</div><div style="font-size:10px;color:var(--gray-500)">${ventasMes?'costo de producción '+costoPct+'% · se reemplaza por ventas/compras reales':'estimado mensual para proyectar ingresos y costos'}</div></div><button class="btn btn-sec" style="margin-left:auto;font-size:12px;padding:8px 13px" onclick="finProyModal()">${ventasMes?'✎ Editar':'＋ Cargar'}</button></div>`;
+    gs('finFluCaja').innerHTML=cajaRow+proyRow;
+  }
+  const P={}; const touch=k=>{ if(k) P[k]=P[k]||{cxc:0,cxp:0,sue:0,cheq:0,banco:0,vproy:0,cprod:0}; return k; };
+  const cxcMes={};
   const add=(k,f,val)=>{ if(!k||!val)return; touch(k); P[k][f]+=val; };
   // cheques: una compra vinculada a un cheque (pendiente o ya caído) queda cubierta y no cuenta como pago pendiente; solo los cheques pendientes se proyectan como egreso el día que caen.
   const chAll=getCheques(); const chCov={}; chAll.forEach(c=>{ if(c.compra_id) chCov[c.compra_id]=true; }); const chList=chAll.filter(c=>c.estado!=='caido');
-  let gCxc=0,gCxp=0,gSue=0,gCheq=0,gBanco=0;
-  getVentas().forEach(v=>{ (v.cuotas||[]).forEach(cu=>{ const s=finCuotaSaldo(cu); if(s>0){ const g=finGs(v,s); add(perRoll(cu.venc),'cxc',g); gCxc+=g; } }); });
+  let gCxc=0,gCxp=0,gSue=0,gCheq=0,gBanco=0,gVproy=0,gCprod=0;
+  getVentas().forEach(v=>{ (v.cuotas||[]).forEach(cu=>{ const s=finCuotaSaldo(cu); if(s>0){ const g=finGs(v,s); add(perRoll(cu.venc),'cxc',g); gCxc+=g; const mk=(String(cu.venc)<start?start:String(cu.venc)).slice(0,7); cxcMes[mk]=(cxcMes[mk]||0)+g; } }); });
   getCompras().forEach(c=>{ if(chCov[c.id]) return; (c.cuotas||[]).forEach(cu=>{ const s=finCuotaSaldo(cu); if(s>0){ const g=finGs(c,s); add(perRoll(cu.venc),'cxp',g); gCxp+=g; } }); });
   getSueldos().forEach(su=>{ (su.cuotas||[]).forEach(cu=>{ const s=finCuotaSaldo(cu); if(s>0){ const g=finGs(su,s); add(perRoll(cu.venc),'sue',g); gSue+=g; } }); });
   chList.forEach(ch=>{ const g=finGs(ch,ch.monto); add(perRoll(ch.fecha),'cheq',g); gCheq+=g; });
   getPrestamos().forEach(pr=>{ if(pr.estado==='pagado') return; _prestamoFechas(pr).forEach(c=>{ const g=finGs(pr,c.monto); add(perRoll(c.fecha),'banco',g); gBanco+=g; }); });
+  // ventas proyectadas (estimado mensual, neto de lo ya real por cobrar) + costo de producción (% del proyectado)
+  if(ventasMes>0){ const monthAdd=(ym,n)=>{ let [y,m]=ym.split('-').map(Number); m+=n; y+=Math.floor((m-1)/12); m=((m-1)%12+12)%12+1; return y+'-'+String(m).padStart(2,'0'); };
+    const sm=(start>hoyS?start:hoyS).slice(0,7); let mdm=sm; Object.keys(P).forEach(k=>{ const km=k.slice(0,7); if(km>mdm) mdm=km; });
+    const horizon=(monthAdd(sm,11)>mdm)?monthAdd(sm,11):mdm; let M=sm, guard=0;
+    while(M<=horizon && guard++<60){ const proj=Math.max(0,ventasMes-(cxcMes[M]||0)); const cost=Math.round(costoPct/100*proj); const pk=perRoll(M+'-01'); if(proj){ add(pk,'vproy',proj); gVproy+=proj; } if(cost){ add(pk,'cprod',cost); gCprod+=cost; } M=monthAdd(M,1); } }
   // tarjetas resumen
-  const porCobrar=gCxc, porPagar=gCxp+gSue+gCheq+gBanco, saldoFin=saldoIni+porCobrar-porPagar;
+  const porCobrar=gCxc, porPagar=gCxp+gSue+gCheq+gBanco, saldoFin=saldoIni+(porCobrar+gVproy)-(porPagar+gCprod);
   if(gs('finFluResumen')) gs('finFluResumen').innerHTML=`<div style="display:flex;gap:8px;flex-wrap:wrap">
     <div style="flex:1;min-width:110px;background:var(--gray-100);border-radius:10px;padding:10px;text-align:center"><div style="font-size:10px;color:var(--gray-500)">Por cobrar</div><div style="font-size:15px;font-weight:700;color:var(--amber)">${finGsFmt(porCobrar)}</div></div>
     <div style="flex:1;min-width:110px;background:var(--gray-100);border-radius:10px;padding:10px;text-align:center"><div style="font-size:10px;color:var(--gray-500)">Por pagar</div><div style="font-size:15px;font-weight:700;color:var(--red)">${finGsFmt(porPagar)}</div></div>
@@ -3369,7 +3395,7 @@ function finRenderFlujo(){ const modo=_finFluModo; const per=ds=>{ if(!ds)return
   // períodos continuos desde el arranque hacia adelante
   const set={...P}; set[startPer]=set[startPer]||1; set[curK]=set[curK]||1; let ks=Object.keys(set).sort();
   let periods=[]; if(ks.length){ if(modo==='sem'){ let d=_fluDate(ks[0]); const e=_fluDate(ks[ks.length-1]); let g=0; while(d<=e && g++<200){ periods.push(_fluKey(d)); d.setDate(d.getDate()+7); } } else { let [y,m]=ks[0].split('-').map(Number); const [ye,me]=ks[ks.length-1].split('-').map(Number); let g=0; while((y<ye||(y===ye&&m<=me)) && g++<200){ periods.push(y+'-'+String(m).padStart(2,'0')); m++; if(m>12){m=1;y++;} } } }
-  periods.forEach(k=>{ const p=P[k]||{cxc:0,cxp:0,sue:0,cheq:0,banco:0}; p.totIn=p.cxc; p.totEg=p.cxp+p.sue+p.cheq+p.banco; p.neto=p.totIn-p.totEg; P[k]=p; });
+  periods.forEach(k=>{ const p=P[k]||{cxc:0,cxp:0,sue:0,cheq:0,banco:0,vproy:0,cprod:0}; p.totIn=p.cxc+(p.vproy||0); p.totEg=p.cxp+p.sue+p.cheq+p.banco+(p.cprod||0); p.neto=p.totIn-p.totEg; P[k]=p; });
   let ac=saldoIni; periods.forEach(k=>{ ac+=P[k].neto; P[k].acum=ac; });
   // toggle
   const chip=(mm,l)=>`<button class="finchip${modo===mm?' on':''}" onclick="finFluModo('${mm}')">${l}</button>`;
@@ -3387,8 +3413,8 @@ function finRenderFlujo(){ const modo=_finFluModo; const per=ds=>{ if(!ds)return
   const secRow=label=>`<tr class="sec"><td class="lbl secl">${label}</td><td class="secbar" colspan="${periods.length}"></td></tr>`;
   const netoRow=`<tr class="neto"><td class="lbl">Neto del período</td>${periods.map(k=>{ const v=P[k].neto; return `<td class="num${k===curK?' now':''}" title="${finGsFmt(v)}" style="color:${v<0?'var(--red)':'var(--green)'}">${v?_fluFmt(v):'<span class=z>·</span>'}</td>`; }).join('')}</tr>`;
   const acumRow=`<tr class="acum"><td class="lbl">Saldo de caja</td>${periods.map(k=>{ const v=P[k].acum; return `<td class="num${k===curK?' now':''}" title="${finGsFmt(v)}" style="${v<0?'color:#ffd0d0':''}">${_fluFmt(v)||'0'}</td>`; }).join('')}</tr>`;
-  const body=secRow('INGRESOS')+dataRow('','Cuentas por cobrar','cxc','var(--green)')+dataRow('totin','Total ingresos','totIn','')+
-    secRow('EGRESOS')+dataRow('','Cuentas por pagar','cxp','var(--red)')+dataRow('','Cheques diferidos','cheq','var(--red)')+dataRow('','Cuota banco / préstamos','banco','var(--red)')+dataRow('','Sueldos a pagar','sue','var(--red)')+dataRow('toteg','Total egresos','totEg','')+
+  const body=secRow('INGRESOS')+dataRow('','Ventas proyectadas','vproy','var(--green)')+dataRow('','Cuentas por cobrar','cxc','var(--green)')+dataRow('totin','Total ingresos','totIn','')+
+    secRow('EGRESOS')+dataRow('','Costos de producción','cprod','var(--red)')+dataRow('','Cuentas por pagar','cxp','var(--red)')+dataRow('','Cheques diferidos','cheq','var(--red)')+dataRow('','Cuota banco / préstamos','banco','var(--red)')+dataRow('','Sueldos a pagar','sue','var(--red)')+dataRow('toteg','Total egresos','totEg','')+
     netoRow+acumRow;
   const css=`<style>.flu{border-collapse:separate;border-spacing:0;font-size:10.5px;white-space:nowrap}.flu th,.flu td{padding:5px 8px;border-bottom:1px solid var(--gray-200)}.flu .lbl{position:sticky;left:0;background:#fff;text-align:left;font-weight:600;min-width:148px;box-shadow:1px 0 0 var(--gray-200);z-index:2}.flu .corner{position:sticky;left:0;z-index:3;background:#1e3f63;color:#fff;text-align:left}.flu .mth{background:#eef2f7;color:#1e3f63;font-weight:700;text-align:center;font-size:10px}.flu .wk{text-align:center;color:var(--gray-600);font-size:9.5px}.flu .wk .d{font-weight:700;color:var(--gray-800);font-size:10.5px}.flu td.num{text-align:right;font-variant-numeric:tabular-nums}.flu td.now,.flu th.now{background:var(--green-lt)}.flu tr.sec .secl{background:#1e3f63;color:#fff;font-weight:800;font-size:10px;letter-spacing:.5px}.flu tr.sec .secbar{background:#1e3f63}.flu tr.totin .lbl,.flu tr.totin td.num{background:#eaf7ee;font-weight:800}.flu tr.toteg .lbl,.flu tr.toteg td.num{background:#fdecec;font-weight:800}.flu tr.neto .lbl,.flu tr.neto td.num{background:#f8fafc;font-weight:800}.flu tr.acum .lbl,.flu tr.acum td.num{background:#1e3f63;color:#fff;font-weight:800}.flu tr.totin td.now,.flu tr.toteg td.now,.flu tr.neto td.now{background:#dff0e6}.flu .z{color:var(--gray-300)}</style>`;
   gs('finFluTabla').innerHTML=bar+css+`<table class="flu"><thead>${head1}${head2}</thead><tbody>${body}</tbody></table>`;
