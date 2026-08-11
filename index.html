@@ -486,6 +486,7 @@ textarea{resize:vertical;min-height:66px}
       <button class="fintab" id="finT_cobrar" onclick="finSetTab('cobrar')">📥 Por cobrar</button>
       <button class="fintab" id="finT_gastos" onclick="finSetTab('gastos')">🧾 Gastos</button>
       <button class="fintab" id="finT_pagar" onclick="finSetTab('pagar')">📤 Por pagar</button>
+      <button class="fintab" id="finT_sueldos" onclick="finSetTab('sueldos')">👷 Sueldos</button>
       <button class="fintab" id="finT_flujo" onclick="finSetTab('flujo')">📊 Flujo</button>
     </div>
     <div id="finW_ventas">
@@ -507,6 +508,12 @@ textarea{resize:vertical;min-height:66px}
     <div id="finW_pagar" style="display:none">
       <div id="finPagResumen" style="font-size:12px;margin-bottom:8px;padding:0 2px"></div>
       <div class="card"><div class="card-h">Cuentas por pagar</div><div id="finPagList"></div></div>
+    </div>
+    <div id="finW_sueldos" style="display:none">
+      <button class="btn btn-primary btn-block" style="margin-bottom:8px" onclick="finSueldoModal()">＋ Nuevo pago de sueldo</button>
+      <input type="search" id="finSBuscar" placeholder="🔎 Buscar empleado / período…" oninput="finRenderSueldos()" style="margin-bottom:8px">
+      <div id="finSResumen" style="font-size:12px;margin-bottom:8px;padding:0 2px"></div>
+      <div class="card"><div id="finSList"></div></div>
     </div>
     <div id="finW_flujo" style="display:none">
       <div id="finFluResumen" style="margin-bottom:10px"></div>
@@ -1050,6 +1057,7 @@ const SYNC_DEFS = {
   agenda:{ get:getAgenda, save:saveAgenda, table:'bio_agenda', toRow:agRow, fromRow:rowAg, toRowSafe:(a)=>{ const r=agRow(a); delete r.estancia_id; return r; } },
   venta:{ get:getVentas, save:saveVentas, table:'bio_ventas', toRow:ventaRow, fromRow:rowVenta },
   compra:{ get:getCompras, save:saveCompras, table:'bio_compras', toRow:compraRow, fromRow:rowCompra },
+  sueldo:{ get:getSueldos, save:saveSueldos, table:'bio_sueldos', toRow:sueldoRow, fromRow:rowSueldo },
 };
 function formulaRow(f){ return { id:f.id||('FM-'+(f.c||f.n)), c:f.c||'', n:f.n||'', kg:Number(f.kg)||0, ins:f.ins||[], ts:f.ts||null }; }
 function rowFormula(r){ let ins=r.ins; if(typeof ins==='string'){ try{ ins=JSON.parse(ins); }catch{ ins=[]; } } return { id:r.id, c:r.c||'', n:r.n||'', kg:Number(r.kg)||0, ins:Array.isArray(ins)?ins:[], custom:true, ts:r.ts }; }
@@ -1098,7 +1106,7 @@ async function cloudPull(name){
     d.save(Object.values(merged));
   }catch(e){}
 }
-async function cloudPullAll(){ if(!AUTH_ON) return; await cloudPull('clientes'); await cloudPull('estancias'); await cloudPull('visitas'); await cloudPull('ot'); await cloudPull('mov'); await cloudPull('caja'); await cloudPull('viat'); await cloudPull('insumo'); await cloudPull('precio'); await cloudPull('cotiz'); await cloudPull('insprec'); await cloudPull('ptmov'); await cloudPull('garantia'); await cloudPull('agenda'); await cloudPull('venta'); await cloudPull('compra'); await pullPricingCfg(); refreshVista(); }
+async function cloudPullAll(){ if(!AUTH_ON) return; await cloudPull('clientes'); await cloudPull('estancias'); await cloudPull('visitas'); await cloudPull('ot'); await cloudPull('mov'); await cloudPull('caja'); await cloudPull('viat'); await cloudPull('insumo'); await cloudPull('precio'); await cloudPull('cotiz'); await cloudPull('insprec'); await cloudPull('ptmov'); await cloudPull('garantia'); await cloudPull('agenda'); await cloudPull('venta'); await cloudPull('compra'); await cloudPull('sueldo'); await pullPricingCfg(); refreshVista(); }
 function refreshVista(){ const act=document.querySelector('.screen.active'); if(!act) return;
   if(act.id==='sHome') renderHome(); else if(act.id==='sClientes') renderClientes();
   else if(act.id==='sCliente'&&curCliente) abrirCliente(curCliente); else if(act.id==='sHistorial') renderHistorial();
@@ -2947,13 +2955,13 @@ function rowVenta(r){ let cu=r.cuotas; if(typeof cu==='string'){try{cu=JSON.pars
 function compraRow(c){ return { id:c.id, fecha:c.fecha||null, factura:c.factura||'', categoria:c.categoria||'', proveedor:c.proveedor||'', concepto:c.concepto||'', monto:c.monto||0, moneda:c.moneda||'PYG', tc:c.tc||null, cond:c.cond||'contado', cuotas:c.cuotas||[], por:c.por||'', ts:c.ts||null }; }
 function rowCompra(r){ let cu=r.cuotas; if(typeof cu==='string'){try{cu=JSON.parse(cu)}catch{cu=[]}} return { id:r.id, fecha:r.fecha||'', factura:r.factura||'', categoria:r.categoria||'', proveedor:r.proveedor||'', concepto:r.concepto||'', monto:Number(r.monto)||0, moneda:r.moneda||'PYG', tc:(r.tc!=null?Number(r.tc):null), cond:r.cond||'contado', cuotas:Array.isArray(cu)?cu:[], por:r.por||'', ts:r.ts, pending:false }; }
 function openFinanzas(){ if(!puedeVer('finanzas')){ showToast('Sin permiso'); return; } showScreen('sFinanzas','Finanzas','Ventas · cobros · gastos · pagos · flujo',true); finSetTab(_finTab||'ventas'); }
-function finSetTab(t){ _finTab=t; ['ventas','cobrar','gastos','pagar','flujo'].forEach(x=>{ const w=gs('finW_'+x); if(w) w.style.display=(x===t?'':'none'); const b=gs('finT_'+x); if(b) b.className='fintab'+(x===t?' on':''); });
-  if(t==='ventas') finRenderVentas(); else if(t==='cobrar') finRenderCobrar(); else if(t==='gastos') finRenderGastos(); else if(t==='pagar') finRenderPagar(); else finRenderFlujo(); }
+function finSetTab(t){ _finTab=t; ['ventas','cobrar','gastos','pagar','sueldos','flujo'].forEach(x=>{ const w=gs('finW_'+x); if(w) w.style.display=(x===t?'':'none'); const b=gs('finT_'+x); if(b) b.className='fintab'+(x===t?' on':''); });
+  if(t==='ventas') finRenderVentas(); else if(t==='cobrar') finRenderCobrar(); else if(t==='gastos') finRenderGastos(); else if(t==='pagar') finRenderPagar(); else if(t==='sueldos') finRenderSueldos(); else finRenderFlujo(); }
 // ---- Ventas ----
 function finRenderVentas(){ const q=(gs('finVBuscar').value||'').trim().toLowerCase(); let ls=getVentas().slice().sort((a,b)=>String(b.fecha||'').localeCompare(String(a.fecha||''))); if(q) ls=ls.filter(v=>((v.cliente||'')+' '+(v.concepto||'')).toLowerCase().includes(q));
   const tot=ls.reduce((a,v)=>a+finGs(v,v.monto),0), pend=ls.reduce((a,v)=>a+finGs(v,finSaldo(v)),0);
   if(gs('finVResumen')) gs('finVResumen').innerHTML='Total: <b>'+finGsFmt(tot)+'</b> · Por cobrar: <b style="color:var(--amber)">'+finGsFmt(pend)+'</b>';
-  gs('finVList').innerHTML=ls.map(v=>{ const s=finSaldo(v); const ok=s<=0; return `<div class="li" onclick="finVentaModal('${v.id}')"><div style="min-width:0"><div class="li-t">${esc(v.cliente||'—')} <span style="font-size:10px;color:var(--gray-400)">${esc(finCondLbl(v.cond))}</span></div><div class="li-s">${fmtFecha(v.fecha)}${v.factura?' · Fact '+esc(v.factura):''}${v.concepto?' · '+esc(v.concepto):''}</div></div><div style="text-align:right;flex-shrink:0"><div style="font-weight:700">${finFmt(v.monto,v.moneda)}</div><div style="font-size:10px;color:${ok?'var(--green)':'var(--amber)'}">${ok?'✓ cobrada':'saldo '+finFmt(s,v.moneda)}</div></div></div>`; }).join('')||'<div class="empty">Sin ventas.</div>';
+  gs('finVList').innerHTML=ls.map(v=>{ const s=finSaldo(v); const ok=s<=0; const cu0=(v.cuotas&&v.cuotas[0])||{}; const vlbl=(cu0.venc&&cu0.venc!==v.fecha)?('vence '+fmtFecha(cu0.venc)):'contado'; return `<div class="li" onclick="finVentaModal('${v.id}')"><div style="min-width:0"><div class="li-t">${esc(v.cliente||'—')} <span style="font-size:10px;color:var(--gray-400)">${vlbl}</span></div><div class="li-s">${fmtFecha(v.fecha)}${v.factura?' · Fact '+esc(v.factura):''}${v.concepto?' · '+esc(v.concepto):''}</div></div><div style="text-align:right;flex-shrink:0"><div style="font-weight:700">${finFmt(v.monto,v.moneda)}</div><div style="font-size:10px;color:${ok?'var(--green)':'var(--amber)'}">${ok?'✓ cobrada':'saldo '+finFmt(s,v.moneda)}</div></div></div>`; }).join('')||'<div class="empty">Sin ventas.</div>';
 }
 function finClientesDL(){ return '<datalist id="finCliDL">'+getClientes().slice().sort((a,b)=>a.nombre.localeCompare(b.nombre)).map(c=>`<option value="${esc(c.nombre)}">`).join('')+'</datalist>'; }
 function finVentaModal(id){ if(!canEdit()){ showToast('Sin permiso'); return; } const v=id?getVentas().find(x=>x.id===id):null;
@@ -2963,16 +2971,21 @@ function finVentaModal(id){ if(!canEdit()){ showToast('Sin permiso'); return; } 
     <label class="fl">Concepto / detalle</label><input id="finVConc" value="${esc(v&&v.concepto)}" placeholder="ej: 50 bolsas Confi 40" autocomplete="off">
     <div class="row2"><div><label class="fl">Fecha</label><input type="date" id="finVFecha" value="${v?v.fecha:hoy()}"></div><div><label class="fl">Moneda</label><select id="finVMon" onchange="finTcToggle('V')"><option value="PYG" ${!v||v.moneda!=='USD'?'selected':''}>Guaraníes ₲</option><option value="USD" ${v&&v.moneda==='USD'?'selected':''}>Dólares US$</option></select></div></div>
     <div class="row2"><div><label class="fl">Monto</label><input type="number" id="finVMonto" value="${v?v.monto:''}" placeholder="0"></div><div id="finVTcWrap" style="display:${v&&v.moneda==='USD'?'':'none'}"><label class="fl">TC ₲/US$</label><input type="number" id="finVTc" value="${v&&v.tc?v.tc:cotizDolar()}"></div></div>
-    <label class="fl">Condición de venta</label><select id="finVCond">${FIN_CONDS.map(c=>`<option value="${c[0]}" ${v&&v.cond===c[0]?'selected':''}>${c[1]}</option>`).join('')}</select>
-    <div style="font-size:11px;color:var(--gray-400);margin-top:4px">Si es a crédito, se generan las cuotas con sus vencimientos.</div>
+    <label class="fl">Vencimiento</label>
+    <input type="date" id="finVVenc" value="${(v&&v.cuotas&&v.cuotas[0]&&v.cuotas[0].venc)?v.cuotas[0].venc:(v?v.fecha:hoy())}">
+    <div style="display:flex;gap:5px;margin-top:5px">${[['0','Contado'],['30','+30'],['60','+60'],['90','+90']].map(x=>`<button type="button" onclick="finVSetPlazo(${x[0]})" style="flex:1;font-size:11px;padding:6px 4px;border:1px solid var(--gray-200);background:#fff;border-radius:6px;cursor:pointer">${x[1]}</button>`).join('')}</div>
+    <div style="font-size:11px;color:var(--gray-400);margin-top:4px">Un solo vencimiento. Los cobros parciales se registran en "Por cobrar".</div>
     <div class="row2" style="margin-top:12px">${v?`<button class="btn btn-sec" onclick="finVentaBorrar('${v.id}')" style="color:var(--red)">Borrar</button>`:'<button class="btn btn-sec" onclick="cerrarModal()">Cancelar</button>'}<button class="btn btn-primary" onclick="finVentaGuardar('${v?v.id:''}')">Guardar</button></div>`;
   gs('modal').classList.add('show');
 }
 function finTcToggle(pfx){ const usd=gs('fin'+pfx+'Mon')&&gs('fin'+pfx+'Mon').value==='USD'; const w=gs('fin'+pfx+'TcWrap'); if(w) w.style.display=usd?'':'none'; }
+function finVSetPlazo(d){ const f=gs('finVFecha')?gs('finVFecha').value:hoy(); if(gs('finVVenc')) gs('finVVenc').value=_finAddDays(f,d); }
 function finVentaGuardar(id){ if(!canEdit()) return; const cli=(gs('finVCli').value||'').trim(); const monto=num(gs('finVMonto').value); if(!cli){ showToast('Poné el cliente'); return; } if(!monto||monto<=0){ showToast('Poné el monto'); return; }
-  const mon=gs('finVMon').value, fecha=gs('finVFecha').value||hoy(), cond=gs('finVCond').value; const tc=mon==='USD'?(num(gs('finVTc').value)||0):null; if(mon==='USD'&&!tc){ showToast('Cargá el tipo de cambio'); return; }
+  const mon=gs('finVMon').value, fecha=gs('finVFecha').value||hoy(), venc=gs('finVVenc').value||fecha; const tc=mon==='USD'?(num(gs('finVTc').value)||0):null; if(mon==='USD'&&!tc){ showToast('Cargá el tipo de cambio'); return; }
   const prev=id?getVentas().find(x=>x.id===id):null; const cliObj=getClientes().find(c=>c.nombre.toLowerCase()===cli.toLowerCase());
-  let cuotas; if(prev && prev.monto===monto && prev.cond===cond && prev.fecha===fecha){ cuotas=prev.cuotas; } else { cuotas=finGenCuotas(fecha,monto,finCondTerms(cond)); }
+  const abonosPrev=(prev&&prev.cuotas&&prev.cuotas[0]&&prev.cuotas[0].abonos)||[];
+  const cuotas=[{ n:1, venc, monto:Math.round(monto), abonos:abonosPrev }];
+  const cond = (venc && venc!==fecha) ? 'plazo' : 'contado';
   const v={ id:id||('VN-'+Date.now()), fecha, factura:(gs('finVFact').value||'').trim(), cliente:cli, cliente_id:cliObj?cliObj.id:'', concepto:(gs('finVConc').value||'').trim(), monto:Math.round(monto), moneda:mon, tc, cond, cuotas, por:(getSession()&&getSession().nombre)||'', ts:new Date().toISOString(), pending:true };
   const a=getVentas().filter(x=>x.id!==v.id); a.unshift(v); saveVentas(a); cloudPush('venta',v); cerrarModal(); showToast('✓ Venta guardada'); finSetTab(_finTab);
 }
@@ -3013,23 +3026,57 @@ function finRenderPagar(){ const rows=_finPendientes('compra'); const totGs=rows
   if(gs('finPagResumen')) gs('finPagResumen').innerHTML='Por pagar: <b style="color:var(--red)">'+finGsFmt(totGs)+'</b> · '+rows.length+' cuota(s)';
   gs('finPagList').innerHTML=rows.map(r=>{ const vd=String(r.venc)<hoyS; const nc=(r.rec.cuotas||[]).length; return `<div class="li"><div style="min-width:0"><div class="li-t">${esc(r.rec.proveedor||r.rec.categoria||'—')}${nc>1?' <span style="font-size:10px;color:var(--gray-400)">cuota '+r.cu.n+'/'+nc+'</span>':''}</div><div class="li-s">Vence ${fmtFecha(r.venc)}${vd?' <span style="color:var(--red)">· vencida</span>':''}${r.rec.factura?' · Fact '+esc(r.rec.factura):''}${r.rec.concepto?' · '+esc(r.rec.concepto):''}</div></div><div style="text-align:right;flex-shrink:0"><div style="font-weight:700;color:var(--red)">${finFmt(r.saldo,r.rec.moneda)}</div><button onclick="finAbonoModal('compra','${r.rec.id}',${r.ci})" style="font-size:11px;border:none;background:var(--red-lt);color:var(--red);border-radius:6px;padding:3px 9px;cursor:pointer;margin-top:2px">＋ Pagar</button></div></div>`; }).join('')||'<div class="empty">Nada por pagar 🎉</div>';
 }
-function finAbonoModal(tipo,id,ci){ if(!canEdit()){ showToast('Sin permiso'); return; } const rec=(tipo==='venta'?getVentas():getCompras()).find(x=>x.id===id); if(!rec) return; const cu=rec.cuotas[ci]; const s=finCuotaSaldo(cu);
-  gs('modalBox').innerHTML=`<h3>${tipo==='venta'?'Registrar cobro':'Registrar pago'}</h3><div style="font-size:12px;color:var(--gray-600);margin-bottom:8px">${esc(rec.cliente||rec.proveedor||'')} · cuota ${cu.n} · saldo <b>${finFmt(s,rec.moneda)}</b></div>
+function _finArr(tipo){ return tipo==='venta'?getVentas():tipo==='compra'?getCompras():getSueldos(); }
+function _finSave(tipo,arr,rec){ if(tipo==='venta'){ saveVentas(arr); cloudPush('venta',rec); } else if(tipo==='compra'){ saveCompras(arr); cloudPush('compra',rec); } else { saveSueldos(arr); cloudPush('sueldo',rec); } }
+function finAbonoModal(tipo,id,ci){ if(!canEdit()){ showToast('Sin permiso'); return; } const rec=_finArr(tipo).find(x=>x.id===id); if(!rec) return; const cu=rec.cuotas[ci]; const s=finCuotaSaldo(cu); const nc=(rec.cuotas||[]).length;
+  gs('modalBox').innerHTML=`<h3>${tipo==='venta'?'Registrar cobro':'Registrar pago'}</h3><div style="font-size:12px;color:var(--gray-600);margin-bottom:8px">${esc(rec.cliente||rec.proveedor||rec.empleado||'')}${nc>1?' · cuota '+cu.n:''} · saldo <b>${finFmt(s,rec.moneda)}</b></div>
     <label class="fl">Monto (${rec.moneda==='USD'?'US$':'₲'})</label><input type="number" id="finAbMonto" value="${s}">
     <label class="fl">Fecha</label><input type="date" id="finAbFecha" value="${hoy()}">
     <label class="fl">Medio / nota</label><input id="finAbNota" placeholder="efectivo, transferencia, cheque…" autocomplete="off">
-    <div class="row2" style="margin-top:10px"><button class="btn btn-sec" onclick="finSetTab('${tipo==='venta'?'cobrar':'pagar'}');cerrarModal()">Cancelar</button><button class="btn btn-primary" onclick="finAbonoGuardar('${tipo}','${id}',${ci})">Guardar</button></div>`;
+    <div class="row2" style="margin-top:10px"><button class="btn btn-sec" onclick="cerrarModal();finSetTab('${tipo==='venta'?'cobrar':tipo==='compra'?'pagar':'sueldos'}')">Cancelar</button><button class="btn btn-primary" onclick="finAbonoGuardar('${tipo}','${id}',${ci})">Guardar</button></div>`;
   gs('modal').classList.add('show');
 }
-function finAbonoGuardar(tipo,id,ci){ if(!canEdit()) return; const arr=tipo==='venta'?getVentas():getCompras(); const rec=arr.find(x=>x.id===id); if(!rec) return; const monto=num(gs('finAbMonto').value); if(!monto||monto<=0){ showToast('Monto inválido'); return; }
+function finAbonoGuardar(tipo,id,ci){ if(!canEdit()) return; const arr=_finArr(tipo); const rec=arr.find(x=>x.id===id); if(!rec) return; const monto=num(gs('finAbMonto').value); if(!monto||monto<=0){ showToast('Monto inválido'); return; }
   rec.cuotas[ci].abonos=rec.cuotas[ci].abonos||[]; rec.cuotas[ci].abonos.push({ fecha:gs('finAbFecha').value||hoy(), monto:Math.round(monto), nota:(gs('finAbNota').value||'').trim(), ts:new Date().toISOString() }); rec.ts=new Date().toISOString(); rec.pending=true;
-  if(tipo==='venta'){ saveVentas(arr); cloudPush('venta',rec); } else { saveCompras(arr); cloudPush('compra',rec); }
+  _finSave(tipo,arr,rec);
   cerrarModal(); showToast(tipo==='venta'?'✓ Cobro registrado':'✓ Pago registrado'); finSetTab(_finTab);
 }
+// ---- Sueldos y horas extra ----
+function getSueldos(){ return getArr('bio:sueldos'); }
+function saveSueldos(a){ setArr('bio:sueldos',a); }
+function sueldoRow(s){ return { id:s.id, empleado:s.empleado||'', periodo:s.periodo||'', fecha:s.fecha||null, base:s.base||0, he_h:s.he_h||0, he_v:s.he_v||0, bonos:s.bonos||0, descuentos:s.descuentos||0, total:s.total||0, moneda:s.moneda||'PYG', tc:s.tc||null, cuotas:s.cuotas||[], por:s.por||'', ts:s.ts||null }; }
+function rowSueldo(r){ let cu=r.cuotas; if(typeof cu==='string'){try{cu=JSON.parse(cu)}catch{cu=[]}} return { id:r.id, empleado:r.empleado||'', periodo:r.periodo||'', fecha:r.fecha||'', base:Number(r.base)||0, he_h:Number(r.he_h)||0, he_v:Number(r.he_v)||0, bonos:Number(r.bonos)||0, descuentos:Number(r.descuentos)||0, total:Number(r.total)||0, moneda:r.moneda||'PYG', tc:(r.tc!=null?Number(r.tc):null), cuotas:Array.isArray(cu)?cu:[], por:r.por||'', ts:r.ts, pending:false }; }
+function finSueldoTotal(base,he_h,he_v,bonos,desc){ return Math.round((Number(base)||0)+(Number(he_h)||0)*(Number(he_v)||0)+(Number(bonos)||0)-(Number(desc)||0)); }
+function finRenderSueldos(){ const q=(gs('finSBuscar').value||'').trim().toLowerCase(); let ls=getSueldos().slice().sort((a,b)=>String(b.periodo||b.fecha||'').localeCompare(String(a.periodo||a.fecha||''))); if(q) ls=ls.filter(s=>((s.empleado||'')+' '+(s.periodo||'')).toLowerCase().includes(q));
+  const tot=ls.reduce((a,s)=>a+finGs(s,s.total),0), pend=ls.reduce((a,s)=>a+finGs(s,finSaldo(s)),0);
+  if(gs('finSResumen')) gs('finSResumen').innerHTML='Total sueldos: <b>'+finGsFmt(tot)+'</b> · Pendiente: <b style="color:var(--red)">'+finGsFmt(pend)+'</b>';
+  gs('finSList').innerHTML=ls.map(s=>{ const sal=finSaldo(s); const ok=sal<=0; const he=(Number(s.he_h)||0); return `<div class="li"><div style="min-width:0;flex:1" onclick="finSueldoModal('${s.id}')"><div class="li-t">${esc(s.empleado||'—')} <span style="font-size:10px;color:var(--gray-400)">${esc(finMesLbl(s.periodo))}</span></div><div class="li-s">${finFmt(s.total,s.moneda)}${he?' · '+he+' hs extra':''}${s.bonos?' · bonos '+finFmt(s.bonos,s.moneda):''}</div></div><div style="text-align:right;flex-shrink:0"><div style="font-size:10px;color:${ok?'var(--green)':'var(--red)'}">${ok?'✓ pagado':'saldo '+finFmt(sal,s.moneda)}</div>${!ok?`<button onclick="finAbonoModal('sueldo','${s.id}',0)" style="font-size:11px;border:none;background:var(--red-lt);color:var(--red);border-radius:6px;padding:3px 9px;cursor:pointer;margin-top:2px">＋ Pagar</button>`:''}</div></div>`; }).join('')||'<div class="empty">Sin sueldos cargados.</div>';
+}
+function finSueldoModal(id){ if(!canEdit()){ showToast('Sin permiso'); return; } const s=id?getSueldos().find(x=>x.id===id):null; const mesDef=(s&&s.periodo)||hoy().slice(0,7);
+  gs('modalBox').innerHTML=`<h3>${s?'Editar':'Nuevo'} pago de sueldo</h3>
+    <label class="fl">Empleado</label><input id="finSEmp" value="${esc(s&&s.empleado)}" placeholder="Nombre" autocomplete="off">
+    <div class="row2"><div><label class="fl">Período (mes)</label><input type="month" id="finSPer" value="${mesDef}"></div><div><label class="fl">Fecha de pago</label><input type="date" id="finSFecha" value="${s?s.fecha:hoy()}"></div></div>
+    <label class="fl">Sueldo base (₲)</label><input type="number" id="finSBase" value="${s?s.base:''}" placeholder="0" oninput="finSueldoCalc()">
+    <div class="row2"><div><label class="fl">Horas extra (cant.)</label><input type="number" id="finSHeH" value="${s&&s.he_h?s.he_h:''}" placeholder="0" oninput="finSueldoCalc()"></div><div><label class="fl">Valor hora extra (₲)</label><input type="number" id="finSHeV" value="${s&&s.he_v?s.he_v:''}" placeholder="0" oninput="finSueldoCalc()"></div></div>
+    <div class="row2"><div><label class="fl">Bonos / otros (₲)</label><input type="number" id="finSBonos" value="${s&&s.bonos?s.bonos:''}" placeholder="0" oninput="finSueldoCalc()"></div><div><label class="fl">Descuentos (₲)</label><input type="number" id="finSDesc" value="${s&&s.descuentos?s.descuentos:''}" placeholder="0" oninput="finSueldoCalc()"></div></div>
+    <div id="finSTotal" style="font-weight:800;font-size:15px;margin:8px 0;text-align:center;color:var(--green-d)"></div>
+    <div class="row2" style="margin-top:6px">${s?`<button class="btn btn-sec" onclick="finSueldoBorrar('${s.id}')" style="color:var(--red)">Borrar</button>`:'<button class="btn btn-sec" onclick="cerrarModal()">Cancelar</button>'}<button class="btn btn-primary" onclick="finSueldoGuardar('${s?s.id:''}')">Guardar</button></div>`;
+  gs('modal').classList.add('show'); finSueldoCalc();
+}
+function finSueldoCalc(){ const t=finSueldoTotal(num(gs('finSBase').value),num(gs('finSHeH').value),num(gs('finSHeV').value),num(gs('finSBonos').value),num(gs('finSDesc').value)); const el=gs('finSTotal'); if(el) el.textContent='Total a pagar: '+finGsFmt(t); }
+function finSueldoGuardar(id){ if(!canEdit()) return; const emp=(gs('finSEmp').value||'').trim(); if(!emp){ showToast('Poné el empleado'); return; }
+  const base=num(gs('finSBase').value)||0, he_h=num(gs('finSHeH').value)||0, he_v=num(gs('finSHeV').value)||0, bonos=num(gs('finSBonos').value)||0, desc=num(gs('finSDesc').value)||0;
+  const total=finSueldoTotal(base,he_h,he_v,bonos,desc); if(total<=0){ showToast('El total debe ser mayor a 0'); return; }
+  const fecha=gs('finSFecha').value||hoy(); const prev=id?getSueldos().find(x=>x.id===id):null; const abonosPrev=(prev&&prev.cuotas&&prev.cuotas[0]&&prev.cuotas[0].abonos)||[];
+  const s={ id:id||('SU-'+Date.now()), empleado:emp, periodo:gs('finSPer').value||hoy().slice(0,7), fecha, base:Math.round(base), he_h, he_v:Math.round(he_v), bonos:Math.round(bonos), descuentos:Math.round(desc), total, moneda:'PYG', tc:null, cuotas:[{n:1,venc:fecha,monto:total,abonos:abonosPrev}], por:(getSession()&&getSession().nombre)||'', ts:new Date().toISOString(), pending:true };
+  const a=getSueldos().filter(x=>x.id!==s.id); a.unshift(s); saveSueldos(a); cloudPush('sueldo',s); cerrarModal(); showToast('✓ Sueldo guardado'); finSetTab(_finTab);
+}
+function finSueldoBorrar(id){ if(!canEdit()) return; if(!confirm('¿Borrar este pago de sueldo?')) return; saveSueldos(getSueldos().filter(x=>x.id!==id)); cloudDelete('sueldo',id); cerrarModal(); finSetTab(_finTab); }
 // ---- Flujo de caja ----
 function finRenderFlujo(){ const map={}; const ym=d=>String(d||'').slice(0,7); const add=(k,f,val)=>{ if(!k)return; map[k]=map[k]||{inR:0,egR:0,inP:0,egP:0}; map[k][f]+=val; };
   getVentas().forEach(v=>{ (v.cuotas||[]).forEach(cu=>{ (cu.abonos||[]).forEach(a=>add(ym(a.fecha),'inR',finGs(v,a.monto))); const s=finCuotaSaldo(cu); if(s>0) add(ym(cu.venc),'inP',finGs(v,s)); }); });
   getCompras().forEach(c=>{ (c.cuotas||[]).forEach(cu=>{ (cu.abonos||[]).forEach(a=>add(ym(a.fecha),'egR',finGs(c,a.monto))); const s=finCuotaSaldo(cu); if(s>0) add(ym(cu.venc),'egP',finGs(c,s)); }); });
+  getSueldos().forEach(su=>{ (su.cuotas||[]).forEach(cu=>{ (cu.abonos||[]).forEach(a=>add(ym(a.fecha),'egR',finGs(su,a.monto))); const s=finCuotaSaldo(cu); if(s>0) add(ym(cu.venc),'egP',finGs(su,s)); }); });
   const hoyM=hoy().slice(0,7); const keys=Object.keys(map).sort();
   const saldoReal=keys.reduce((a,k)=>a+(map[k].inR-map[k].egR),0);
   const porCobrar=keys.reduce((a,k)=>a+map[k].inP,0), porPagar=keys.reduce((a,k)=>a+map[k].egP,0);
