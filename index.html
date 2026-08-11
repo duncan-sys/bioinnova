@@ -494,10 +494,10 @@ textarea{resize:vertical;min-height:66px}
       <button class="fintab" id="finT_pagar" onclick="finSetTab('pagar')">📤 Por pagar</button>
       <button class="fintab" id="finT_sueldos" onclick="finSetTab('sueldos')">👷 Sueldos</button>
       <button class="fintab" id="finT_cheques" onclick="finSetTab('cheques')">🧾 Cheques</button>
-      <button class="fintab" id="finT_banco" onclick="finSetTab('banco')">🏦 Banco</button>
+      <button class="fintab" id="finT_banco" onclick="finSetTab('banco')">🏦 Fijos</button>
       <button class="fintab" id="finT_flujo" onclick="finSetTab('flujo')">📊 Flujo</button>
     </div>
-    <div style="font-size:9px;color:var(--gray-400);text-align:right;margin:-6px 0 8px">BioInnova <span id="finVer">v73</span></div>
+    <div style="font-size:9px;color:var(--gray-400);text-align:right;margin:-6px 0 8px">BioInnova <span id="finVer">v74</span></div>
     <div id="finW_ventas">
       <button class="btn btn-primary btn-block" style="margin-bottom:8px" onclick="finVentaModal()">＋ Nueva venta</button>
       <input type="search" id="finVBuscar" placeholder="🔎 Buscar cliente / factura…" oninput="finRenderVentas()" style="margin-bottom:8px">
@@ -540,8 +540,8 @@ textarea{resize:vertical;min-height:66px}
       <div id="finChList"></div>
     </div>
     <div id="finW_banco" style="display:none">
-      <button class="btn btn-primary btn-block" style="margin-bottom:8px" onclick="finPrestamoModal()">＋ Nueva cuota / préstamo de banco</button>
-      <input type="search" id="finBcoBuscar" placeholder="🔎 Buscar banco / concepto…" oninput="finRenderBanco()" style="margin-bottom:8px">
+      <button class="btn btn-primary btn-block" style="margin-bottom:8px" onclick="finPrestamoModal()">＋ Nueva cuota fija (banco, alquiler…)</button>
+      <input type="search" id="finBcoBuscar" placeholder="🔎 Buscar concepto / banco…" oninput="finRenderBanco()" style="margin-bottom:8px">
       <div id="finBcoResumen" style="font-size:12px;margin-bottom:8px;padding:0 2px"></div>
       <div id="finBcoList"></div>
     </div>
@@ -3303,14 +3303,14 @@ function _prestamoFechas(pr){ const out=[]; if(!pr||!pr.fecha) return out; if(pr
 function finRenderBanco(){ const hoyS=hoy(); const q=(gs('finBcoBuscar').value||'').trim().toLowerCase(); let ls=getPrestamos().slice().sort((a,b)=>String(a.fecha||'').localeCompare(String(b.fecha||'')));
   if(q) ls=ls.filter(p=>((p.concepto||'')+' '+(p.banco||'')).toLowerCase().includes(q));
   const totGs=ls.filter(p=>p.estado!=='pagado').reduce((a,p)=>a+_prestamoFechas(p).reduce((s,c)=>s+finGs(p,c.monto),0),0);
-  if(gs('finBcoResumen')) gs('finBcoResumen').innerHTML='Compromisos con banco: <b style="color:var(--red)">'+finGsFmt(totGs)+'</b> · '+ls.length+' ítem(s)';
+  if(gs('finBcoResumen')) gs('finBcoResumen').innerHTML='Compromisos fijos: <b style="color:var(--red)">'+finGsFmt(totGs)+'</b> · '+ls.length+' ítem(s)';
   gs('finBcoList').innerHTML=ls.map(p=>{ const fs=_prestamoFechas(p); const prox=fs.find(c=>String(c.fecha)>=hoyS)||fs[fs.length-1]||{}; const tot=fs.reduce((s,c)=>s+finGs(p,c.monto),0); const mens=p.tipo==='mensual';
     return `<div class="li" onclick="finPrestamoModal('${p.id}')"><div style="min-width:0"><div class="li-t">${esc(p.concepto||p.banco||'—')} ${mens?`<span style="font-size:9px;color:var(--gray-400)">${p.cuotas_n} cuota(s) mensual</span>`:'<span style="font-size:9px;color:var(--gray-400)">pago único</span>'}</div><div class="li-s">${p.banco?esc(p.banco)+' · ':''}${mens?'próx. '+fmtFecha(prox.fecha):'vence '+fmtFecha(p.fecha)}${mens?' · '+finFmt(p.monto,p.moneda)+'/mes':''}</div></div><div style="text-align:right;flex-shrink:0"><div style="font-weight:700;color:var(--red)">${finFmt(mens?tot:p.monto,p.moneda)}</div><div style="font-size:10px;color:var(--gray-400)">${mens?'total '+fs.length+' cuotas':finCondLbl('')||'único'}</div></div></div>`; }).join('')||'<div class="empty">Sin compromisos con banco.</div>';
 }
 function finPrestamoModal(id){ if(!canEdit()){ showToast('Sin permiso'); return; } const p=id?getPrestamos().find(x=>x.id===id):null; const mens=p&&p.tipo==='mensual';
-  gs('modalBox').innerHTML=`<h3>${p?'Editar':'Nueva'} cuota / préstamo de banco</h3>
-    <label class="fl">Concepto</label><input id="finBcoConc" value="${esc(p&&p.concepto)}" placeholder="ej: Amortización capital operativo" autocomplete="off">
-    <label class="fl">Banco</label><input id="finBcoBanco" value="${esc(p&&p.banco)}" placeholder="ej: Continental" autocomplete="off">
+  gs('modalBox').innerHTML=`<h3>${p?'Editar':'Nueva'} cuota fija / préstamo</h3>
+    <label class="fl">Concepto</label><input id="finBcoConc" value="${esc(p&&p.concepto)}" placeholder="ej: Alquiler local, Amortización capital operativo" autocomplete="off">
+    <label class="fl">Banco / entidad</label><input id="finBcoBanco" value="${esc(p&&p.banco)}" placeholder="ej: Continental, Propietario" autocomplete="off">
     <label class="fl">Tipo</label><select id="finBcoTipo" onchange="finBcoTipoToggle()"><option value="unica" ${!mens?'selected':''}>Pago único (una fecha)</option><option value="mensual" ${mens?'selected':''}>Cuota mensual (se repite)</option></select>
     <div class="row2"><div><label class="fl">Monto ${mens?'por cuota':''}</label><input type="number" id="finBcoMonto" value="${p?p.monto:''}" placeholder="0"></div><div><label class="fl">Moneda</label><select id="finBcoMon" onchange="finTcToggle('Bco')"><option value="PYG" ${!p||p.moneda!=='USD'?'selected':''}>Guaraníes ₲</option><option value="USD" ${p&&p.moneda==='USD'?'selected':''}>Dólares US$</option></select></div></div>
     <div class="row2"><div id="finBcoTcWrap" style="display:${p&&p.moneda==='USD'?'':'none'}"><label class="fl">TC ₲/US$</label><input type="number" id="finBcoTc" value="${p&&p.tc?p.tc:cotizDolar()}"></div><div></div></div>
@@ -3427,7 +3427,7 @@ function finRenderFlujo(){ const modo=_finFluModo; const per=ds=>{ if(!ds)return
   const netoRow=`<tr class="neto"><td class="lbl">Neto del período</td>${periods.map(k=>{ const v=P[k].neto; return `<td class="num${k===curK?' now':''}" title="${finGsFmt(v)}" style="color:${v<0?'var(--red)':'var(--green)'}">${v?_fluFmt(v):'<span class=z>·</span>'}</td>`; }).join('')}</tr>`;
   const acumRow=`<tr class="acum"><td class="lbl">Saldo de caja</td>${periods.map(k=>{ const v=P[k].acum; return `<td class="num${k===curK?' now':''}" title="${finGsFmt(v)}" style="${v<0?'color:#ffd0d0':''}">${_fluFmt(v)||'0'}</td>`; }).join('')}</tr>`;
   const body=secRow('INGRESOS')+dataRow('','Ventas proyectadas','vproy','#7ba87b')+dataRow('','Cuentas por cobrar','cxc','var(--amber)')+dataRow('','Cobranzas realizadas','cobR','var(--green)')+dataRow('totin','Total ingresos','totIn','')+
-    secRow('EGRESOS')+dataRow('','Costos de producción','cprod','#d98a8a')+dataRow('','Cuentas por pagar','cxp','var(--amber)')+dataRow('','Pagos realizados','pagR','var(--red)')+dataRow('','Cheques diferidos','cheq','var(--red)')+dataRow('','Cuota banco / préstamos','banco','var(--red)')+dataRow('','Sueldos a pagar','sue','var(--red)')+dataRow('toteg','Total egresos','totEg','')+
+    secRow('EGRESOS')+dataRow('','Costos de producción','cprod','#d98a8a')+dataRow('','Cuentas por pagar','cxp','var(--amber)')+dataRow('','Pagos realizados','pagR','var(--red)')+dataRow('','Cheques diferidos','cheq','var(--red)')+dataRow('','Cuotas fijas (banco/alquiler)','banco','var(--red)')+dataRow('','Sueldos a pagar','sue','var(--red)')+dataRow('toteg','Total egresos','totEg','')+
     netoRow+acumRow;
   const css=`<style>.flu{border-collapse:separate;border-spacing:0;font-size:10.5px;white-space:nowrap}.flu th,.flu td{padding:5px 8px;border-bottom:1px solid var(--gray-200)}.flu .lbl{position:sticky;left:0;background:#fff;text-align:left;font-weight:600;min-width:148px;box-shadow:1px 0 0 var(--gray-200);z-index:2}.flu .corner{position:sticky;left:0;z-index:3;background:#1e3f63;color:#fff;text-align:left}.flu .mth{background:#eef2f7;color:#1e3f63;font-weight:700;text-align:center;font-size:10px}.flu .wk{text-align:center;color:var(--gray-600);font-size:9.5px}.flu .wk .d{font-weight:700;color:var(--gray-800);font-size:10.5px}.flu td.num{text-align:right;font-variant-numeric:tabular-nums}.flu td.now,.flu th.now{background:var(--green-lt)}.flu tr.sec .secl{background:#1e3f63;color:#fff;font-weight:800;font-size:10px;letter-spacing:.5px}.flu tr.sec .secbar{background:#1e3f63}.flu tr.totin .lbl,.flu tr.totin td.num{background:#eaf7ee;font-weight:800}.flu tr.toteg .lbl,.flu tr.toteg td.num{background:#fdecec;font-weight:800}.flu tr.neto .lbl,.flu tr.neto td.num{background:#f8fafc;font-weight:800}.flu tr.acum .lbl,.flu tr.acum td.num{background:#1e3f63;color:#fff;font-weight:800}.flu tr.totin td.now,.flu tr.toteg td.now,.flu tr.neto td.now{background:#dff0e6}.flu .z{color:var(--gray-300)}</style>`;
   gs('finFluTabla').innerHTML=bar+css+`<table class="flu"><thead>${head1}${head2}</thead><tbody>${body}</tbody></table>`;
