@@ -1857,7 +1857,7 @@ function otPrint(id){ const o=getOTs().find(x=>x.id===id); if(!o) return;
    <table><thead><tr><th>Código</th><th>Concepto</th><th class="r">Cantidad</th><th class="r">%</th></tr></thead><tbody>${filas}
     <tr class="tot"><td colspan="2">PRODUCTO FINAL — ${esc(o.producto_nom)}</td><td class="r">${(o.kg||0).toLocaleString('es-PY')} kg</td><td class="r">${o.bolsas} bolsas</td></tr></tbody></table>
    <div style="display:flex;justify-content:space-between;margin-top:36px;font-size:12px"><div>Preparado por: ____________</div><div>Controlado por: ____________</div></div>
-   <div class="noprint" style="text-align:center;margin-top:16px"><button onclick="window.print()" style="background:#2f7d3b;color:#fff;border:none;padding:10px 22px;border-radius:8px;cursor:pointer">🖨️ Imprimir / Guardar PDF</button></div>
+   <div class="noprint" style="text-align:center;margin-top:16px"><button onclick="window.print()" style="background:#2f7d3b;color:#fff;border:none;padding:10px 22px;border-radius:8px;cursor:pointer">🖨️ Imprimir / Guardar PDF</button> <button onclick="window.close()" style="background:#e2e8f0;color:#334155;border:none;padding:10px 22px;border-radius:8px;cursor:pointer;margin-left:8px">← Volver</button></div>
    </div></body></html>`);
   w.document.close();
 }
@@ -2002,7 +2002,7 @@ function cotizPrint(id, incluirGar){ const c=getCotiz().find(x=>x.id===id); if(!
    <div class="firma"><b>${esc(c.vendedor||'')}</b><br>Asesor técnico<br><b>Bioinnova S.A.</b></div>
    <div class="vh">Válido Hasta ${validoHasta}</div>
    ${incluirGar?('<style>'+garDocCss()+'</style>'+garForCotizItems(items).map(x=>`<div style="page-break-before:always;padding-top:10px">${garDocInner(x.g,x.p)}</div>`).join('')):''}
-   <div class="noprint" style="text-align:center;margin-top:20px"><button onclick="window.print()" style="background:#2e5b8a;color:#fff;border:none;padding:10px 22px;border-radius:8px;cursor:pointer">🖨️ Imprimir / Guardar PDF</button></div>
+   <div class="noprint" style="text-align:center;margin-top:20px"><button onclick="window.print()" style="background:#2e5b8a;color:#fff;border:none;padding:10px 22px;border-radius:8px;cursor:pointer">🖨️ Imprimir / Guardar PDF</button> <button onclick="window.close()" style="background:#e2e8f0;color:#334155;border:none;padding:10px 22px;border-radius:8px;cursor:pointer;margin-left:8px">← Volver</button></div>
    </div></body></html>`);
   w.document.close();
 }
@@ -2215,7 +2215,7 @@ function viatPrint(){ const r=getRend().find(x=>x.id===curViatId); if(!r) return
    ${r.estado==='liquidada'?`<div style="font-size:12px;margin-top:6px;color:#555">Liquidado por transferencia el ${fmtFecha(r.liq_fecha)}${r.liq_ref?' · '+esc(r.liq_ref):''}</div>`:''}
    <div class="nota">Adjuntar a este resumen las facturas físicas correspondientes a cada gasto.</div>
    <div class="firma"><div>Firma del comercial</div><div>Recibido / Aprobado</div></div>
-   <div class="noprint" style="text-align:center;margin-top:18px"><button onclick="window.print()" style="background:#2f7d3b;color:#fff;border:none;padding:10px 22px;border-radius:8px;cursor:pointer">🖨️ Imprimir / Guardar PDF</button></div>
+   <div class="noprint" style="text-align:center;margin-top:18px"><button onclick="window.print()" style="background:#2f7d3b;color:#fff;border:none;padding:10px 22px;border-radius:8px;cursor:pointer">🖨️ Imprimir / Guardar PDF</button> <button onclick="window.close()" style="background:#e2e8f0;color:#334155;border:none;padding:10px 22px;border-radius:8px;cursor:pointer;margin-left:8px">← Volver</button></div>
    </div></body></html>`);
   w.document.close();
 }
@@ -2311,7 +2311,7 @@ function cajaRecibo(id){ const m=getCaja().find(x=>x.id===id); if(!m) return; co
     <tr><td class="k">Registró</td><td>${esc(m.por||'—')}</td></tr>
    </table>
    <div class="firma"><div>Recibí conforme</div><div>Autorizó</div></div>
-   <div class="noprint" style="text-align:center;margin-top:18px"><button onclick="window.print()" style="background:#2f7d3b;color:#fff;border:none;padding:10px 22px;border-radius:8px;cursor:pointer">🖨️ Imprimir / Guardar PDF</button></div>
+   <div class="noprint" style="text-align:center;margin-top:18px"><button onclick="window.print()" style="background:#2f7d3b;color:#fff;border:none;padding:10px 22px;border-radius:8px;cursor:pointer">🖨️ Imprimir / Guardar PDF</button> <button onclick="window.close()" style="background:#e2e8f0;color:#334155;border:none;padding:10px 22px;border-radius:8px;cursor:pointer;margin-left:8px">← Volver</button></div>
    </div></body></html>`);
   w.document.close();
 }
@@ -2337,7 +2337,7 @@ function cajaResumen(){
    </div>
    <table><thead><tr><th>Fecha</th><th>Concepto</th><th>Resp./Prov.</th><th class="r">Ingreso</th><th class="r">Egreso</th></tr></thead><tbody>${filas||'<tr><td colspan="5" style="text-align:center;color:#999">Sin movimientos</td></tr>'}
     <tr class="tot"><td colspan="3">TOTALES</td><td class="r" style="color:#2f7d3b">${gsFmt(ing)}</td><td class="r" style="color:#b91c1c">${gsFmt(egr)}</td></tr></tbody></table>
-   <div class="noprint" style="text-align:center;margin-top:16px"><button onclick="window.print()" style="background:#2f7d3b;color:#fff;border:none;padding:10px 22px;border-radius:8px;cursor:pointer">🖨️ Imprimir / Guardar PDF</button></div>
+   <div class="noprint" style="text-align:center;margin-top:16px"><button onclick="window.print()" style="background:#2f7d3b;color:#fff;border:none;padding:10px 22px;border-radius:8px;cursor:pointer">🖨️ Imprimir / Guardar PDF</button> <button onclick="window.close()" style="background:#e2e8f0;color:#334155;border:none;padding:10px 22px;border-radius:8px;cursor:pointer;margin-left:8px">← Volver</button></div>
    </div></body></html>`);
   w.document.close();
 }
@@ -2686,7 +2686,7 @@ function garGuardar(keyEnc){ if(!esGerente()){ showToast('Solo el gerente'); ret
 }
 function garBorrar(keyEnc){ if(!esGerente()) return; if(!confirm('¿Quitar la garantía de este producto?')) return; const key=decodeURIComponent(keyEnc); const g=garantiaDe(key); if(g){ saveGarantias(getGarantias().filter(x=>x.prod_key!==key)); if(typeof cloudDelete==='function') cloudDelete('garantia', g.id); } cerrarModal(); renderProductosGar(); }
 function garPrint(keyEnc){ const key=decodeURIComponent(keyEnc); const p=precioList().find(x=>precioKey(x)===key); const g=garantiaDe(key); if(!garTieneDatos(g)){ showToast('Sin garantía'); return; } const w=window.open('','_blank'); if(!w){ showToast('Permití las ventanas emergentes'); return; }
-  w.document.write(`<html><head><meta charset="utf-8"><title>Garantía — ${esc(p?p.n:'')}</title><style>body{margin:0;padding:24px;background:#fff}${garDocCss()}@media print{body{padding:0}.noprint{display:none}}</style></head><body>${garDocInner(g,p)}<div class="noprint" style="text-align:center;margin-top:16px"><button onclick="window.print()" style="background:#2f7d3b;color:#fff;border:none;padding:10px 22px;border-radius:8px;cursor:pointer">🖨️ Imprimir / Guardar PDF</button></div></body></html>`);
+  w.document.write(`<html><head><meta charset="utf-8"><title>Garantía — ${esc(p?p.n:'')}</title><style>body{margin:0;padding:24px;background:#fff}${garDocCss()}@media print{body{padding:0}.noprint{display:none}}</style></head><body>${garDocInner(g,p)}<div class="noprint" style="text-align:center;margin-top:16px"><button onclick="window.print()" style="background:#2f7d3b;color:#fff;border:none;padding:10px 22px;border-radius:8px;cursor:pointer">🖨️ Imprimir / Guardar PDF</button> <button onclick="window.close()" style="background:#e2e8f0;color:#334155;border:none;padding:10px 22px;border-radius:8px;cursor:pointer;margin-left:8px">← Volver</button></div></body></html>`);
   w.document.close();
 }
 // garantías (con datos) correspondientes a los ítems de una cotización
@@ -2800,6 +2800,7 @@ function agPrint(){
    <div class="noprint" style="display:flex;gap:8px;justify-content:center;margin-top:18px">
      <button onclick="guardarPDF(this)" style="background:#16a34a;color:#fff;border:none;padding:10px 20px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">📄 Guardar PDF</button>
      <button onclick="window.print()" style="background:#2f7d3b;color:#fff;border:none;padding:10px 20px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">🖨️ Imprimir</button>
+     <button onclick="window.close()" style="background:#e2e8f0;color:#334155;border:none;padding:10px 20px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">← Volver</button>
    </div>
   </div>
   <script src="https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.2/dist/html2pdf.bundle.min.js"><\/script>
@@ -2857,6 +2858,7 @@ function informeComercialPDF(id){
     <div class="noprint" style="display:flex;gap:8px;justify-content:center;margin-top:18px">
       <button onclick="guardarPDF(this)" style="background:#16a34a;color:#fff;border:none;padding:10px 20px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">📄 Guardar PDF</button>
       <button onclick="window.print()" style="background:#1e3f63;color:#fff;border:none;padding:10px 20px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">🖨️ Imprimir</button>
+      <button onclick="window.close()" style="background:#e2e8f0;color:#334155;border:none;padding:10px 20px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">← Volver</button>
     </div>
   </div>
   <script src="https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.2/dist/html2pdf.bundle.min.js"><\/script>
@@ -2923,6 +2925,7 @@ function informePDF(id){
     <div class="noprint" style="display:flex;gap:8px;justify-content:center;margin-top:18px">
       <button onclick="guardarPDF(this)" style="background:#16a34a;color:#fff;border:none;padding:10px 20px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">📄 Guardar PDF</button>
       <button onclick="window.print()" style="background:#2f7d3b;color:#fff;border:none;padding:10px 20px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">🖨️ Imprimir</button>
+      <button onclick="window.close()" style="background:#e2e8f0;color:#334155;border:none;padding:10px 20px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">← Volver</button>
     </div>
   </div>
   <script src="https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.2/dist/html2pdf.bundle.min.js"><\/script>
