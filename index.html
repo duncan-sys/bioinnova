@@ -163,6 +163,7 @@ textarea{resize:vertical;min-height:66px}
       <div class="tile" id="tileProductos" onclick="openProductos()" style="display:none"><div class="ico">🏷️</div><div class="tlab">Productos</div><div class="tsub">catálogo e inventario PT</div></div>
       <div class="tile" id="tileFormulas" onclick="openFormulas()" style="display:none"><div class="ico">🧪</div><div class="tlab">Formulaciones</div><div class="tsub">recetas</div></div>
       <div class="tile" id="tileInv" onclick="openInv()" style="display:none"><div class="ico">📦</div><div class="tlab">Inventario</div><div class="tsub">insumos y materia prima</div></div>
+      <div class="tile" id="tileFinanzas" onclick="openFinanzas()" style="display:none"><div class="ico">📊</div><div class="tlab">Finanzas</div><div class="tsub">ventas, cobros, pagos y flujo</div></div>
       <div class="tile" id="tileCaja" onclick="openCaja()" style="display:none"><div class="ico">💵</div><div class="tlab">Caja chica</div><div class="tsub">efectivo de planta</div></div>
       <div class="tile" id="tileViat" onclick="openViaticos()" style="display:none"><div class="ico">🧾</div><div class="tlab">Viáticos</div><div class="tsub">rendición de comerciales</div></div>
       <div class="tile" id="tileCrm" onclick="openCrm()" style="display:none"><div class="ico">🤝</div><div class="tlab">CRM</div><div class="tsub">seguimiento de clientes</div></div>
@@ -475,6 +476,42 @@ textarea{resize:vertical;min-height:66px}
       <button class="btn btn-amber" onclick="agPrint()" style="flex:0 0 auto;font-size:12px;padding:7px 12px">🖨️ PDF</button>
     </div>
     <div id="agDays"></div>
+  </div>
+
+  <!-- FINANZAS -->
+  <style>.fintab{flex:0 0 auto;border:none;background:var(--gray-200);color:var(--gray-600);border-radius:14px;padding:7px 13px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit}.fintab.on{background:var(--green);color:#fff}</style>
+  <div class="screen" id="sFinanzas">
+    <div style="display:flex;gap:5px;margin-bottom:10px;overflow-x:auto;padding-bottom:2px">
+      <button class="fintab on" id="finT_ventas" onclick="finSetTab('ventas')">💰 Ventas</button>
+      <button class="fintab" id="finT_cobrar" onclick="finSetTab('cobrar')">📥 Por cobrar</button>
+      <button class="fintab" id="finT_gastos" onclick="finSetTab('gastos')">🧾 Gastos</button>
+      <button class="fintab" id="finT_pagar" onclick="finSetTab('pagar')">📤 Por pagar</button>
+      <button class="fintab" id="finT_flujo" onclick="finSetTab('flujo')">📊 Flujo</button>
+    </div>
+    <div id="finW_ventas">
+      <button class="btn btn-primary btn-block" style="margin-bottom:8px" onclick="finVentaModal()">＋ Nueva venta</button>
+      <input type="search" id="finVBuscar" placeholder="🔎 Buscar cliente / concepto…" oninput="finRenderVentas()" style="margin-bottom:8px">
+      <div id="finVResumen" style="font-size:12px;margin-bottom:8px;padding:0 2px"></div>
+      <div class="card"><div id="finVList"></div></div>
+    </div>
+    <div id="finW_cobrar" style="display:none">
+      <div id="finCobResumen" style="font-size:12px;margin-bottom:8px;padding:0 2px"></div>
+      <div class="card"><div class="card-h">Cuentas por cobrar</div><div id="finCobList"></div></div>
+    </div>
+    <div id="finW_gastos" style="display:none">
+      <button class="btn btn-primary btn-block" style="margin-bottom:8px" onclick="finGastoModal()">＋ Nuevo gasto</button>
+      <input type="search" id="finGBuscar" placeholder="🔎 Buscar proveedor / concepto…" oninput="finRenderGastos()" style="margin-bottom:8px">
+      <div id="finGResumen" style="font-size:12px;margin-bottom:8px;padding:0 2px"></div>
+      <div class="card"><div id="finGList"></div></div>
+    </div>
+    <div id="finW_pagar" style="display:none">
+      <div id="finPagResumen" style="font-size:12px;margin-bottom:8px;padding:0 2px"></div>
+      <div class="card"><div class="card-h">Cuentas por pagar</div><div id="finPagList"></div></div>
+    </div>
+    <div id="finW_flujo" style="display:none">
+      <div id="finFluResumen" style="margin-bottom:10px"></div>
+      <div class="card"><div class="card-h">Flujo de caja mensual</div><div id="finFluTabla" style="padding:6px 10px 12px;overflow-x:auto"></div></div>
+    </div>
   </div>
 
 </div>
@@ -889,7 +926,7 @@ const sb = {
 const ROLES = { gerente:{label:'Gerente',editar:true}, tecnico:{label:'Comercial',editar:true}, supervisor:{label:'Supervisor de planta',editar:true}, planta:{label:'Planta',editar:false}, lectura:{label:'Solo lectura',editar:false} };
 // Qué módulos ve cada rol. Editar acá para ajustar accesos.
 const ROL_MODULOS = {
-  gerente:    ['visita','clientes','historial','crm','viaticos','cotizaciones','ot','formulas','inventario','caja','usuarios','agenda'],
+  gerente:    ['visita','clientes','historial','crm','viaticos','cotizaciones','ot','formulas','inventario','caja','usuarios','agenda','finanzas'],
   tecnico:    ['visita','clientes','historial','crm','viaticos','cotizaciones','agenda'],
   supervisor: ['ot','formulas','inventario','caja'],
   planta:     ['inventario','caja'],
@@ -971,6 +1008,7 @@ function applyRoleUI(){
   showEl('tileClientes', puedeVer('clientes'));
   showEl('tileHistorial', puedeVer('historial'));
   showEl('tileAgenda', puedeVer('agenda'));
+  showEl('tileFinanzas', puedeVer('finanzas'));
   showEl('tileCrm', puedeVer('crm'));
   showEl('tileViat', puedeVer('viaticos'));
   showEl('tileCotiz', puedeVer('cotizaciones'));
@@ -1010,6 +1048,8 @@ const SYNC_DEFS = {
   ptmov:{ get:getPtMovs, save:savePtMovs, table:'bio_ptmov', toRow:ptmovRow, fromRow:rowPtmov },
   garantia:{ get:getGarantias, save:saveGarantias, table:'bio_garantias', toRow:garRow, fromRow:rowGar },
   agenda:{ get:getAgenda, save:saveAgenda, table:'bio_agenda', toRow:agRow, fromRow:rowAg, toRowSafe:(a)=>{ const r=agRow(a); delete r.estancia_id; return r; } },
+  venta:{ get:getVentas, save:saveVentas, table:'bio_ventas', toRow:ventaRow, fromRow:rowVenta },
+  compra:{ get:getCompras, save:saveCompras, table:'bio_compras', toRow:compraRow, fromRow:rowCompra },
 };
 function formulaRow(f){ return { id:f.id||('FM-'+(f.c||f.n)), c:f.c||'', n:f.n||'', kg:Number(f.kg)||0, ins:f.ins||[], ts:f.ts||null }; }
 function rowFormula(r){ let ins=r.ins; if(typeof ins==='string'){ try{ ins=JSON.parse(ins); }catch{ ins=[]; } } return { id:r.id, c:r.c||'', n:r.n||'', kg:Number(r.kg)||0, ins:Array.isArray(ins)?ins:[], custom:true, ts:r.ts }; }
@@ -1058,7 +1098,7 @@ async function cloudPull(name){
     d.save(Object.values(merged));
   }catch(e){}
 }
-async function cloudPullAll(){ if(!AUTH_ON) return; await cloudPull('clientes'); await cloudPull('estancias'); await cloudPull('visitas'); await cloudPull('ot'); await cloudPull('mov'); await cloudPull('caja'); await cloudPull('viat'); await cloudPull('insumo'); await cloudPull('precio'); await cloudPull('cotiz'); await cloudPull('insprec'); await cloudPull('ptmov'); await cloudPull('garantia'); await cloudPull('agenda'); await pullPricingCfg(); refreshVista(); }
+async function cloudPullAll(){ if(!AUTH_ON) return; await cloudPull('clientes'); await cloudPull('estancias'); await cloudPull('visitas'); await cloudPull('ot'); await cloudPull('mov'); await cloudPull('caja'); await cloudPull('viat'); await cloudPull('insumo'); await cloudPull('precio'); await cloudPull('cotiz'); await cloudPull('insprec'); await cloudPull('ptmov'); await cloudPull('garantia'); await cloudPull('agenda'); await cloudPull('venta'); await cloudPull('compra'); await pullPricingCfg(); refreshVista(); }
 function refreshVista(){ const act=document.querySelector('.screen.active'); if(!act) return;
   if(act.id==='sHome') renderHome(); else if(act.id==='sClientes') renderClientes();
   else if(act.id==='sCliente'&&curCliente) abrirCliente(curCliente); else if(act.id==='sHistorial') renderHistorial();
@@ -1067,7 +1107,8 @@ function refreshVista(){ const act=document.querySelector('.screen.active'); if(
   else if(act.id==='sCrm') renderCrm();
   else if(act.id==='sCotiz') renderCotizList(); else if(act.id==='sPrecios') renderPrecios(); else if(act.id==='sInsPrec') renderInsPrec();
   else if(act.id==='sProductos'){ if(_prodTab==='inv') renderProductosInv(); else if(_prodTab==='gar') renderProductosGar(); else renderProductosCat(); }
-  else if(act.id==='sAgenda') renderAgenda(); }
+  else if(act.id==='sAgenda') renderAgenda();
+  else if(act.id==='sFinanzas') finSetTab(_finTab||'ventas'); }
 function startSync(){ if(!AUTH_ON) return; cloudPullAll(); if(syncTimer) clearInterval(syncTimer); syncTimer=setInterval(cloudPullAll, 30000); }
 
 let curCliente=null, editVisitaId=null, curSub='Visitas técnicas a campo', _lotesEdit=[], _evals=[], _estEdit=[];
@@ -1087,6 +1128,7 @@ function reopenScreen(id){ _navBacking=true; try{ switch(id){
     case 'sClientes': openClientes(); break;
     case 'sHistorial': openHistorial(); break;
     case 'sAgenda': openAgenda(); break;
+    case 'sFinanzas': openFinanzas(); break;
     case 'sCliente': curCliente?abrirCliente(curCliente):openClientes(); break;
     case 'sCrm': openCrm(); break;
     case 'sCotiz': openCotiz(); break;
@@ -2880,6 +2922,124 @@ function agPrint(){
   }
   <\/script></body></html>`);
   w.document.close();
+}
+
+// ══ FINANZAS (ventas · cuentas por cobrar · gastos · cuentas por pagar · flujo de caja) ══
+const FIN_CONDS=[['contado','Contado',[0]],['30','30 días',[30]],['30-60','30/60 días',[30,60]],['30-60-90','30/60/90 días',[30,60,90]]];
+const FIN_GCAT=['Insumos','Materia prima','Servicios','Sueldos','Fletes','Impuestos','Alquiler','Mantenimiento','Comisiones','Otros'];
+let _finTab='ventas';
+function getVentas(){ return getArr('bio:ventas'); }
+function saveVentas(a){ setArr('bio:ventas',a); }
+function getCompras(){ return getArr('bio:compras'); }
+function saveCompras(a){ setArr('bio:compras',a); }
+function finCondLbl(k){ const c=FIN_CONDS.find(x=>x[0]===k); return c?c[1]:(k||''); }
+function finCondTerms(k){ const c=FIN_CONDS.find(x=>x[0]===k); return c?c[2]:[0]; }
+function _finAddDays(fecha,d){ const dt=new Date((fecha||hoy())+'T00:00:00'); dt.setDate(dt.getDate()+d); const y=dt.getFullYear(),m=String(dt.getMonth()+1).padStart(2,'0'),da=String(dt.getDate()).padStart(2,'0'); return y+'-'+m+'-'+da; }
+function finGenCuotas(fecha,monto,terms){ const n=terms.length||1; const base=Math.round(monto/n); return terms.map((d,i)=>({ n:i+1, venc:_finAddDays(fecha,d), monto:(i===n-1?monto-base*(n-1):base), abonos:[] })); }
+function finCuotaSaldo(cu){ const ab=(cu.abonos||[]).reduce((a,x)=>a+(Number(x.monto)||0),0); return Math.round((Number(cu.monto)||0)-ab); }
+function finSaldo(rec){ return (rec.cuotas||[]).reduce((a,cu)=>a+finCuotaSaldo(cu),0); }
+function finGs(rec,val){ return rec&&rec.moneda==='USD' ? Math.round((val||0)*(Number(rec.tc)||0)) : Math.round(val||0); }
+function finFmt(v,mon){ return (mon==='USD'?'US$ ':'₲ ')+Number(v||0).toLocaleString('es-PY',{maximumFractionDigits:mon==='USD'?2:0}); }
+function finMesLbl(ym){ const p=String(ym||'').split('-'); const M=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']; return p.length===2?(M[(+p[1])-1]+' '+p[0]):ym; }
+function finGsFmt(v){ return '₲ '+Math.round(v||0).toLocaleString('es-PY'); }
+function ventaRow(v){ return { id:v.id, fecha:v.fecha||null, cliente:v.cliente||'', cliente_id:v.cliente_id||'', concepto:v.concepto||'', monto:v.monto||0, moneda:v.moneda||'PYG', tc:v.tc||null, cond:v.cond||'contado', cuotas:v.cuotas||[], por:v.por||'', ts:v.ts||null }; }
+function rowVenta(r){ let cu=r.cuotas; if(typeof cu==='string'){try{cu=JSON.parse(cu)}catch{cu=[]}} return { id:r.id, fecha:r.fecha||'', cliente:r.cliente||'', cliente_id:r.cliente_id||'', concepto:r.concepto||'', monto:Number(r.monto)||0, moneda:r.moneda||'PYG', tc:(r.tc!=null?Number(r.tc):null), cond:r.cond||'contado', cuotas:Array.isArray(cu)?cu:[], por:r.por||'', ts:r.ts, pending:false }; }
+function compraRow(c){ return { id:c.id, fecha:c.fecha||null, categoria:c.categoria||'', proveedor:c.proveedor||'', concepto:c.concepto||'', monto:c.monto||0, moneda:c.moneda||'PYG', tc:c.tc||null, cond:c.cond||'contado', cuotas:c.cuotas||[], por:c.por||'', ts:c.ts||null }; }
+function rowCompra(r){ let cu=r.cuotas; if(typeof cu==='string'){try{cu=JSON.parse(cu)}catch{cu=[]}} return { id:r.id, fecha:r.fecha||'', categoria:r.categoria||'', proveedor:r.proveedor||'', concepto:r.concepto||'', monto:Number(r.monto)||0, moneda:r.moneda||'PYG', tc:(r.tc!=null?Number(r.tc):null), cond:r.cond||'contado', cuotas:Array.isArray(cu)?cu:[], por:r.por||'', ts:r.ts, pending:false }; }
+function openFinanzas(){ if(!puedeVer('finanzas')){ showToast('Sin permiso'); return; } showScreen('sFinanzas','Finanzas','Ventas · cobros · gastos · pagos · flujo',true); finSetTab(_finTab||'ventas'); }
+function finSetTab(t){ _finTab=t; ['ventas','cobrar','gastos','pagar','flujo'].forEach(x=>{ const w=gs('finW_'+x); if(w) w.style.display=(x===t?'':'none'); const b=gs('finT_'+x); if(b) b.className='fintab'+(x===t?' on':''); });
+  if(t==='ventas') finRenderVentas(); else if(t==='cobrar') finRenderCobrar(); else if(t==='gastos') finRenderGastos(); else if(t==='pagar') finRenderPagar(); else finRenderFlujo(); }
+// ---- Ventas ----
+function finRenderVentas(){ const q=(gs('finVBuscar').value||'').trim().toLowerCase(); let ls=getVentas().slice().sort((a,b)=>String(b.fecha||'').localeCompare(String(a.fecha||''))); if(q) ls=ls.filter(v=>((v.cliente||'')+' '+(v.concepto||'')).toLowerCase().includes(q));
+  const tot=ls.reduce((a,v)=>a+finGs(v,v.monto),0), pend=ls.reduce((a,v)=>a+finGs(v,finSaldo(v)),0);
+  if(gs('finVResumen')) gs('finVResumen').innerHTML='Total: <b>'+finGsFmt(tot)+'</b> · Por cobrar: <b style="color:var(--amber)">'+finGsFmt(pend)+'</b>';
+  gs('finVList').innerHTML=ls.map(v=>{ const s=finSaldo(v); const ok=s<=0; return `<div class="li" onclick="finVentaModal('${v.id}')"><div style="min-width:0"><div class="li-t">${esc(v.cliente||'—')} <span style="font-size:10px;color:var(--gray-400)">${esc(finCondLbl(v.cond))}</span></div><div class="li-s">${fmtFecha(v.fecha)}${v.concepto?' · '+esc(v.concepto):''}</div></div><div style="text-align:right;flex-shrink:0"><div style="font-weight:700">${finFmt(v.monto,v.moneda)}</div><div style="font-size:10px;color:${ok?'var(--green)':'var(--amber)'}">${ok?'✓ cobrada':'saldo '+finFmt(s,v.moneda)}</div></div></div>`; }).join('')||'<div class="empty">Sin ventas.</div>';
+}
+function finClientesDL(){ return '<datalist id="finCliDL">'+getClientes().slice().sort((a,b)=>a.nombre.localeCompare(b.nombre)).map(c=>`<option value="${esc(c.nombre)}">`).join('')+'</datalist>'; }
+function finVentaModal(id){ if(!canEdit()){ showToast('Sin permiso'); return; } const v=id?getVentas().find(x=>x.id===id):null;
+  gs('modalBox').innerHTML=`<h3>${v?'Editar':'Nueva'} venta</h3>${finClientesDL()}
+    <label class="fl">Cliente</label><input id="finVCli" list="finCliDL" value="${esc(v&&v.cliente)}" placeholder="Nombre del cliente" autocomplete="off">
+    <label class="fl">Concepto / detalle</label><input id="finVConc" value="${esc(v&&v.concepto)}" placeholder="ej: 50 bolsas Confi 40" autocomplete="off">
+    <div class="row2"><div><label class="fl">Fecha</label><input type="date" id="finVFecha" value="${v?v.fecha:hoy()}"></div><div><label class="fl">Moneda</label><select id="finVMon" onchange="finTcToggle('V')"><option value="PYG" ${!v||v.moneda!=='USD'?'selected':''}>Guaraníes ₲</option><option value="USD" ${v&&v.moneda==='USD'?'selected':''}>Dólares US$</option></select></div></div>
+    <div class="row2"><div><label class="fl">Monto</label><input type="number" id="finVMonto" value="${v?v.monto:''}" placeholder="0"></div><div id="finVTcWrap" style="display:${v&&v.moneda==='USD'?'':'none'}"><label class="fl">TC ₲/US$</label><input type="number" id="finVTc" value="${v&&v.tc?v.tc:cotizDolar()}"></div></div>
+    <label class="fl">Condición de venta</label><select id="finVCond">${FIN_CONDS.map(c=>`<option value="${c[0]}" ${v&&v.cond===c[0]?'selected':''}>${c[1]}</option>`).join('')}</select>
+    <div style="font-size:11px;color:var(--gray-400);margin-top:4px">Si es a crédito, se generan las cuotas con sus vencimientos.</div>
+    <div class="row2" style="margin-top:12px">${v?`<button class="btn btn-sec" onclick="finVentaBorrar('${v.id}')" style="color:var(--red)">Borrar</button>`:'<button class="btn btn-sec" onclick="cerrarModal()">Cancelar</button>'}<button class="btn btn-primary" onclick="finVentaGuardar('${v?v.id:''}')">Guardar</button></div>`;
+  gs('modal').classList.add('show');
+}
+function finTcToggle(pfx){ const usd=gs('fin'+pfx+'Mon')&&gs('fin'+pfx+'Mon').value==='USD'; const w=gs('fin'+pfx+'TcWrap'); if(w) w.style.display=usd?'':'none'; }
+function finVentaGuardar(id){ if(!canEdit()) return; const cli=(gs('finVCli').value||'').trim(); const monto=num(gs('finVMonto').value); if(!cli){ showToast('Poné el cliente'); return; } if(!monto||monto<=0){ showToast('Poné el monto'); return; }
+  const mon=gs('finVMon').value, fecha=gs('finVFecha').value||hoy(), cond=gs('finVCond').value; const tc=mon==='USD'?(num(gs('finVTc').value)||0):null; if(mon==='USD'&&!tc){ showToast('Cargá el tipo de cambio'); return; }
+  const prev=id?getVentas().find(x=>x.id===id):null; const cliObj=getClientes().find(c=>c.nombre.toLowerCase()===cli.toLowerCase());
+  let cuotas; if(prev && prev.monto===monto && prev.cond===cond && prev.fecha===fecha){ cuotas=prev.cuotas; } else { cuotas=finGenCuotas(fecha,monto,finCondTerms(cond)); }
+  const v={ id:id||('VN-'+Date.now()), fecha, cliente:cli, cliente_id:cliObj?cliObj.id:'', concepto:(gs('finVConc').value||'').trim(), monto:Math.round(monto), moneda:mon, tc, cond, cuotas, por:(getSession()&&getSession().nombre)||'', ts:new Date().toISOString(), pending:true };
+  const a=getVentas().filter(x=>x.id!==v.id); a.unshift(v); saveVentas(a); cloudPush('venta',v); cerrarModal(); showToast('✓ Venta guardada'); finSetTab(_finTab);
+}
+function finVentaBorrar(id){ if(!canEdit()) return; if(!confirm('¿Borrar esta venta y sus cuotas?')) return; saveVentas(getVentas().filter(x=>x.id!==id)); cloudDelete('venta',id); cerrarModal(); finSetTab(_finTab); }
+// ---- Gastos / Compras ----
+function finRenderGastos(){ const q=(gs('finGBuscar').value||'').trim().toLowerCase(); let ls=getCompras().slice().sort((a,b)=>String(b.fecha||'').localeCompare(String(a.fecha||''))); if(q) ls=ls.filter(c=>((c.proveedor||'')+' '+(c.concepto||'')+' '+(c.categoria||'')).toLowerCase().includes(q));
+  const tot=ls.reduce((a,c)=>a+finGs(c,c.monto),0), pend=ls.reduce((a,c)=>a+finGs(c,finSaldo(c)),0);
+  if(gs('finGResumen')) gs('finGResumen').innerHTML='Total: <b>'+finGsFmt(tot)+'</b> · Por pagar: <b style="color:var(--red)">'+finGsFmt(pend)+'</b>';
+  gs('finGList').innerHTML=ls.map(c=>{ const s=finSaldo(c); const ok=s<=0; return `<div class="li" onclick="finGastoModal('${c.id}')"><div style="min-width:0"><div class="li-t">${esc(c.proveedor||c.categoria||'—')} <span style="font-size:10px;color:var(--gray-400)">${esc(c.categoria)} · ${esc(finCondLbl(c.cond))}</span></div><div class="li-s">${fmtFecha(c.fecha)}${c.concepto?' · '+esc(c.concepto):''}</div></div><div style="text-align:right;flex-shrink:0"><div style="font-weight:700">${finFmt(c.monto,c.moneda)}</div><div style="font-size:10px;color:${ok?'var(--green)':'var(--red)'}">${ok?'✓ pagado':'saldo '+finFmt(s,c.moneda)}</div></div></div>`; }).join('')||'<div class="empty">Sin gastos.</div>';
+}
+function finGastoModal(id){ if(!canEdit()){ showToast('Sin permiso'); return; } const c=id?getCompras().find(x=>x.id===id):null;
+  gs('modalBox').innerHTML=`<h3>${c?'Editar':'Nuevo'} gasto</h3>
+    <label class="fl">Proveedor</label><input id="finGProv" value="${esc(c&&c.proveedor)}" placeholder="Nombre del proveedor" autocomplete="off">
+    <label class="fl">Categoría</label><select id="finGCat">${FIN_GCAT.map(x=>`<option ${c&&c.categoria===x?'selected':''}>${x}</option>`).join('')}</select>
+    <label class="fl">Concepto / detalle</label><input id="finGConc" value="${esc(c&&c.concepto)}" placeholder="ej: compra de urea" autocomplete="off">
+    <div class="row2"><div><label class="fl">Fecha</label><input type="date" id="finGFecha" value="${c?c.fecha:hoy()}"></div><div><label class="fl">Moneda</label><select id="finGMon" onchange="finTcToggle('G')"><option value="PYG" ${!c||c.moneda!=='USD'?'selected':''}>Guaraníes ₲</option><option value="USD" ${c&&c.moneda==='USD'?'selected':''}>Dólares US$</option></select></div></div>
+    <div class="row2"><div><label class="fl">Monto</label><input type="number" id="finGMonto" value="${c?c.monto:''}" placeholder="0"></div><div id="finGTcWrap" style="display:${c&&c.moneda==='USD'?'':'none'}"><label class="fl">TC ₲/US$</label><input type="number" id="finGTc" value="${c&&c.tc?c.tc:cotizDolar()}"></div></div>
+    <label class="fl">Condición de pago</label><select id="finGCond">${FIN_CONDS.map(x=>`<option value="${x[0]}" ${c&&c.cond===x[0]?'selected':''}>${x[1]}</option>`).join('')}</select>
+    <div style="font-size:11px;color:var(--gray-400);margin-top:4px">Si es a crédito (30/60/90) se generan las cuotas a pagar.</div>
+    <div class="row2" style="margin-top:12px">${c?`<button class="btn btn-sec" onclick="finGastoBorrar('${c.id}')" style="color:var(--red)">Borrar</button>`:'<button class="btn btn-sec" onclick="cerrarModal()">Cancelar</button>'}<button class="btn btn-primary" onclick="finGastoGuardar('${c?c.id:''}')">Guardar</button></div>`;
+  gs('modal').classList.add('show');
+}
+function finGastoGuardar(id){ if(!canEdit()) return; const prov=(gs('finGProv').value||'').trim(); const monto=num(gs('finGMonto').value); if(!monto||monto<=0){ showToast('Poné el monto'); return; }
+  const mon=gs('finGMon').value, fecha=gs('finGFecha').value||hoy(), cond=gs('finGCond').value; const tc=mon==='USD'?(num(gs('finGTc').value)||0):null; if(mon==='USD'&&!tc){ showToast('Cargá el tipo de cambio'); return; }
+  const prev=id?getCompras().find(x=>x.id===id):null; let cuotas; if(prev && prev.monto===monto && prev.cond===cond && prev.fecha===fecha){ cuotas=prev.cuotas; } else { cuotas=finGenCuotas(fecha,monto,finCondTerms(cond)); }
+  const c={ id:id||('CP-'+Date.now()), fecha, categoria:gs('finGCat').value, proveedor:prov, concepto:(gs('finGConc').value||'').trim(), monto:Math.round(monto), moneda:mon, tc, cond, cuotas, por:(getSession()&&getSession().nombre)||'', ts:new Date().toISOString(), pending:true };
+  const a=getCompras().filter(x=>x.id!==c.id); a.unshift(c); saveCompras(a); cloudPush('compra',c); cerrarModal(); showToast('✓ Gasto guardado'); finSetTab(_finTab);
+}
+function finGastoBorrar(id){ if(!canEdit()) return; if(!confirm('¿Borrar este gasto y sus cuotas?')) return; saveCompras(getCompras().filter(x=>x.id!==id)); cloudDelete('compra',id); cerrarModal(); finSetTab(_finTab); }
+// ---- Cuentas por cobrar / pagar ----
+function _finPendientes(tipo){ const arr=tipo==='venta'?getVentas():getCompras(); const rows=[]; arr.forEach(rec=>{ (rec.cuotas||[]).forEach((cu,ci)=>{ const s=finCuotaSaldo(cu); if(s>0) rows.push({rec,ci,cu,saldo:s,venc:cu.venc}); }); }); rows.sort((a,b)=>String(a.venc||'').localeCompare(String(b.venc||''))); return rows; }
+function finRenderCobrar(){ const rows=_finPendientes('venta'); const totGs=rows.reduce((a,r)=>a+finGs(r.rec,r.saldo),0); const hoyS=hoy();
+  if(gs('finCobResumen')) gs('finCobResumen').innerHTML='Por cobrar: <b style="color:var(--amber)">'+finGsFmt(totGs)+'</b> · '+rows.length+' cuota(s)';
+  gs('finCobList').innerHTML=rows.map(r=>{ const vd=String(r.venc)<hoyS; const nc=(r.rec.cuotas||[]).length; return `<div class="li"><div style="min-width:0"><div class="li-t">${esc(r.rec.cliente||'—')}${nc>1?' <span style="font-size:10px;color:var(--gray-400)">cuota '+r.cu.n+'/'+nc+'</span>':''}</div><div class="li-s">Vence ${fmtFecha(r.venc)}${vd?' <span style="color:var(--red)">· vencida</span>':''}${r.rec.concepto?' · '+esc(r.rec.concepto):''}</div></div><div style="text-align:right;flex-shrink:0"><div style="font-weight:700;color:var(--amber)">${finFmt(r.saldo,r.rec.moneda)}</div><button onclick="finAbonoModal('venta','${r.rec.id}',${r.ci})" style="font-size:11px;border:none;background:var(--green-lt);color:var(--green);border-radius:6px;padding:3px 9px;cursor:pointer;margin-top:2px">＋ Cobrar</button></div></div>`; }).join('')||'<div class="empty">Nada por cobrar 🎉</div>';
+}
+function finRenderPagar(){ const rows=_finPendientes('compra'); const totGs=rows.reduce((a,r)=>a+finGs(r.rec,r.saldo),0); const hoyS=hoy();
+  if(gs('finPagResumen')) gs('finPagResumen').innerHTML='Por pagar: <b style="color:var(--red)">'+finGsFmt(totGs)+'</b> · '+rows.length+' cuota(s)';
+  gs('finPagList').innerHTML=rows.map(r=>{ const vd=String(r.venc)<hoyS; const nc=(r.rec.cuotas||[]).length; return `<div class="li"><div style="min-width:0"><div class="li-t">${esc(r.rec.proveedor||r.rec.categoria||'—')}${nc>1?' <span style="font-size:10px;color:var(--gray-400)">cuota '+r.cu.n+'/'+nc+'</span>':''}</div><div class="li-s">Vence ${fmtFecha(r.venc)}${vd?' <span style="color:var(--red)">· vencida</span>':''}${r.rec.concepto?' · '+esc(r.rec.concepto):''}</div></div><div style="text-align:right;flex-shrink:0"><div style="font-weight:700;color:var(--red)">${finFmt(r.saldo,r.rec.moneda)}</div><button onclick="finAbonoModal('compra','${r.rec.id}',${r.ci})" style="font-size:11px;border:none;background:var(--red-lt);color:var(--red);border-radius:6px;padding:3px 9px;cursor:pointer;margin-top:2px">＋ Pagar</button></div></div>`; }).join('')||'<div class="empty">Nada por pagar 🎉</div>';
+}
+function finAbonoModal(tipo,id,ci){ if(!canEdit()){ showToast('Sin permiso'); return; } const rec=(tipo==='venta'?getVentas():getCompras()).find(x=>x.id===id); if(!rec) return; const cu=rec.cuotas[ci]; const s=finCuotaSaldo(cu);
+  gs('modalBox').innerHTML=`<h3>${tipo==='venta'?'Registrar cobro':'Registrar pago'}</h3><div style="font-size:12px;color:var(--gray-600);margin-bottom:8px">${esc(rec.cliente||rec.proveedor||'')} · cuota ${cu.n} · saldo <b>${finFmt(s,rec.moneda)}</b></div>
+    <label class="fl">Monto (${rec.moneda==='USD'?'US$':'₲'})</label><input type="number" id="finAbMonto" value="${s}">
+    <label class="fl">Fecha</label><input type="date" id="finAbFecha" value="${hoy()}">
+    <label class="fl">Medio / nota</label><input id="finAbNota" placeholder="efectivo, transferencia, cheque…" autocomplete="off">
+    <div class="row2" style="margin-top:10px"><button class="btn btn-sec" onclick="finSetTab('${tipo==='venta'?'cobrar':'pagar'}');cerrarModal()">Cancelar</button><button class="btn btn-primary" onclick="finAbonoGuardar('${tipo}','${id}',${ci})">Guardar</button></div>`;
+  gs('modal').classList.add('show');
+}
+function finAbonoGuardar(tipo,id,ci){ if(!canEdit()) return; const arr=tipo==='venta'?getVentas():getCompras(); const rec=arr.find(x=>x.id===id); if(!rec) return; const monto=num(gs('finAbMonto').value); if(!monto||monto<=0){ showToast('Monto inválido'); return; }
+  rec.cuotas[ci].abonos=rec.cuotas[ci].abonos||[]; rec.cuotas[ci].abonos.push({ fecha:gs('finAbFecha').value||hoy(), monto:Math.round(monto), nota:(gs('finAbNota').value||'').trim(), ts:new Date().toISOString() }); rec.ts=new Date().toISOString(); rec.pending=true;
+  if(tipo==='venta'){ saveVentas(arr); cloudPush('venta',rec); } else { saveCompras(arr); cloudPush('compra',rec); }
+  cerrarModal(); showToast(tipo==='venta'?'✓ Cobro registrado':'✓ Pago registrado'); finSetTab(_finTab);
+}
+// ---- Flujo de caja ----
+function finRenderFlujo(){ const map={}; const ym=d=>String(d||'').slice(0,7); const add=(k,f,val)=>{ if(!k)return; map[k]=map[k]||{inR:0,egR:0,inP:0,egP:0}; map[k][f]+=val; };
+  getVentas().forEach(v=>{ (v.cuotas||[]).forEach(cu=>{ (cu.abonos||[]).forEach(a=>add(ym(a.fecha),'inR',finGs(v,a.monto))); const s=finCuotaSaldo(cu); if(s>0) add(ym(cu.venc),'inP',finGs(v,s)); }); });
+  getCompras().forEach(c=>{ (c.cuotas||[]).forEach(cu=>{ (cu.abonos||[]).forEach(a=>add(ym(a.fecha),'egR',finGs(c,a.monto))); const s=finCuotaSaldo(cu); if(s>0) add(ym(cu.venc),'egP',finGs(c,s)); }); });
+  const hoyM=hoy().slice(0,7); const keys=Object.keys(map).sort();
+  const saldoReal=keys.reduce((a,k)=>a+(map[k].inR-map[k].egR),0);
+  const porCobrar=keys.reduce((a,k)=>a+map[k].inP,0), porPagar=keys.reduce((a,k)=>a+map[k].egP,0);
+  if(gs('finFluResumen')) gs('finFluResumen').innerHTML=`<div style="display:flex;gap:8px;flex-wrap:wrap">
+    <div style="flex:1;min-width:120px;background:var(--gray-100);border-radius:10px;padding:10px;text-align:center"><div style="font-size:10px;color:var(--gray-500)">Caja realizada</div><div style="font-size:18px;font-weight:800;color:${saldoReal<0?'var(--red)':'var(--green)'}">${finGsFmt(saldoReal)}</div></div>
+    <div style="flex:1;min-width:110px;background:var(--gray-100);border-radius:10px;padding:10px;text-align:center"><div style="font-size:10px;color:var(--gray-500)">Por cobrar</div><div style="font-size:15px;font-weight:700;color:var(--amber)">${finGsFmt(porCobrar)}</div></div>
+    <div style="flex:1;min-width:110px;background:var(--gray-100);border-radius:10px;padding:10px;text-align:center"><div style="font-size:10px;color:var(--gray-500)">Por pagar</div><div style="font-size:15px;font-weight:700;color:var(--red)">${finGsFmt(porPagar)}</div></div></div>`;
+  let acum=0;
+  const filas=keys.map(k=>{ const m=map[k]; const ingr=m.inR+m.inP, egr=m.egR+m.egP, neto=ingr-egr; acum+=neto; const fut=k>hoyM, proy=(m.inP||m.egP);
+    const nota=(fut||proy)?' <span style="font-size:9px;color:var(--gray-400)">proy</span>':'';
+    return `<tr style="${k===hoyM?'background:var(--green-lt)':''}"><td style="padding:5px 6px;border-top:1px solid var(--gray-200)">${finMesLbl(k)}${nota}</td><td style="text-align:right;color:var(--green);border-top:1px solid var(--gray-200)">${ingr?finGsFmt(ingr):'—'}</td><td style="text-align:right;color:var(--red);border-top:1px solid var(--gray-200)">${egr?finGsFmt(egr):'—'}</td><td style="text-align:right;font-weight:700;color:${neto<0?'var(--red)':'var(--gray-800)'};border-top:1px solid var(--gray-200)">${finGsFmt(neto)}</td><td style="text-align:right;font-weight:700;color:${acum<0?'var(--red)':'var(--gray-800)'};border-top:1px solid var(--gray-200)">${finGsFmt(acum)}</td></tr>`; }).join('')||'<tr><td colspan="5" style="color:var(--gray-400);padding:10px;text-align:center">Sin movimientos.</td></tr>';
+  gs('finFluTabla').innerHTML=`<table style="width:100%;border-collapse:collapse;font-size:11.5px"><thead><tr style="color:var(--gray-500);font-size:10px"><th style="text-align:left;padding:4px 6px">Mes</th><th style="text-align:right">Ingresos</th><th style="text-align:right">Egresos</th><th style="text-align:right">Neto</th><th style="text-align:right">Acumulado</th></tr></thead><tbody>${filas}</tbody></table>`;
 }
 
 // ── INFORME PDF (molde del .docx) ──
