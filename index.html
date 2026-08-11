@@ -2944,7 +2944,7 @@ function agPrint(){
 
 // ══ FINANZAS (ventas · cuentas por cobrar · gastos · cuentas por pagar · flujo de caja) ══
 const FIN_CONDS=[['contado','Contado',[0]],['30','30 días',[30]],['30-60','30/60 días',[30,60]],['30-60-90','30/60/90 días',[30,60,90]]];
-const FIN_GCAT=['Insumos','Materia prima','Servicios','Sueldos','Fletes','Impuestos','Alquiler','Mantenimiento','Comisiones','Otros'];
+const FIN_GCAT=['Insumos','Materia prima','Fletes','Servicios','Alquiler','Mantenimiento','Administración','Viáticos','Marketing','Certificación','Sueldos','Impuestos','Comisiones','Otros'];
 let _finTab='ventas';
 function getVentas(){ return getArr('bio:ventas'); }
 function saveVentas(a){ setArr('bio:ventas',a); }
