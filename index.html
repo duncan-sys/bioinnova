@@ -493,6 +493,7 @@ textarea{resize:vertical;min-height:66px}
       <button class="fintab" id="finT_gastos" onclick="finSetTab('gastos')">🧾 Gastos</button>
       <button class="fintab" id="finT_pagar" onclick="finSetTab('pagar')">📤 Por pagar</button>
       <button class="fintab" id="finT_sueldos" onclick="finSetTab('sueldos')">👷 Sueldos</button>
+      <button class="fintab" id="finT_cheques" onclick="finSetTab('cheques')">🧾 Cheques</button>
       <button class="fintab" id="finT_flujo" onclick="finSetTab('flujo')">📊 Flujo</button>
     </div>
     <div id="finW_ventas">
@@ -529,7 +530,15 @@ textarea{resize:vertical;min-height:66px}
       <div id="finSResumen" style="font-size:12px;margin-bottom:8px;padding:0 2px"></div>
       <div class="card"><div id="finSList"></div></div>
     </div>
+    <div id="finW_cheques" style="display:none">
+      <button class="btn btn-primary btn-block" style="margin-bottom:8px" onclick="finChequeModal()">＋ Nuevo cheque diferido</button>
+      <input type="search" id="finChBuscar" placeholder="🔎 Buscar proveedor / banco / Nº…" oninput="finRenderCheques()" style="margin-bottom:8px">
+      <div id="finChFiltros" style="display:flex;gap:5px;margin-bottom:8px;flex-wrap:wrap"></div>
+      <div id="finChResumen" style="font-size:12px;margin-bottom:8px;padding:0 2px"></div>
+      <div id="finChList"></div>
+    </div>
     <div id="finW_flujo" style="display:none">
+      <div id="finFluCaja" style="margin-bottom:10px"></div>
       <div id="finFluResumen" style="margin-bottom:10px"></div>
       <div class="card"><div class="card-h">Flujo de caja proyectado</div><div id="finFluTabla" style="padding:6px 10px 12px;overflow-x:auto"></div></div>
     </div>
@@ -1072,7 +1081,17 @@ const SYNC_DEFS = {
   venta:{ get:getVentas, save:saveVentas, table:'bio_ventas', toRow:ventaRow, fromRow:rowVenta },
   compra:{ get:getCompras, save:saveCompras, table:'bio_compras', toRow:compraRow, fromRow:rowCompra },
   sueldo:{ get:getSueldos, save:saveSueldos, table:'bio_sueldos', toRow:sueldoRow, fromRow:rowSueldo },
+  cheque:{ get:getCheques, save:saveCheques, table:'bio_cheques', toRow:chequeRow, fromRow:rowCheque },
 };
+function getCheques(){ return getArr('bio:cheques'); }
+function saveCheques(a){ setArr('bio:cheques',a); }
+function chequeRow(c){ return { id:c.id, proveedor:c.proveedor||'', compra_id:c.compra_id||'', factura:c.factura||'', banco:c.banco||'', num:c.num||'', monto:Number(c.monto)||0, moneda:c.moneda||'PYG', tc:c.tc||null, fecha:c.fecha||null, emitido:c.emitido||null, estado:c.estado||'pendiente', nota:c.nota||'', por:c.por||'', ts:c.ts||null }; }
+function rowCheque(r){ return { id:r.id, proveedor:r.proveedor||'', compra_id:r.compra_id||'', factura:r.factura||'', banco:r.banco||'', num:r.num||'', monto:Number(r.monto)||0, moneda:r.moneda||'PYG', tc:r.tc?Number(r.tc):null, fecha:r.fecha||'', emitido:r.emitido||'', estado:r.estado||'pendiente', nota:r.nota||'', por:r.por||'', ts:r.ts, pending:false }; }
+// Saldo inicial de caja (fila única en bio_config id='fincaja')
+function getFinCaja(){ try{ const o=JSON.parse(localStorage.getItem('bio:fincaja')||'null'); return (o&&typeof o==='object')?o:null; }catch(e){ return null; } }
+function setFinCaja(o){ localStorage.setItem('bio:fincaja',JSON.stringify(o)); }
+async function pullFinCaja(){ if(!AUTH_ON) return; try{ const rows=await sb.query('bio_config',{id:'fincaja'}); if(rows&&rows[0]&&rows[0].data){ const d=(typeof rows[0].data==='string')?JSON.parse(rows[0].data):rows[0].data; if(d&&d.fecha) setFinCaja(d); } }catch(e){} }
+async function pushFinCaja(){ if(!AUTH_ON) return; try{ await sb.upsert('bio_config',{id:'fincaja',data:getFinCaja()||{},ts:new Date().toISOString()},'id'); }catch(e){} }
 function formulaRow(f){ return { id:f.id||('FM-'+(f.c||f.n)), c:f.c||'', n:f.n||'', kg:Number(f.kg)||0, ins:f.ins||[], ts:f.ts||null }; }
 function rowFormula(r){ let ins=r.ins; if(typeof ins==='string'){ try{ ins=JSON.parse(ins); }catch{ ins=[]; } } return { id:r.id, c:r.c||'', n:r.n||'', kg:Number(r.kg)||0, ins:Array.isArray(ins)?ins:[], custom:true, ts:r.ts }; }
 function insprecRow(o){ return { id:o.id||('IP-'+o.c), c:o.c||'', gskg:Number(o.gskg)||0, ts:o.ts||null }; }
@@ -1120,7 +1139,7 @@ async function cloudPull(name){
     d.save(Object.values(merged));
   }catch(e){}
 }
-async function cloudPullAll(){ if(!AUTH_ON) return; await cloudPull('clientes'); await cloudPull('estancias'); await cloudPull('visitas'); await cloudPull('ot'); await cloudPull('mov'); await cloudPull('caja'); await cloudPull('viat'); await cloudPull('insumo'); await cloudPull('precio'); await cloudPull('cotiz'); await cloudPull('insprec'); await cloudPull('formula'); await cloudPull('ptmov'); await cloudPull('garantia'); await cloudPull('agenda'); await cloudPull('venta'); await cloudPull('compra'); await cloudPull('sueldo'); await pullPricingCfg(); refreshVista(); }
+async function cloudPullAll(){ if(!AUTH_ON) return; await cloudPull('clientes'); await cloudPull('estancias'); await cloudPull('visitas'); await cloudPull('ot'); await cloudPull('mov'); await cloudPull('caja'); await cloudPull('viat'); await cloudPull('insumo'); await cloudPull('precio'); await cloudPull('cotiz'); await cloudPull('insprec'); await cloudPull('formula'); await cloudPull('ptmov'); await cloudPull('garantia'); await cloudPull('agenda'); await cloudPull('venta'); await cloudPull('compra'); await cloudPull('sueldo'); await cloudPull('cheque'); await pullFinCaja(); await pullPricingCfg(); refreshVista(); }
 function refreshVista(){ const act=document.querySelector('.screen.active'); if(!act) return;
   if(act.id==='sHome') renderHome(); else if(act.id==='sClientes') renderClientes();
   else if(act.id==='sCliente'&&curCliente) abrirCliente(curCliente); else if(act.id==='sHistorial') renderHistorial();
@@ -2969,8 +2988,8 @@ function rowVenta(r){ let cu=r.cuotas; if(typeof cu==='string'){try{cu=JSON.pars
 function compraRow(c){ return { id:c.id, fecha:c.fecha||null, factura:c.factura||'', categoria:c.categoria||'', proveedor:c.proveedor||'', concepto:c.concepto||'', monto:c.monto||0, moneda:c.moneda||'PYG', tc:c.tc||null, cond:c.cond||'contado', cuotas:c.cuotas||[], por:c.por||'', ts:c.ts||null }; }
 function rowCompra(r){ let cu=r.cuotas; if(typeof cu==='string'){try{cu=JSON.parse(cu)}catch{cu=[]}} return { id:r.id, fecha:r.fecha||'', factura:r.factura||'', categoria:r.categoria||'', proveedor:r.proveedor||'', concepto:r.concepto||'', monto:Number(r.monto)||0, moneda:r.moneda||'PYG', tc:(r.tc!=null?Number(r.tc):null), cond:r.cond||'contado', cuotas:Array.isArray(cu)?cu:[], por:r.por||'', ts:r.ts, pending:false }; }
 function openFinanzas(){ if(!puedeVer('finanzas')){ showToast('Sin permiso'); return; } showScreen('sFinanzas','Finanzas','Ventas · cobros · gastos · pagos · flujo',true); finSetTab(_finTab||'ventas'); }
-function finSetTab(t){ _finTab=t; ['ventas','cobrar','gastos','pagar','sueldos','flujo'].forEach(x=>{ const w=gs('finW_'+x); if(w) w.style.display=(x===t?'':'none'); const b=gs('finT_'+x); if(b) b.className='fintab'+(x===t?' on':''); });
-  if(t==='ventas') finRenderVentas(); else if(t==='cobrar') finRenderCobrar(); else if(t==='gastos') finRenderGastos(); else if(t==='pagar') finRenderPagar(); else if(t==='sueldos') finRenderSueldos(); else finRenderFlujo(); }
+function finSetTab(t){ _finTab=t; ['ventas','cobrar','gastos','pagar','sueldos','cheques','flujo'].forEach(x=>{ const w=gs('finW_'+x); if(w) w.style.display=(x===t?'':'none'); const b=gs('finT_'+x); if(b) b.className='fintab'+(x===t?' on':''); });
+  if(t==='ventas') finRenderVentas(); else if(t==='cobrar') finRenderCobrar(); else if(t==='gastos') finRenderGastos(); else if(t==='pagar') finRenderPagar(); else if(t==='sueldos') finRenderSueldos(); else if(t==='cheques') finRenderCheques(); else finRenderFlujo(); }
 // ---- Ventas ----
 let _finVFiltro='todas';
 function finVSetFiltro(f){ _finVFiltro=f; finRenderVentas(); }
@@ -3223,7 +3242,53 @@ function finSueldoGuardar(id){ if(!canEdit()) return; const emp=(gs('finSEmp').v
   const a=getSueldos().filter(x=>x.id!==s.id); a.unshift(s); saveSueldos(a); cloudPush('sueldo',s); cerrarModal(); showToast('✓ Sueldo guardado'); finSetTab(_finTab);
 }
 function finSueldoBorrar(id){ if(!canEdit()) return; if(!confirm('¿Borrar este pago de sueldo?')) return; saveSueldos(getSueldos().filter(x=>x.id!==id)); cloudDelete('sueldo',id); cerrarModal(); finSetTab(_finTab); }
+// ---- Cheques diferidos (pago a proveedores) ----
+let _finChFiltro='pend';
+function finChSetFiltro(f){ _finChFiltro=f; finRenderCheques(); }
+function finRenderCheques(){ const hoyS=hoy(); const q=(gs('finChBuscar').value||'').trim().toLowerCase(); let ls=getCheques().slice().sort((a,b)=>String(a.fecha||'').localeCompare(String(b.fecha||'')));
+  if(q) ls=ls.filter(c=>((c.proveedor||'')+' '+(c.banco||'')+' '+(c.num||'')+' '+(c.factura||'')).toLowerCase().includes(q));
+  if(_finChFiltro==='pend') ls=ls.filter(c=>c.estado!=='caido'); else if(_finChFiltro==='caido') ls=ls.filter(c=>c.estado==='caido');
+  const fc=gs('finChFiltros'); if(fc){ const chip=(f,l)=>`<button class="finchip${_finChFiltro===f?' on':''}" onclick="finChSetFiltro('${f}')">${l}</button>`; fc.innerHTML=chip('pend','Por caer')+chip('caido','Caídos')+chip('todos','Todos'); }
+  const pend=getCheques().filter(c=>c.estado!=='caido'); const totGs=pend.reduce((a,c)=>a+finGs(c,c.monto),0);
+  const venc=pend.filter(c=>String(c.fecha)<hoyS).reduce((a,c)=>a+finGs(c,c.monto),0);
+  if(gs('finChResumen')) gs('finChResumen').innerHTML='A caer: <b style="color:var(--red)">'+finGsFmt(totGs)+'</b>'+(venc?' · Vencidos sin registrar: <b style="color:var(--red)">'+finGsFmt(venc)+'</b>':'')+' · '+pend.length+' cheque(s)';
+  gs('finChList').innerHTML=ls.map(c=>{ const caido=c.estado==='caido'; const vd=!caido && String(c.fecha)<hoyS; return `<div class="li"><div style="min-width:0"><div class="li-t">${esc(c.proveedor||'—')} ${c.factura?'<span style="font-size:10px;color:var(--gray-400)">Fact '+esc(c.factura)+'</span>':''}${c.compra_id?' <span style="font-size:9px;color:var(--green)">🔗 cta a pagar</span>':''}</div><div class="li-s">Cae ${fmtFecha(c.fecha)}${vd?' <span style="color:var(--red)">· vencido</span>':''}${c.banco?' · '+esc(c.banco):''}${c.num?' · Nº '+esc(c.num):''}</div></div><div style="text-align:right;flex-shrink:0"><div style="font-weight:700;color:${caido?'var(--gray-400)':'var(--red)'}">${finFmt(c.monto,c.moneda)}</div>${caido?'<div style="font-size:10px;color:var(--green)">✓ caído</div>':`<div style="margin-top:2px;display:flex;gap:4px;justify-content:flex-end"><button onclick="finChequeEstado('${c.id}',1)" style="font-size:10px;border:none;background:var(--green-lt);color:var(--green);border-radius:6px;padding:3px 7px;cursor:pointer">✓ Caído</button><button onclick="finChequeModal('${c.id}')" style="font-size:10px;border:none;background:var(--gray-200);color:var(--gray-600);border-radius:6px;padding:3px 7px;cursor:pointer">✎</button></div>`}</div></div>`; }).join('')||'<div class="empty">Sin cheques diferidos.</div>';
+}
+function finChequeModal(id){ if(!canEdit()){ showToast('Sin permiso'); return; } const c=id?getCheques().find(x=>x.id===id):null;
+  const pendComp=getCompras().filter(x=>finSaldo(x)>0).sort((a,b)=>String(a.proveedor||'').localeCompare(String(b.proveedor||'')));
+  const opts=['<option value="">— sin vincular —</option>'].concat(pendComp.map(x=>`<option value="${x.id}" ${c&&c.compra_id===x.id?'selected':''}>${esc(x.proveedor||'—')}${x.factura?' · Fact '+esc(x.factura):''} · saldo ${finFmt(finSaldo(x),x.moneda)}</option>`)).join('');
+  gs('modalBox').innerHTML=`<h3>${c?'Editar':'Nuevo'} cheque diferido</h3>
+    <label class="fl">Cuenta a pagar que cancela (opcional)</label><select id="finChCompra" onchange="finChFromCompra()">${opts}</select>
+    <label class="fl">Proveedor</label><input id="finChProv" value="${esc(c&&c.proveedor)}" placeholder="Nombre del proveedor" autocomplete="off">
+    <div class="row2"><div><label class="fl">Banco</label><input id="finChBanco" value="${esc(c&&c.banco)}" placeholder="ej: Continental" autocomplete="off"></div><div><label class="fl">Nº cheque</label><input id="finChNum" value="${esc(c&&c.num)}" placeholder="opcional" autocomplete="off"></div></div>
+    <div class="row2"><div><label class="fl">Monto</label><input type="number" id="finChMonto" value="${c?c.monto:''}" placeholder="0"></div><div><label class="fl">Moneda</label><select id="finChMon" onchange="finTcToggle('Ch')"><option value="PYG" ${!c||c.moneda!=='USD'?'selected':''}>Guaraníes ₲</option><option value="USD" ${c&&c.moneda==='USD'?'selected':''}>Dólares US$</option></select></div></div>
+    <div class="row2"><div id="finChTcWrap" style="display:${c&&c.moneda==='USD'?'':'none'}"><label class="fl">TC ₲/US$</label><input type="number" id="finChTc" value="${c&&c.tc?c.tc:cotizDolar()}"></div><div></div></div>
+    <div class="row2"><div><label class="fl">Fecha de caída (cobro)</label><input type="date" id="finChFecha" value="${c?c.fecha:hoy()}"></div><div><label class="fl">Fecha de emisión</label><input type="date" id="finChEmit" value="${c&&c.emitido?c.emitido:hoy()}"></div></div>
+    <label class="fl">Nota</label><input id="finChNota" value="${esc(c&&c.nota)}" placeholder="opcional" autocomplete="off">
+    <div style="font-size:11px;color:var(--gray-400);margin-top:4px">Si lo vinculás a una cuenta a pagar, esa deja de contar como pago pendiente y el cheque aparece como egreso en el flujo el día que cae.</div>
+    <div class="row2" style="margin-top:12px">${c?`<button class="btn btn-sec" onclick="finChequeBorrar('${c.id}')" style="color:var(--red)">Borrar</button>`:'<button class="btn btn-sec" onclick="cerrarModal()">Cancelar</button>'}<button class="btn btn-primary" onclick="finChequeGuardar('${c?c.id:''}')">Guardar</button></div>`;
+  gs('modal').classList.add('show');
+}
+function finChFromCompra(){ const id=gs('finChCompra').value; if(!id) return; const c=getCompras().find(x=>x.id===id); if(!c) return; if(!gs('finChProv').value) gs('finChProv').value=c.proveedor||''; if(!num(gs('finChMonto').value)){ gs('finChMonto').value=Math.round(finSaldo(c)); } if(c.moneda==='USD'){ gs('finChMon').value='USD'; gs('finChTcWrap').style.display=''; if(c.tc) gs('finChTc').value=c.tc; } }
+function finChequeGuardar(id){ if(!canEdit()) return; const prov=(gs('finChProv').value||'').trim(); const monto=num(gs('finChMonto').value); const fecha=gs('finChFecha').value; if(!prov){ showToast('Poné el proveedor'); return; } if(!monto||monto<=0){ showToast('Poné el monto'); return; } if(!fecha){ showToast('Poné la fecha de caída'); return; }
+  const mon=gs('finChMon').value; const tc=mon==='USD'?(num(gs('finChTc').value)||0):null; if(mon==='USD'&&!tc){ showToast('Cargá el tipo de cambio'); return; }
+  const compra_id=gs('finChCompra').value||''; const factura=compra_id?((getCompras().find(x=>x.id===compra_id)||{}).factura||''):'';
+  const prev=id?getCheques().find(x=>x.id===id):null;
+  const c={ id:id||('CH-'+Date.now()), proveedor:prov, compra_id, factura, banco:(gs('finChBanco').value||'').trim(), num:(gs('finChNum').value||'').trim(), monto:Math.round(monto), moneda:mon, tc, fecha, emitido:gs('finChEmit').value||'', estado:(prev&&prev.estado)||'pendiente', nota:(gs('finChNota').value||'').trim(), por:(getSession()&&getSession().nombre)||'', ts:new Date().toISOString(), pending:true };
+  const a=getCheques().filter(x=>x.id!==c.id); a.unshift(c); saveCheques(a); cloudPush('cheque',c); cerrarModal(); showToast('✓ Cheque guardado'); finSetTab(_finTab);
+}
+function finChequeEstado(id,caido){ if(!canEdit()) return; const a=getCheques(); const c=a.find(x=>x.id===id); if(!c) return; c.estado=caido?'caido':'pendiente'; c.ts=new Date().toISOString(); c.pending=true; saveCheques(a); cloudPush('cheque',c); finSetTab(_finTab); }
+function finChequeBorrar(id){ if(!canEdit()) return; if(!confirm('¿Borrar este cheque?')) return; saveCheques(getCheques().filter(x=>x.id!==id)); cloudDelete('cheque',id); cerrarModal(); finSetTab(_finTab); }
 // ---- Flujo de caja ----
+function finCajaModal(){ if(!canEdit()){ showToast('Sin permiso'); return; } const fc=getFinCaja();
+  gs('modalBox').innerHTML=`<h3>Saldo inicial de caja</h3>
+    <div style="font-size:12px;color:var(--gray-600);margin-bottom:8px">Dinero disponible a la fecha de arranque. Desde ahí el flujo arrastra el saldo sumando lo que falta cobrar y restando lo que falta pagar.</div>
+    <div class="row2"><div><label class="fl">Fecha de arranque</label><input type="date" id="finCajaFecha" value="${fc&&fc.fecha?fc.fecha:hoy()}"></div><div><label class="fl">Monto disponible (₲)</label><input type="number" id="finCajaMonto" value="${fc?fc.monto:''}" placeholder="0"></div></div>
+    <div class="row2" style="margin-top:12px">${fc?`<button class="btn btn-sec" onclick="finCajaBorrar()" style="color:var(--red)">Borrar</button>`:'<button class="btn btn-sec" onclick="cerrarModal()">Cancelar</button>'}<button class="btn btn-primary" onclick="finCajaGuardar()">Guardar</button></div>`;
+  gs('modal').classList.add('show');
+}
+function finCajaGuardar(){ if(!canEdit()) return; const fecha=gs('finCajaFecha').value; const monto=num(gs('finCajaMonto').value); if(!fecha){ showToast('Poné la fecha'); return; } setFinCaja({fecha,monto:Math.round(monto||0),ts:new Date().toISOString()}); pushFinCaja(); cerrarModal(); showToast('✓ Saldo inicial guardado'); finSetTab('flujo'); }
+function finCajaBorrar(){ if(!canEdit()) return; if(!confirm('¿Borrar el saldo inicial?')) return; localStorage.removeItem('bio:fincaja'); pushFinCaja(); cerrarModal(); finSetTab('flujo'); }
 let _finFluModo='sem';
 function finFluModo(m){ _finFluModo=m; finRenderFlujo(); }
 function _fluDate(k){ const p=String(k).split('-'); return new Date(+p[0],(+p[1])-1,+(p[2]||1)); }
@@ -3232,27 +3297,35 @@ function _fluKey(d){ const z=n=>String(n).padStart(2,'0'); return d.getFullYear(
 function _fluFmt(v){ if(!v) return ''; const n=Math.round(v), a=Math.abs(n); if(a>=1e6) return (n/1e6).toLocaleString('es-PY',{maximumFractionDigits:1})+' M'; if(a>=1e4) return Math.round(n/1e3).toLocaleString('es-PY')+' k'; return n.toLocaleString('es-PY'); }
 const _FLU_MESES=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
 function finRenderFlujo(){ const modo=_finFluModo; const per=ds=>{ if(!ds)return''; return modo==='sem'?_fluKey(_fluWkStart(ds)):String(ds).slice(0,7); };
-  const P={}; const touch=k=>{ if(k) P[k]=P[k]||{venCob:0,cxc:0,gPag:0,cxp:0,sue:0}; return k; };
+  const fc=getFinCaja(); const start=(fc&&fc.fecha)||hoy(); const saldoIni=(fc&&Number(fc.monto))||0;
+  const hoyS=hoy(); const startPer=per(start<hoyS?start:hoyS); const curK=per(hoyS);
+  const perRoll=ds=>{ const p=per(ds); return (p<startPer)?startPer:p; };
+  // barra de saldo inicial
+  if(gs('finFluCaja')) gs('finFluCaja').innerHTML=`<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:#eef4fb;border:1px solid #dbe6f2;border-radius:10px;padding:10px 13px"><div style="min-width:0"><div style="font-size:10px;color:var(--gray-500);text-transform:uppercase;letter-spacing:.4px">Saldo inicial de caja</div><div style="font-size:17px;font-weight:800;color:${saldoIni<0?'var(--red)':'#1e3f63'}">${fc?finGsFmt(saldoIni):'— sin cargar —'}</div>${fc?`<div style="font-size:10px;color:var(--gray-500)">se arrastra desde ${fmtFecha(start)}</div>`:'<div style="font-size:10px;color:var(--gray-500)">cargá el saldo y la fecha de arranque</div>'}</div><button class="btn btn-sec" style="margin-left:auto;font-size:12px;padding:8px 13px" onclick="finCajaModal()">${fc?'✎ Editar':'＋ Cargar saldo'}</button></div>`;
+  const P={}; const touch=k=>{ if(k) P[k]=P[k]||{cxc:0,cxp:0,sue:0,cheq:0}; return k; };
   const add=(k,f,val)=>{ if(!k||!val)return; touch(k); P[k][f]+=val; };
-  let gVenCob=0,gCxc=0,gGpag=0,gCxp=0,gSueR=0,gSueP=0;
-  getVentas().forEach(v=>{ (v.cuotas||[]).forEach(cu=>{ (cu.abonos||[]).forEach(a=>{ const g=finGs(v,a.monto); add(per(a.fecha),'venCob',g); gVenCob+=g; }); const s=finCuotaSaldo(cu); if(s>0){ const g=finGs(v,s); add(per(cu.venc),'cxc',g); gCxc+=g; } }); });
-  getCompras().forEach(c=>{ (c.cuotas||[]).forEach(cu=>{ (cu.abonos||[]).forEach(a=>{ const g=finGs(c,a.monto); add(per(a.fecha),'gPag',g); gGpag+=g; }); const s=finCuotaSaldo(cu); if(s>0){ const g=finGs(c,s); add(per(cu.venc),'cxp',g); gCxp+=g; } }); });
-  getSueldos().forEach(su=>{ (su.cuotas||[]).forEach(cu=>{ (cu.abonos||[]).forEach(a=>{ const g=finGs(su,a.monto); add(per(a.fecha),'sue',g); gSueR+=g; }); const s=finCuotaSaldo(cu); if(s>0){ const g=finGs(su,s); add(per(cu.venc),'sue',g); gSueP+=g; } }); });
+  // cheques: una compra vinculada a un cheque (pendiente o ya caído) queda cubierta y no cuenta como pago pendiente; solo los cheques pendientes se proyectan como egreso el día que caen.
+  const chAll=getCheques(); const chCov={}; chAll.forEach(c=>{ if(c.compra_id) chCov[c.compra_id]=true; }); const chList=chAll.filter(c=>c.estado!=='caido');
+  let gCxc=0,gCxp=0,gSue=0,gCheq=0;
+  getVentas().forEach(v=>{ (v.cuotas||[]).forEach(cu=>{ const s=finCuotaSaldo(cu); if(s>0){ const g=finGs(v,s); add(perRoll(cu.venc),'cxc',g); gCxc+=g; } }); });
+  getCompras().forEach(c=>{ if(chCov[c.id]) return; (c.cuotas||[]).forEach(cu=>{ const s=finCuotaSaldo(cu); if(s>0){ const g=finGs(c,s); add(perRoll(cu.venc),'cxp',g); gCxp+=g; } }); });
+  getSueldos().forEach(su=>{ (su.cuotas||[]).forEach(cu=>{ const s=finCuotaSaldo(cu); if(s>0){ const g=finGs(su,s); add(perRoll(cu.venc),'sue',g); gSue+=g; } }); });
+  chList.forEach(ch=>{ const g=finGs(ch,ch.monto); add(perRoll(ch.fecha),'cheq',g); gCheq+=g; });
   // tarjetas resumen
-  const saldoReal=gVenCob-gGpag-gSueR, porCobrar=gCxc, porPagar=gCxp+gSueP;
+  const porCobrar=gCxc, porPagar=gCxp+gSue+gCheq, saldoFin=saldoIni+porCobrar-porPagar;
   if(gs('finFluResumen')) gs('finFluResumen').innerHTML=`<div style="display:flex;gap:8px;flex-wrap:wrap">
-    <div style="flex:1;min-width:120px;background:var(--gray-100);border-radius:10px;padding:10px;text-align:center"><div style="font-size:10px;color:var(--gray-500)">Caja realizada</div><div style="font-size:18px;font-weight:800;color:${saldoReal<0?'var(--red)':'var(--green)'}">${finGsFmt(saldoReal)}</div></div>
     <div style="flex:1;min-width:110px;background:var(--gray-100);border-radius:10px;padding:10px;text-align:center"><div style="font-size:10px;color:var(--gray-500)">Por cobrar</div><div style="font-size:15px;font-weight:700;color:var(--amber)">${finGsFmt(porCobrar)}</div></div>
-    <div style="flex:1;min-width:110px;background:var(--gray-100);border-radius:10px;padding:10px;text-align:center"><div style="font-size:10px;color:var(--gray-500)">Por pagar</div><div style="font-size:15px;font-weight:700;color:var(--red)">${finGsFmt(porPagar)}</div></div></div>`;
-  // períodos continuos
-  const hoyS=hoy(); const curK=per(hoyS); const set={...P}; set[curK]=set[curK]||1; let ks=Object.keys(set).sort();
-  let periods=[]; if(ks.length){ if(modo==='sem'){ let d=_fluDate(ks[0]); const e=_fluDate(ks[ks.length-1]); let g=0; while(d<=e && g++<160){ periods.push(_fluKey(d)); d.setDate(d.getDate()+7); } } else { let [y,m]=ks[0].split('-').map(Number); const [ye,me]=ks[ks.length-1].split('-').map(Number); let g=0; while((y<ye||(y===ye&&m<=me)) && g++<160){ periods.push(y+'-'+String(m).padStart(2,'0')); m++; if(m>12){m=1;y++;} } } }
-  periods.forEach(k=>{ const p=P[k]||{venCob:0,cxc:0,gPag:0,cxp:0,sue:0}; p.totIn=p.venCob+p.cxc; p.totEg=p.gPag+p.cxp+p.sue; p.neto=p.totIn-p.totEg; P[k]=p; });
-  let ac=0; periods.forEach(k=>{ ac+=P[k].neto; P[k].acum=ac; });
+    <div style="flex:1;min-width:110px;background:var(--gray-100);border-radius:10px;padding:10px;text-align:center"><div style="font-size:10px;color:var(--gray-500)">Por pagar</div><div style="font-size:15px;font-weight:700;color:var(--red)">${finGsFmt(porPagar)}</div></div>
+    <div style="flex:1;min-width:120px;background:var(--gray-100);border-radius:10px;padding:10px;text-align:center"><div style="font-size:10px;color:var(--gray-500)">Saldo proyectado</div><div style="font-size:18px;font-weight:800;color:${saldoFin<0?'var(--red)':'var(--green)'}">${finGsFmt(saldoFin)}</div></div></div>`;
+  // períodos continuos desde el arranque hacia adelante
+  const set={...P}; set[startPer]=set[startPer]||1; set[curK]=set[curK]||1; let ks=Object.keys(set).sort();
+  let periods=[]; if(ks.length){ if(modo==='sem'){ let d=_fluDate(ks[0]); const e=_fluDate(ks[ks.length-1]); let g=0; while(d<=e && g++<200){ periods.push(_fluKey(d)); d.setDate(d.getDate()+7); } } else { let [y,m]=ks[0].split('-').map(Number); const [ye,me]=ks[ks.length-1].split('-').map(Number); let g=0; while((y<ye||(y===ye&&m<=me)) && g++<200){ periods.push(y+'-'+String(m).padStart(2,'0')); m++; if(m>12){m=1;y++;} } } }
+  periods.forEach(k=>{ const p=P[k]||{cxc:0,cxp:0,sue:0,cheq:0}; p.totIn=p.cxc; p.totEg=p.cxp+p.sue+p.cheq; p.neto=p.totIn-p.totEg; P[k]=p; });
+  let ac=saldoIni; periods.forEach(k=>{ ac+=P[k].neto; P[k].acum=ac; });
   // toggle
   const chip=(mm,l)=>`<button class="finchip${modo===mm?' on':''}" onclick="finFluModo('${mm}')">${l}</button>`;
-  const bar=`<div style="display:flex;gap:6px;margin-bottom:8px;align-items:center"><span style="font-size:11px;color:var(--gray-500)">Ver por:</span>${chip('sem','Semana')}${chip('mes','Mes')}<span style="margin-left:auto;font-size:9px;color:var(--gray-400)">montos en ₲ · k=mil · M=millón</span></div>`;
-  if(!periods.length){ gs('finFluTabla').innerHTML=bar+'<div class="empty">Sin movimientos.</div>'; return; }
+  const bar=`<div style="display:flex;gap:6px;margin-bottom:8px;align-items:center"><span style="font-size:11px;color:var(--gray-500)">Ver por:</span>${chip('sem','Semana')}${chip('mes','Mes')}<span style="margin-left:auto;font-size:9px;color:var(--gray-400)">proyección · montos en ₲ · k=mil · M=millón</span></div>`;
+  if(!periods.length){ gs('finFluTabla').innerHTML=bar+'<div class="empty">Sin movimientos por venir.</div>'; return; }
   // encabezado
   let head1='', head2='';
   if(modo==='sem'){ let grp=[]; periods.forEach(k=>{ const d=_fluDate(k); const ym=d.getFullYear()+'-'+String(d.getMonth()+1); const lbl=_FLU_MESES[d.getMonth()]+' '+d.getFullYear(); const last=grp[grp.length-1]; if(last&&last.ym===ym) last.n++; else grp.push({ym,lbl,n:1}); });
@@ -3264,9 +3337,9 @@ function finRenderFlujo(){ const modo=_finFluModo; const per=ds=>{ if(!ds)return
   const dataRow=(cls,label,f,col)=>`<tr class="${cls}"><td class="lbl">${label}</td>${periods.map(k=>cell(k,P[k][f],col)).join('')}</tr>`;
   const secRow=label=>`<tr class="sec"><td class="lbl secl">${label}</td><td class="secbar" colspan="${periods.length}"></td></tr>`;
   const netoRow=`<tr class="neto"><td class="lbl">Neto del período</td>${periods.map(k=>{ const v=P[k].neto; return `<td class="num${k===curK?' now':''}" title="${finGsFmt(v)}" style="color:${v<0?'var(--red)':'var(--green)'}">${v?_fluFmt(v):'<span class=z>·</span>'}</td>`; }).join('')}</tr>`;
-  const acumRow=`<tr class="acum"><td class="lbl">Saldo acumulado</td>${periods.map(k=>{ const v=P[k].acum; return `<td class="num${k===curK?' now':''}" title="${finGsFmt(v)}">${_fluFmt(v)||'0'}</td>`; }).join('')}</tr>`;
-  const body=secRow('INGRESOS')+dataRow('','Ventas cobradas','venCob','var(--green)')+dataRow('','Por cobrar (estim.)','cxc','var(--amber)')+dataRow('totin','Total ingresos','totIn','')+
-    secRow('EGRESOS')+dataRow('','Gastos pagados','gPag','var(--red)')+dataRow('','Por pagar','cxp','var(--red)')+dataRow('','Sueldos','sue','var(--red)')+dataRow('toteg','Total egresos','totEg','')+
+  const acumRow=`<tr class="acum"><td class="lbl">Saldo de caja</td>${periods.map(k=>{ const v=P[k].acum; return `<td class="num${k===curK?' now':''}" title="${finGsFmt(v)}" style="${v<0?'color:#ffd0d0':''}">${_fluFmt(v)||'0'}</td>`; }).join('')}</tr>`;
+  const body=secRow('INGRESOS')+dataRow('','Cuentas por cobrar','cxc','var(--green)')+dataRow('totin','Total ingresos','totIn','')+
+    secRow('EGRESOS')+dataRow('','Cuentas por pagar','cxp','var(--red)')+dataRow('','Cheques diferidos','cheq','var(--red)')+dataRow('','Sueldos a pagar','sue','var(--red)')+dataRow('toteg','Total egresos','totEg','')+
     netoRow+acumRow;
   const css=`<style>.flu{border-collapse:separate;border-spacing:0;font-size:10.5px;white-space:nowrap}.flu th,.flu td{padding:5px 8px;border-bottom:1px solid var(--gray-200)}.flu .lbl{position:sticky;left:0;background:#fff;text-align:left;font-weight:600;min-width:148px;box-shadow:1px 0 0 var(--gray-200);z-index:2}.flu .corner{position:sticky;left:0;z-index:3;background:#1e3f63;color:#fff;text-align:left}.flu .mth{background:#eef2f7;color:#1e3f63;font-weight:700;text-align:center;font-size:10px}.flu .wk{text-align:center;color:var(--gray-600);font-size:9.5px}.flu .wk .d{font-weight:700;color:var(--gray-800);font-size:10.5px}.flu td.num{text-align:right;font-variant-numeric:tabular-nums}.flu td.now,.flu th.now{background:var(--green-lt)}.flu tr.sec .secl{background:#1e3f63;color:#fff;font-weight:800;font-size:10px;letter-spacing:.5px}.flu tr.sec .secbar{background:#1e3f63}.flu tr.totin .lbl,.flu tr.totin td.num{background:#eaf7ee;font-weight:800}.flu tr.toteg .lbl,.flu tr.toteg td.num{background:#fdecec;font-weight:800}.flu tr.neto .lbl,.flu tr.neto td.num{background:#f8fafc;font-weight:800}.flu tr.acum .lbl,.flu tr.acum td.num{background:#1e3f63;color:#fff;font-weight:800}.flu tr.totin td.now,.flu tr.toteg td.now,.flu tr.neto td.now{background:#dff0e6}.flu .z{color:var(--gray-300)}</style>`;
   gs('finFluTabla').innerHTML=bar+css+`<table class="flu"><thead>${head1}${head2}</thead><tbody>${body}</tbody></table>`;
