@@ -497,7 +497,7 @@ textarea{resize:vertical;min-height:66px}
       <button class="fintab" id="finT_banco" onclick="finSetTab('banco')">🏦 Banco</button>
       <button class="fintab" id="finT_flujo" onclick="finSetTab('flujo')">📊 Flujo</button>
     </div>
-    <div style="font-size:9px;color:var(--gray-400);text-align:right;margin:-6px 0 8px">BioInnova <span id="finVer">v71</span></div>
+    <div style="font-size:9px;color:var(--gray-400);text-align:right;margin:-6px 0 8px">BioInnova <span id="finVer">v72</span></div>
     <div id="finW_ventas">
       <button class="btn btn-primary btn-block" style="margin-bottom:8px" onclick="finVentaModal()">＋ Nueva venta</button>
       <input type="search" id="finVBuscar" placeholder="🔎 Buscar cliente / factura…" oninput="finRenderVentas()" style="margin-bottom:8px">
@@ -3370,24 +3370,30 @@ function finRenderFlujo(){ const modo=_finFluModo; const per=ds=>{ if(!ds)return
     const proyRow=`<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:#f2f9f4;border:1px solid #d6ecdb;border-radius:10px;padding:9px 13px;margin-top:8px"><div style="min-width:0"><div style="font-size:10px;color:var(--gray-500);text-transform:uppercase;letter-spacing:.4px">Ventas proyectadas</div><div style="font-size:15px;font-weight:800;color:#1e3f63">${ventasMes?finGsFmt(ventasMes)+' /mes':'— sin cargar —'}</div><div style="font-size:10px;color:var(--gray-500)">${ventasMes?'costo de producción '+costoPct+'% · se reemplaza por ventas/compras reales':'estimado mensual para proyectar ingresos y costos'}</div></div><button class="btn btn-sec" style="margin-left:auto;font-size:12px;padding:8px 13px" onclick="finProyModal()">${ventasMes?'✎ Editar':'＋ Cargar'}</button></div>`;
     gs('finFluCaja').innerHTML=cajaRow+proyRow;
   }
-  const P={}; const touch=k=>{ if(k) P[k]=P[k]||{cxc:0,cxp:0,sue:0,cheq:0,banco:0,vproy:0,cprod:0}; return k; };
-  const cxcMes={};
+  const P={}; const touch=k=>{ if(k) P[k]=P[k]||{vproy:0,cxc:0,cobR:0,cprod:0,cxp:0,pagR:0,cheq:0,banco:0,sue:0}; return k; };
+  const salesMes={};   // ventas reales por mes de facturación (para netear el proyectado)
   const add=(k,f,val)=>{ if(!k||!val)return; touch(k); P[k][f]+=val; };
   // cheques: una compra vinculada a un cheque (pendiente o ya caído) queda cubierta y no cuenta como pago pendiente; solo los cheques pendientes se proyectan como egreso el día que caen.
   const chAll=getCheques(); const chCov={}; chAll.forEach(c=>{ if(c.compra_id) chCov[c.compra_id]=true; }); const chList=chAll.filter(c=>c.estado!=='caido');
-  let gCxc=0,gCxp=0,gSue=0,gCheq=0,gBanco=0,gVproy=0,gCprod=0;
-  getVentas().forEach(v=>{ (v.cuotas||[]).forEach(cu=>{ const s=finCuotaSaldo(cu); if(s>0){ const g=finGs(v,s); add(perRoll(cu.venc),'cxc',g); gCxc+=g; const mk=(String(cu.venc)<start?start:String(cu.venc)).slice(0,7); cxcMes[mk]=(cxcMes[mk]||0)+g; } }); });
-  getCompras().forEach(c=>{ if(chCov[c.id]) return; (c.cuotas||[]).forEach(cu=>{ const s=finCuotaSaldo(cu); if(s>0){ const g=finGs(c,s); add(perRoll(cu.venc),'cxp',g); gCxp+=g; } }); });
-  getSueldos().forEach(su=>{ (su.cuotas||[]).forEach(cu=>{ const s=finCuotaSaldo(cu); if(s>0){ const g=finGs(su,s); add(perRoll(cu.venc),'sue',g); gSue+=g; } }); });
+  let gCxc=0,gCobR=0,gCxp=0,gPagR=0,gSue=0,gCheq=0,gBanco=0,gVproy=0,gCprod=0;
+  // Ventas: saldo pendiente -> Cuentas por cobrar (por vencimiento); abonos desde el arranque -> Cobranzas realizadas (por fecha de cobro)
+  getVentas().forEach(v=>{ const smk=String(v.fecha||'').slice(0,7); if(smk) salesMes[smk]=(salesMes[smk]||0)+finGs(v,v.monto);
+    (v.cuotas||[]).forEach(cu=>{ const s=finCuotaSaldo(cu); if(s>0){ const g=finGs(v,s); add(perRoll(cu.venc),'cxc',g); gCxc+=g; }
+      (cu.abonos||[]).forEach(a=>{ if(String(a.fecha)>=start){ const g=finGs(v,a.monto); add(per(a.fecha),'cobR',g); gCobR+=g; } }); }); });
+  // Compras: saldo pendiente -> Cuentas por pagar; abonos desde el arranque -> Pagos realizados
+  getCompras().forEach(c=>{ if(chCov[c.id]) return; (c.cuotas||[]).forEach(cu=>{ const s=finCuotaSaldo(cu); if(s>0){ const g=finGs(c,s); add(perRoll(cu.venc),'cxp',g); gCxp+=g; }
+      (cu.abonos||[]).forEach(a=>{ if(String(a.fecha)>=start){ const g=finGs(c,a.monto); add(per(a.fecha),'pagR',g); gPagR+=g; } }); }); });
+  getSueldos().forEach(su=>{ (su.cuotas||[]).forEach(cu=>{ const s=finCuotaSaldo(cu); if(s>0){ const g=finGs(su,s); add(perRoll(cu.venc),'sue',g); gSue+=g; }
+      (cu.abonos||[]).forEach(a=>{ if(String(a.fecha)>=start){ const g=finGs(su,a.monto); add(per(a.fecha),'pagR',g); gPagR+=g; } }); }); });
   chList.forEach(ch=>{ const g=finGs(ch,ch.monto); add(perRoll(ch.fecha),'cheq',g); gCheq+=g; });
   getPrestamos().forEach(pr=>{ if(pr.estado==='pagado') return; _prestamoFechas(pr).forEach(c=>{ const g=finGs(pr,c.monto); add(perRoll(c.fecha),'banco',g); gBanco+=g; }); });
-  // ventas proyectadas (estimado mensual, neto de lo ya real por cobrar) + costo de producción (% del proyectado)
+  // ventas proyectadas (estimado mensual, neto de las ventas reales ya facturadas ese mes) + costo de producción (% del proyectado)
   if(ventasMes>0){ const monthAdd=(ym,n)=>{ let [y,m]=ym.split('-').map(Number); m+=n; y+=Math.floor((m-1)/12); m=((m-1)%12+12)%12+1; return y+'-'+String(m).padStart(2,'0'); };
     const sm=(start>hoyS?start:hoyS).slice(0,7); let mdm=sm; Object.keys(P).forEach(k=>{ const km=k.slice(0,7); if(km>mdm) mdm=km; });
     const horizon=(monthAdd(sm,11)>mdm)?monthAdd(sm,11):mdm; let M=sm, guard=0;
-    while(M<=horizon && guard++<60){ const proj=Math.max(0,ventasMes-(cxcMes[M]||0)); const cost=Math.round(costoPct/100*proj); const pk=perRoll(M+'-01'); if(proj){ add(pk,'vproy',proj); gVproy+=proj; } if(cost){ add(pk,'cprod',cost); gCprod+=cost; } M=monthAdd(M,1); } }
+    while(M<=horizon && guard++<60){ const proj=Math.max(0,ventasMes-(salesMes[M]||0)); const cost=Math.round(costoPct/100*proj); const pk=perRoll(M+'-01'); if(proj){ add(pk,'vproy',proj); gVproy+=proj; } if(cost){ add(pk,'cprod',cost); gCprod+=cost; } M=monthAdd(M,1); } }
   // tarjetas resumen
-  const porCobrar=gCxc, porPagar=gCxp+gSue+gCheq+gBanco, saldoFin=saldoIni+(porCobrar+gVproy)-(porPagar+gCprod);
+  const porCobrar=gCxc, porPagar=gCxp+gSue+gCheq+gBanco, saldoFin=saldoIni+(gVproy+gCxc+gCobR)-(gCprod+gCxp+gPagR+gCheq+gBanco+gSue);
   if(gs('finFluResumen')) gs('finFluResumen').innerHTML=`<div style="display:flex;gap:8px;flex-wrap:wrap">
     <div style="flex:1;min-width:110px;background:var(--gray-100);border-radius:10px;padding:10px;text-align:center"><div style="font-size:10px;color:var(--gray-500)">Por cobrar</div><div style="font-size:15px;font-weight:700;color:var(--amber)">${finGsFmt(porCobrar)}</div></div>
     <div style="flex:1;min-width:110px;background:var(--gray-100);border-radius:10px;padding:10px;text-align:center"><div style="font-size:10px;color:var(--gray-500)">Por pagar</div><div style="font-size:15px;font-weight:700;color:var(--red)">${finGsFmt(porPagar)}</div></div>
@@ -3395,7 +3401,7 @@ function finRenderFlujo(){ const modo=_finFluModo; const per=ds=>{ if(!ds)return
   // períodos continuos desde el arranque hacia adelante
   const set={...P}; set[startPer]=set[startPer]||1; set[curK]=set[curK]||1; let ks=Object.keys(set).sort();
   let periods=[]; if(ks.length){ if(modo==='sem'){ let d=_fluDate(ks[0]); const e=_fluDate(ks[ks.length-1]); let g=0; while(d<=e && g++<200){ periods.push(_fluKey(d)); d.setDate(d.getDate()+7); } } else { let [y,m]=ks[0].split('-').map(Number); const [ye,me]=ks[ks.length-1].split('-').map(Number); let g=0; while((y<ye||(y===ye&&m<=me)) && g++<200){ periods.push(y+'-'+String(m).padStart(2,'0')); m++; if(m>12){m=1;y++;} } } }
-  periods.forEach(k=>{ const p=P[k]||{cxc:0,cxp:0,sue:0,cheq:0,banco:0,vproy:0,cprod:0}; p.totIn=p.cxc+(p.vproy||0); p.totEg=p.cxp+p.sue+p.cheq+p.banco+(p.cprod||0); p.neto=p.totIn-p.totEg; P[k]=p; });
+  periods.forEach(k=>{ const p=P[k]||{vproy:0,cxc:0,cobR:0,cprod:0,cxp:0,pagR:0,cheq:0,banco:0,sue:0}; p.totIn=(p.vproy||0)+p.cxc+(p.cobR||0); p.totEg=(p.cprod||0)+p.cxp+(p.pagR||0)+p.cheq+p.banco+p.sue; p.neto=p.totIn-p.totEg; P[k]=p; });
   let ac=saldoIni; periods.forEach(k=>{ ac+=P[k].neto; P[k].acum=ac; });
   // toggle
   const chip=(mm,l)=>`<button class="finchip${modo===mm?' on':''}" onclick="finFluModo('${mm}')">${l}</button>`;
@@ -3413,8 +3419,8 @@ function finRenderFlujo(){ const modo=_finFluModo; const per=ds=>{ if(!ds)return
   const secRow=label=>`<tr class="sec"><td class="lbl secl">${label}</td><td class="secbar" colspan="${periods.length}"></td></tr>`;
   const netoRow=`<tr class="neto"><td class="lbl">Neto del período</td>${periods.map(k=>{ const v=P[k].neto; return `<td class="num${k===curK?' now':''}" title="${finGsFmt(v)}" style="color:${v<0?'var(--red)':'var(--green)'}">${v?_fluFmt(v):'<span class=z>·</span>'}</td>`; }).join('')}</tr>`;
   const acumRow=`<tr class="acum"><td class="lbl">Saldo de caja</td>${periods.map(k=>{ const v=P[k].acum; return `<td class="num${k===curK?' now':''}" title="${finGsFmt(v)}" style="${v<0?'color:#ffd0d0':''}">${_fluFmt(v)||'0'}</td>`; }).join('')}</tr>`;
-  const body=secRow('INGRESOS')+dataRow('','Ventas proyectadas','vproy','var(--green)')+dataRow('','Cuentas por cobrar','cxc','var(--green)')+dataRow('totin','Total ingresos','totIn','')+
-    secRow('EGRESOS')+dataRow('','Costos de producción','cprod','var(--red)')+dataRow('','Cuentas por pagar','cxp','var(--red)')+dataRow('','Cheques diferidos','cheq','var(--red)')+dataRow('','Cuota banco / préstamos','banco','var(--red)')+dataRow('','Sueldos a pagar','sue','var(--red)')+dataRow('toteg','Total egresos','totEg','')+
+  const body=secRow('INGRESOS')+dataRow('','Ventas proyectadas','vproy','#7ba87b')+dataRow('','Cuentas por cobrar','cxc','var(--amber)')+dataRow('','Cobranzas realizadas','cobR','var(--green)')+dataRow('totin','Total ingresos','totIn','')+
+    secRow('EGRESOS')+dataRow('','Costos de producción','cprod','#d98a8a')+dataRow('','Cuentas por pagar','cxp','var(--amber)')+dataRow('','Pagos realizados','pagR','var(--red)')+dataRow('','Cheques diferidos','cheq','var(--red)')+dataRow('','Cuota banco / préstamos','banco','var(--red)')+dataRow('','Sueldos a pagar','sue','var(--red)')+dataRow('toteg','Total egresos','totEg','')+
     netoRow+acumRow;
   const css=`<style>.flu{border-collapse:separate;border-spacing:0;font-size:10.5px;white-space:nowrap}.flu th,.flu td{padding:5px 8px;border-bottom:1px solid var(--gray-200)}.flu .lbl{position:sticky;left:0;background:#fff;text-align:left;font-weight:600;min-width:148px;box-shadow:1px 0 0 var(--gray-200);z-index:2}.flu .corner{position:sticky;left:0;z-index:3;background:#1e3f63;color:#fff;text-align:left}.flu .mth{background:#eef2f7;color:#1e3f63;font-weight:700;text-align:center;font-size:10px}.flu .wk{text-align:center;color:var(--gray-600);font-size:9.5px}.flu .wk .d{font-weight:700;color:var(--gray-800);font-size:10.5px}.flu td.num{text-align:right;font-variant-numeric:tabular-nums}.flu td.now,.flu th.now{background:var(--green-lt)}.flu tr.sec .secl{background:#1e3f63;color:#fff;font-weight:800;font-size:10px;letter-spacing:.5px}.flu tr.sec .secbar{background:#1e3f63}.flu tr.totin .lbl,.flu tr.totin td.num{background:#eaf7ee;font-weight:800}.flu tr.toteg .lbl,.flu tr.toteg td.num{background:#fdecec;font-weight:800}.flu tr.neto .lbl,.flu tr.neto td.num{background:#f8fafc;font-weight:800}.flu tr.acum .lbl,.flu tr.acum td.num{background:#1e3f63;color:#fff;font-weight:800}.flu tr.totin td.now,.flu tr.toteg td.now,.flu tr.neto td.now{background:#dff0e6}.flu .z{color:var(--gray-300)}</style>`;
   gs('finFluTabla').innerHTML=bar+css+`<table class="flu"><thead>${head1}${head2}</thead><tbody>${body}</tbody></table>`;
