@@ -468,6 +468,7 @@ textarea{resize:vertical;min-height:66px}
     <div style="display:flex;gap:8px;margin-bottom:10px">
       <button class="btn btn-sec" onclick="agNav(0,true)" style="flex:0 0 auto;font-size:12px;padding:7px 12px">📍 Hoy</button>
       <select id="agFiltroCom" onchange="renderAgenda()" style="flex:1"></select>
+      <button class="btn btn-amber" onclick="agPrint()" style="flex:0 0 auto;font-size:12px;padding:7px 12px">🖨️ PDF</button>
     </div>
     <div id="agDays"></div>
   </div>
@@ -2714,15 +2715,16 @@ function renderAgenda(){
   gs('agDays').innerHTML=dias.map((d,i)=>{ const ymd=_ymd(d); let acts=getAgenda().filter(a=>a.fecha===ymd); if(com) acts=acts.filter(a=>String(a.comercial||'')===com);
     acts.sort((a,b)=>String(a.hora||'').localeCompare(String(b.hora||'')));
     const esHoy=hoyStr===ymd;
-    const items=acts.map(a=>{ const tp=agTipo(a.tipo); const done=a.estado==='hecha';
-      return `<div style="display:flex;gap:8px;align-items:center;padding:7px 12px;border-bottom:1px solid var(--gray-100)${done?';opacity:.55':''}">
-        <div onclick="agToggle('${a.id}')" style="cursor:pointer;font-size:16px;flex-shrink:0">${done?'✅':'⬜'}</div>
+    const items=acts.map(a=>{ const tp=agTipo(a.tipo); const done=a.estado==='hecha'; const est=a.estancia_id?((estanciaById(a.estancia_id)||{}).nombre||''):'';
+      const sub=`${est?'🏡 '+esc(est):''}${(est&&a.lugar)?' · ':''}${a.lugar?esc(a.lugar):''}${((est||a.lugar)&&esGerente()&&a.comercial)?' · ':''}${(esGerente()&&a.comercial)?esc(a.comercial):''}${a.nota?' · '+esc(a.nota):''}`;
+      return `<div style="display:flex;gap:8px;align-items:center;padding:7px 9px;margin:5px 8px;border-left:4px solid ${tp[2]};background:${tp[3]};border-radius:8px${done?';opacity:.5':''}">
+        <div onclick="agToggle('${a.id}')" style="cursor:pointer;font-size:18px;flex-shrink:0">${done?'✅':'⬜'}</div>
         <div style="min-width:0;flex:1" onclick="agActModal('${ymd}','${a.id}')">
-          <div style="font-size:12px;color:var(--gray-800)${done?';text-decoration:line-through':''}"><b>${a.hora||'--:--'}</b> <span class="chip" style="background:${tp[3]};color:${tp[2]};font-size:10px">${tp[1]}</span> ${esc(a.titulo)}</div>
-          <div style="font-size:10px;color:var(--gray-400)">${a.estancia_id?('🏡 '+esc((estanciaById(a.estancia_id)||{}).nombre||'')):''}${(a.estancia_id&&a.lugar)?' · ':''}${a.lugar?esc(a.lugar):''}${((a.estancia_id||a.lugar)&&esGerente()&&a.comercial)?' · ':''}${(esGerente()&&a.comercial)?esc(a.comercial):''}${a.nota?' · '+esc(a.nota):''}</div>
+          <div style="font-size:12px;color:var(--gray-800)${done?';text-decoration:line-through':''}"><span style="display:inline-block;background:#fff;border:1px solid ${tp[2]};color:${tp[2]};font-weight:800;font-size:10px;padding:1px 6px;border-radius:6px;margin-right:5px">${a.hora||'--:--'}</span><b>${esc(a.titulo)}</b></div>
+          ${sub?`<div style="font-size:10px;color:var(--gray-500);margin-top:2px">${sub}</div>`:''}
         </div>
         ${canEdit()?`<div onclick="agBorrar('${a.id}')" style="cursor:pointer;color:var(--red);flex-shrink:0;padding:0 2px">🗑</div>`:''}
-      </div>`; }).join('') || '<div style="font-size:11px;color:var(--gray-400);padding:6px 12px">Sin actividades</div>';
+      </div>`; }).join('') || '<div style="font-size:11px;color:var(--gray-400);padding:8px 12px;text-align:center">Sin actividades</div>';
     return `<div class="card" style="margin-bottom:8px"><div class="card-h" style="display:flex;justify-content:space-between;align-items:center;${esHoy?'color:var(--green)':''}"><span>${DOW[i]} ${fmtFecha(ymd).slice(0,5)}${esHoy?' · hoy':''}</span>${canEdit()?`<span onclick="agActModal('${ymd}','')" style="cursor:pointer;color:var(--green);font-weight:700;font-size:16px">＋</span>`:''}</div>${items}</div>`;
   }).join('');
 }
@@ -2757,6 +2759,58 @@ function agGuardar(id){ if(!canEdit()) return; const fecha=gs('agFecha').value; 
 }
 function agToggle(id){ if(!canEdit()) return; const a=getAgenda().find(x=>x.id===id); if(!a) return; a.estado=a.estado==='hecha'?'pendiente':'hecha'; a.ts=new Date().toISOString(); a.pending=true; saveAgenda(getAgenda().map(x=>x.id===id?a:x)); if(typeof cloudPush==='function') cloudPush('agenda',a); renderAgenda(); }
 function agBorrar(id){ if(!canEdit()) return; if(!confirm('¿Borrar esta actividad?')) return; saveAgenda(getAgenda().filter(x=>x.id!==id)); if(typeof cloudDelete==='function') cloudDelete('agenda',id); cerrarModal(); renderAgenda(); }
+function agPrint(){
+  const mon=_monday(_agOffset); const dias=[]; for(let i=0;i<7;i++){ const d=new Date(mon); d.setDate(mon.getDate()+i); dias.push(d); }
+  const com = esGerente()? _agFiltroCom : miNombre();
+  const DOW=['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo']; const hoyStr=hoy();
+  const base=`${location.origin}${location.pathname.replace(/[^/]*$/,'')}logo.jpg`;
+  const cols=dias.map((d,i)=>{ const ymd=_ymd(d); let acts=getAgenda().filter(a=>a.fecha===ymd); if(com) acts=acts.filter(a=>String(a.comercial||'')===com); acts.sort((a,b)=>String(a.hora||'').localeCompare(String(b.hora||'')));
+    const esHoy=ymd===hoyStr;
+    const blocks=acts.map(a=>{ const tp=agTipo(a.tipo); const est=a.estancia_id?((estanciaById(a.estancia_id)||{}).nombre||''):''; const done=a.estado==='hecha';
+      const sub=`${est?esc(est):''}${(est&&a.lugar)?' · ':''}${a.lugar?esc(a.lugar):''}${(esGerente()&&!com&&a.comercial)?' · '+esc(a.comercial):''}`;
+      return `<div class="ev" style="border-left:4px solid ${tp[2]};background:${tp[3]}${done?';opacity:.5':''}"><div class="evt">${a.hora||''} ${done?'✓':''}</div><div class="evi">${esc(a.titulo)}</div>${sub?`<div class="evs">${sub}</div>`:''}</div>`; }).join('')||'<div class="none">—</div>';
+    return `<div class="col${esHoy?' hoy':''}"><div class="dh">${DOW[i]}<br><span class="dd">${fmtFecha(ymd).slice(0,5)}</span></div><div class="cb">${blocks}</div></div>`; }).join('');
+  const legend=AG_TIPOS.map(t=>`<span class="lg"><span class="sw" style="background:${t[2]}"></span>${t[1]}</span>`).join('');
+  const titulo='Semana del '+fmtFecha(_ymd(dias[0]))+' al '+fmtFecha(_ymd(dias[6]));
+  const quien = com || 'Todos los comerciales';
+  const w=window.open('','_blank'); if(!w){ showToast('Permití las ventanas emergentes'); return; }
+  const fname='Agenda-'+String(quien).replace(/[^\w\-]+/g,'_')+'-'+_ymd(dias[0])+'.pdf';
+  w.document.write(`<html><head><meta charset="utf-8"><title>Agenda — ${esc(titulo)}</title><style>
+   *{box-sizing:border-box} body{margin:0;font-family:Arial,Helvetica,sans-serif;color:#1a202c}
+   .wrap{padding:16px 18px}
+   .hd{display:flex;align-items:center;gap:14px;border-bottom:3px solid #2f7d3b;padding-bottom:8px;margin-bottom:6px}
+   .hd img{height:44px} .hd .t1{font-size:17px;font-weight:800} .hd .t2{font-size:12px;color:#555;margin-top:1px}
+   .leg{font-size:11px;margin:6px 0 10px;color:#333} .lg{margin-right:16px;white-space:nowrap} .sw{display:inline-block;width:11px;height:11px;border-radius:2px;margin-right:5px;vertical-align:middle}
+   .grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;align-items:start}
+   .col{border:1px solid #cbd5e0;border-radius:7px;overflow:hidden;background:#fff}
+   .col.hoy{border-color:#2f7d3b;box-shadow:0 0 0 1.5px #2f7d3b}
+   .dh{background:#eef5ef;font-weight:700;font-size:11px;text-align:center;padding:5px 3px;border-bottom:1px solid #cbd5e0;line-height:1.25} .dh .dd{font-weight:600;color:#555;font-size:10px}
+   .col.hoy .dh{background:#2f7d3b;color:#fff} .col.hoy .dh .dd{color:#e6f2e8}
+   .cb{padding:4px;min-height:90px}
+   .ev{margin-bottom:5px;border-radius:5px;padding:4px 6px} .ev .evt{font-size:10px;font-weight:800} .ev .evi{font-size:10.5px;font-weight:600;line-height:1.2} .ev .evs{font-size:9px;color:#555;margin-top:1px}
+   .none{color:#cbd5e0;text-align:center;font-size:12px;padding:12px 0}
+   @page{size:A4 landscape;margin:8mm} @media print{.wrap{padding:0}.noprint{display:none}}
+  </style></head><body><div class="wrap">
+   <div class="hd"><img src="${base}" onerror="this.style.display='none'"><div><div class="t1">Agenda semanal</div><div class="t2">${esc(titulo)} · ${esc(quien)}</div></div></div>
+   <div class="leg">${legend}</div>
+   <div class="grid">${cols}</div>
+   <div class="noprint" style="display:flex;gap:8px;justify-content:center;margin-top:18px">
+     <button onclick="guardarPDF(this)" style="background:#16a34a;color:#fff;border:none;padding:10px 20px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">📄 Guardar PDF</button>
+     <button onclick="window.print()" style="background:#2f7d3b;color:#fff;border:none;padding:10px 20px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">🖨️ Imprimir</button>
+   </div>
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.2/dist/html2pdf.bundle.min.js"><\/script>
+  <script>
+  var PDF_NAME=${JSON.stringify(fname)};
+  function guardarPDF(btn){ if(typeof html2pdf==='undefined'){ alert('No se pudo cargar el generador de PDF. Verificá tu conexión.'); return; }
+    var t=btn.textContent; btn.textContent='Generando…'; btn.disabled=true;
+    var opt={ margin:6, filename:PDF_NAME, image:{type:'jpeg',quality:0.95}, html2canvas:{scale:2,useCORS:true,backgroundColor:'#ffffff'}, jsPDF:{unit:'mm',format:'a4',orientation:'landscape'}, pagebreak:{mode:['css','legacy']} };
+    var done=function(){ btn.textContent=t; btn.disabled=false; };
+    html2pdf().set(opt).from(document.querySelector('.wrap')).save().then(done).catch(function(){ done(); alert('No se pudo generar el PDF.'); });
+  }
+  <\/script></body></html>`);
+  w.document.close();
+}
 
 // ── INFORME PDF (molde del .docx) ──
 function informeComercialPDF(id){
