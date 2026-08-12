@@ -497,7 +497,7 @@ textarea{resize:vertical;min-height:66px}
       <button class="fintab" id="finT_banco" onclick="finSetTab('banco')">🏦 Fijos</button>
       <button class="fintab" id="finT_flujo" onclick="finSetTab('flujo')">📊 Flujo</button>
     </div>
-    <div style="font-size:9px;color:var(--gray-400);text-align:right;margin:-6px 0 8px">BioInnova <span id="finVer">v78</span></div>
+    <div style="font-size:9px;color:var(--gray-400);text-align:right;margin:-6px 0 8px">BioInnova <span id="finVer">v79</span></div>
     <div id="finW_ventas">
       <button class="btn btn-primary btn-block" style="margin-bottom:8px" onclick="finVentaModal()">＋ Nueva venta</button>
       <input type="search" id="finVBuscar" placeholder="🔎 Buscar cliente / factura…" oninput="finRenderVentas()" style="margin-bottom:8px">
@@ -3351,15 +3351,16 @@ function finCajaBorrar(){ if(!canEdit()) return; if(!confirm('¿Borrar el saldo 
 function finProyModal(){ if(!canEdit()){ showToast('Sin permiso'); return; } const fp=getFinProy()||{};
   gs('modalBox').innerHTML=`<h3>Proyección del flujo</h3>
     <div style="font-size:12px;color:var(--gray-600);margin-bottom:8px">Estimados mensuales para proyectar el flujo hacia adelante. Cada mes, lo que ya se concretó (ventas reales, sueldos cargados, facturas de insumo) reemplaza al estimado.</div>
-    <div class="row2"><div><label class="fl">Ventas estimadas /mes (₲)</label><input type="number" id="finProyVtas" value="${fp.ventas_mes||''}" placeholder="750000000"></div><div><label class="fl">Costo de producción (%)</label><input type="number" id="finProyPct" value="${fp.costo_pct!=null?fp.costo_pct:70}" placeholder="70"></div></div>
+    <div class="row2"><div><label class="fl">Ventas estimadas /mes (₲)</label><input type="number" id="finProyVtas" value="${fp.ventas_mes||''}" placeholder="750000000"></div><div><label class="fl">Crecimiento anual (%)</label><input type="number" step="0.1" id="finProyCrec" value="${fp.crecimiento_pct!=null?fp.crecimiento_pct:25}" placeholder="25"></div></div>
+    <label class="fl">Costo de producción (%)</label><input type="number" id="finProyPct" value="${fp.costo_pct!=null?fp.costo_pct:70}" placeholder="70">
     <div style="font-size:11px;color:var(--gray-500);margin-top:10px;font-weight:600">Sueldos estimados /mes (₲)</div>
     <div class="row3" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px"><div><label class="fl">Planta</label><input type="number" id="finProySuePl" value="${fp.sue_planta||''}" placeholder="30000000"></div><div><label class="fl">Comerciales</label><input type="number" id="finProySueCo" value="${fp.sue_comercial||''}" placeholder="28000000"></div><div><label class="fl">Superior</label><input type="number" id="finProySueSu" value="${fp.sue_superior||''}" placeholder="17000000"></div></div>
     <label class="fl">Comisiones (% de ventas)</label><input type="number" step="0.1" id="finProyComis" value="${fp.comision_pct!=null?fp.comision_pct:''}" placeholder="3">
     <div class="row2" style="margin-top:12px">${getFinProy()?`<button class="btn btn-sec" onclick="finProyBorrar()" style="color:var(--red)">Borrar</button>`:'<button class="btn btn-sec" onclick="cerrarModal()">Cancelar</button>'}<button class="btn btn-primary" onclick="finProyGuardar()">Guardar</button></div>`;
   gs('modal').classList.add('show');
 }
-function finProyGuardar(){ if(!canEdit()) return; const v=num(gs('finProyVtas').value)||0; let pct=num(gs('finProyPct').value); if(pct==null||isNaN(pct)) pct=70; let com=num(gs('finProyComis').value); if(com==null||isNaN(com)) com=0;
-  setFinProy({ventas_mes:Math.round(v),costo_pct:pct,sue_planta:Math.round(num(gs('finProySuePl').value)||0),sue_comercial:Math.round(num(gs('finProySueCo').value)||0),sue_superior:Math.round(num(gs('finProySueSu').value)||0),comision_pct:com,ts:new Date().toISOString()}); pushFinProy(); cerrarModal(); showToast('✓ Proyección guardada'); finSetTab('flujo'); }
+function finProyGuardar(){ if(!canEdit()) return; const v=num(gs('finProyVtas').value)||0; let pct=num(gs('finProyPct').value); if(pct==null||isNaN(pct)) pct=70; let com=num(gs('finProyComis').value); if(com==null||isNaN(com)) com=0; let crec=num(gs('finProyCrec').value); if(crec==null||isNaN(crec)) crec=0;
+  setFinProy({ventas_mes:Math.round(v),costo_pct:pct,crecimiento_pct:crec,sue_planta:Math.round(num(gs('finProySuePl').value)||0),sue_comercial:Math.round(num(gs('finProySueCo').value)||0),sue_superior:Math.round(num(gs('finProySueSu').value)||0),comision_pct:com,ts:new Date().toISOString()}); pushFinProy(); cerrarModal(); showToast('✓ Proyección guardada'); finSetTab('flujo'); }
 function finProyBorrar(){ if(!canEdit()) return; if(!confirm('¿Borrar la proyección de ventas?')) return; localStorage.removeItem('bio:finproy'); pushFinProy(); cerrarModal(); finSetTab('flujo'); }
 let _finFluModo='sem', _finFluDet=null;
 function finFluModo(m){ _finFluModo=m; finRenderFlujo(); }
@@ -3383,12 +3384,12 @@ function finRenderFlujo(){ const modo=_finFluModo; const per=ds=>{ if(!ds)return
   const hoyS=hoy(); const startPer=per(start<hoyS?start:hoyS); const curK=per(hoyS);
   const perRoll=ds=>{ const p=per(ds); return (p<startPer)?startPer:p; };
   const fp=getFinProy(); const ventasMes=(fp&&Number(fp.ventas_mes))||0; const costoPct=(fp&&fp.costo_pct!=null)?Number(fp.costo_pct):70;
-  const suePlanta=(fp&&Number(fp.sue_planta))||0, sueComercial=(fp&&Number(fp.sue_comercial))||0, sueSuperior=(fp&&Number(fp.sue_superior))||0; const sueldosMes=suePlanta+sueComercial+sueSuperior; const comisionPct=(fp&&Number(fp.comision_pct))||0;
+  const suePlanta=(fp&&Number(fp.sue_planta))||0, sueComercial=(fp&&Number(fp.sue_comercial))||0, sueSuperior=(fp&&Number(fp.sue_superior))||0; const sueldosMes=suePlanta+sueComercial+sueSuperior; const comisionPct=(fp&&Number(fp.comision_pct))||0; const crecPct=(fp&&fp.crecimiento_pct!=null)?Number(fp.crecimiento_pct):0;
   // barras de configuración: saldo inicial + ventas proyectadas
   const detBreak = fc?('₲ '+saldoGs.toLocaleString('es-PY')+(saldoUsd?' · US$ '+saldoUsd.toLocaleString('es-PY',{maximumFractionDigits:2})+' · TC '+tcIni.toLocaleString('es-PY'):'')):'';
   if(gs('finFluCaja')){
     const cajaRow=`<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:#eef4fb;border:1px solid #dbe6f2;border-radius:10px;padding:10px 13px"><div style="min-width:0"><div style="font-size:10px;color:var(--gray-500);text-transform:uppercase;letter-spacing:.4px">Saldo inicial de caja</div><div style="font-size:17px;font-weight:800;color:${saldoIni<0?'var(--red)':'#1e3f63'}">${fc?finGsFmt(saldoIni):'— sin cargar —'}</div>${fc?`<div style="font-size:10px;color:var(--gray-500)">${detBreak}</div><div style="font-size:10px;color:var(--gray-500)">se arrastra desde ${fmtFecha(start)}</div>`:'<div style="font-size:10px;color:var(--gray-500)">cargá el saldo y la fecha de arranque</div>'}</div><button class="btn btn-sec" style="margin-left:auto;font-size:12px;padding:8px 13px" onclick="finCajaModal()">${fc?'✎ Editar':'＋ Cargar saldo'}</button></div>`;
-    const _hayProy=(ventasMes||sueldosMes||comisionPct); const proyRow=`<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:#f2f9f4;border:1px solid #d6ecdb;border-radius:10px;padding:9px 13px;margin-top:8px"><div style="min-width:0"><div style="font-size:10px;color:var(--gray-500);text-transform:uppercase;letter-spacing:.4px">Proyección</div><div style="font-size:15px;font-weight:800;color:#1e3f63">${ventasMes?'Ventas '+finGsFmt(ventasMes)+' /mes':'— sin cargar —'}</div><div style="font-size:10px;color:var(--gray-500)">${_hayProy?('costo '+costoPct+'%'+(sueldosMes?' · sueldos '+finGsFmt(sueldosMes)+'/mes':'')+(comisionPct?' · comisiones '+comisionPct+'%':'')):'estimados mensuales para proyectar el flujo'}</div></div><button class="btn btn-sec" style="margin-left:auto;font-size:12px;padding:8px 13px" onclick="finProyModal()">${_hayProy?'✎ Editar':'＋ Cargar'}</button></div>`;
+    const _hayProy=(ventasMes||sueldosMes||comisionPct); const proyRow=`<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:#f2f9f4;border:1px solid #d6ecdb;border-radius:10px;padding:9px 13px;margin-top:8px"><div style="min-width:0"><div style="font-size:10px;color:var(--gray-500);text-transform:uppercase;letter-spacing:.4px">Proyección</div><div style="font-size:15px;font-weight:800;color:#1e3f63">${ventasMes?'Ventas '+finGsFmt(ventasMes)+' /mes'+(crecPct?' · +'+crecPct+'%/año':''):'— sin cargar —'}</div><div style="font-size:10px;color:var(--gray-500)">${_hayProy?('costo '+costoPct+'%'+(sueldosMes?' · sueldos '+finGsFmt(sueldosMes)+'/mes':'')+(comisionPct?' · comisiones '+comisionPct+'%':'')):'estimados mensuales para proyectar el flujo'}</div></div><button class="btn btn-sec" style="margin-left:auto;font-size:12px;padding:8px 13px" onclick="finProyModal()">${_hayProy?'✎ Editar':'＋ Cargar'}</button></div>`;
     gs('finFluCaja').innerHTML=cajaRow+proyRow;
   }
   const P={}; const touch=k=>{ if(k) P[k]=P[k]||{vproy:0,cxc:0,cobR:0,cprod:0,cxp:0,pagR:0,cheq:0,banco:0,capital:0,alquiler:0,deuda:0,spry:0,comis:0,sue:0}; return k; };
@@ -3427,10 +3428,11 @@ function finRenderFlujo(){ const modo=_finFluModo; const per=ds=>{ if(!ds)return
   const projByMonth={}; const hasProj=(ventasMes>0||sueldosMes>0||comisionPct>0);
   if(hasProj){ const monthAdd=(ym,n)=>{ let [y,m]=ym.split('-').map(Number); m+=n; y+=Math.floor((m-1)/12); m=((m-1)%12+12)%12+1; return y+'-'+String(m).padStart(2,'0'); };
     const sm=(start>hoyS?start:hoyS).slice(0,7); let mdm=sm; Object.keys(P).forEach(k=>{ const km=k.slice(0,7); if(km>mdm) mdm=km; });
-    const horizon=(monthAdd(sm,11)>mdm)?monthAdd(sm,11):mdm; let M=sm, guard=0;
-    while(M<=horizon && guard++<60){ const proj=Math.max(0,ventasMes-(salesMes[M]||0)); const cost=Math.max(0,Math.round(costoPct/100*ventasMes)-(insumoMes[M]||0));
+    const horizon=(monthAdd(sm,11)>mdm)?monthAdd(sm,11):mdm; let M=sm, guard=0, mi=0;
+    while(M<=horizon && guard++<60){ const factor=Math.pow(1+crecPct/100, mi/12); const vm=ventasMes*factor;
+      const proj=Math.max(0,Math.round(vm)-(salesMes[M]||0)); const cost=Math.max(0,Math.round(costoPct/100*vm)-(insumoMes[M]||0));
       const spry=Math.max(0,sueldosMes-(sueldoRealMes[M]||0)); const ventasTot=proj+(salesMes[M]||0); const comis=Math.max(0,Math.round(comisionPct/100*ventasTot)-(comisionRealMes[M]||0));
-      projByMonth[M]={proj,cost,spry,comis}; gVproy+=proj; gCprod+=cost; gSpry+=spry; gComis+=comis; touch(perRoll(M+'-01')); M=monthAdd(M,1); } }
+      projByMonth[M]={proj,cost,spry,comis}; gVproy+=proj; gCprod+=cost; gSpry+=spry; gComis+=comis; touch(perRoll(M+'-01')); M=monthAdd(M,1); mi++; } }
   // tarjetas resumen
   const porCobrar=gCxc, porPagar=gCxp+gSue+gCheq+gBanco, saldoFin=saldoIni+(gVproy+gCxc+gCobR)-(gCprod+gCxp+gPagR+gCheq+gBanco+gSue+gSpry+gComis);
   if(gs('finFluResumen')) gs('finFluResumen').innerHTML=`<div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -3440,15 +3442,17 @@ function finRenderFlujo(){ const modo=_finFluModo; const per=ds=>{ if(!ds)return
   // períodos continuos desde el arranque hacia adelante
   const set={...P}; set[startPer]=set[startPer]||1; set[curK]=set[curK]||1; let ks=Object.keys(set).sort();
   let periods=[]; if(ks.length){ if(modo==='sem'){ let d=_fluDate(ks[0]); const e=_fluDate(ks[ks.length-1]); let g=0; while(d<=e && g++<200){ periods.push(_fluKey(d)); d.setDate(d.getDate()+7); } } else { let [y,m]=ks[0].split('-').map(Number); const [ye,me]=ks[ks.length-1].split('-').map(Number); let g=0; while((y<ye||(y===ye&&m<=me)) && g++<200){ periods.push(y+'-'+String(m).padStart(2,'0')); m++; if(m>12){m=1;y++;} } } }
-  // distribuir el proyectado mensual (ventas, costos, sueldos, comisiones) entre los períodos de cada mes
-  if(hasProj){ const byMonth={}; periods.forEach(k=>{ const mo=k.slice(0,7); (byMonth[mo]=byMonth[mo]||[]).push(k); });
-    Object.keys(projByMonth).forEach(M=>{ const wks=byMonth[M]||[]; if(!wks.length) return; const pm=projByMonth[M]; const n=wks.length; const pv=Math.round(pm.proj/n), pc=Math.round(pm.cost/n), ps=Math.round((pm.spry||0)/n), pco=Math.round((pm.comis||0)/n); const suf=(modo==='sem')?' (parte de la semana)':''; const mlbl=finMesLbl(M);
-      wks.forEach(k=>{ touch(k);
-        if(pv){ P[k].vproy=(P[k].vproy||0)+pv; (DET[k]=DET[k]||{}); (DET[k].vproy=DET[k].vproy||[]).push({desc:'Ventas estimadas de '+mlbl+suf,monto:pv,fecha:''}); }
-        if(pc){ P[k].cprod=(P[k].cprod||0)+pc; (DET[k]=DET[k]||{}); (DET[k].cprod=DET[k].cprod||[]).push({desc:'Costo estimado de '+mlbl+suf,monto:pc,fecha:''}); }
-        if(ps){ P[k].spry=(P[k].spry||0)+ps; (DET[k]=DET[k]||{}); (DET[k].spry=DET[k].spry||[]).push({desc:'Sueldos estimados de '+mlbl+suf,monto:ps,fecha:''}); }
-        if(pco){ P[k].comis=(P[k].comis||0)+pco; (DET[k]=DET[k]||{}); (DET[k].comis=DET[k].comis||[]).push({desc:'Comisiones ('+comisionPct+'% de ventas) de '+mlbl+suf,monto:pco,fecha:''}); }
-      }); }); }
+  // distribuir el proyectado mensual entre los períodos (por días, para que cada semana muestre lo mismo)
+  if(hasProj){ const dim=ym=>{ const p=ym.split('-').map(Number); return new Date(p[0],p[1],0).getDate(); };
+    const put=(k,pm,frac,mlbl,suf)=>{ touch(k); const pv=Math.round(pm.proj*frac), pc=Math.round(pm.cost*frac), ps=Math.round((pm.spry||0)*frac), pco=Math.round((pm.comis||0)*frac);
+      if(pv){ P[k].vproy=(P[k].vproy||0)+pv; (DET[k]=DET[k]||{}); (DET[k].vproy=DET[k].vproy||[]).push({desc:'Ventas estimadas de '+mlbl+suf,monto:pv,fecha:''}); }
+      if(pc){ P[k].cprod=(P[k].cprod||0)+pc; (DET[k]=DET[k]||{}); (DET[k].cprod=DET[k].cprod||[]).push({desc:'Costo estimado de '+mlbl+suf,monto:pc,fecha:''}); }
+      if(ps){ P[k].spry=(P[k].spry||0)+ps; (DET[k]=DET[k]||{}); (DET[k].spry=DET[k].spry||[]).push({desc:'Sueldos estimados de '+mlbl+suf,monto:ps,fecha:''}); }
+      if(pco){ P[k].comis=(P[k].comis||0)+pco; (DET[k]=DET[k]||{}); (DET[k].comis=DET[k].comis||[]).push({desc:'Comisiones ('+comisionPct+'% de ventas) de '+mlbl+suf,monto:pco,fecha:''}); } };
+    Object.keys(projByMonth).forEach(M=>{ const pm=projByMonth[M]; const mlbl=finMesLbl(M);
+      if(modo!=='sem'){ if(periods.indexOf(M)>=0) put(M,pm,1,mlbl,''); }
+      else { const dm=dim(M); periods.forEach(k=>{ const b=_fluDate(k); let days=0; for(let i=0;i<7;i++){ const d=new Date(b); d.setDate(d.getDate()+i); if(_fluKey(d).slice(0,7)===M) days++; } if(days>0) put(k,pm,days/dm,mlbl,' (parte de la semana)'); }); }
+    }); }
   periods.forEach(k=>{ const p=P[k]||{vproy:0,cxc:0,cobR:0,cprod:0,cxp:0,pagR:0,cheq:0,banco:0,capital:0,alquiler:0,deuda:0,spry:0,comis:0,sue:0}; p.totIn=(p.vproy||0)+p.cxc+(p.cobR||0); p.totEg=(p.cprod||0)+p.cxp+(p.pagR||0)+p.cheq+(p.banco||0)+(p.capital||0)+(p.alquiler||0)+(p.deuda||0)+(p.spry||0)+(p.comis||0)+p.sue; p.neto=p.totIn-p.totEg; P[k]=p; });
   _finFluDet={det:DET,modo:modo};
   let ac=saldoIni; periods.forEach(k=>{ ac+=P[k].neto; P[k].acum=ac; });
