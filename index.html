@@ -497,7 +497,7 @@ textarea{resize:vertical;min-height:66px}
       <button class="fintab" id="finT_banco" onclick="finSetTab('banco')">🏦 Fijos</button>
       <button class="fintab" id="finT_flujo" onclick="finSetTab('flujo')">📊 Flujo</button>
     </div>
-    <div style="font-size:9px;color:var(--gray-400);text-align:right;margin:-6px 0 8px">BioInnova <span id="finVer">v81</span></div>
+    <div style="font-size:9px;color:var(--gray-400);text-align:right;margin:-6px 0 8px">BioInnova <span id="finVer">v82</span></div>
     <div id="finW_ventas">
       <button class="btn btn-primary btn-block" style="margin-bottom:8px" onclick="finVentaModal()">＋ Nueva venta</button>
       <input type="search" id="finVBuscar" placeholder="🔎 Buscar cliente / factura…" oninput="finRenderVentas()" style="margin-bottom:8px">
@@ -3351,7 +3351,7 @@ function finCajaBorrar(){ if(!canEdit()) return; if(!confirm('¿Borrar el saldo 
 function finProyModal(){ if(!canEdit()){ showToast('Sin permiso'); return; } const fp=getFinProy()||{};
   gs('modalBox').innerHTML=`<h3>Proyección del flujo</h3>
     <div style="font-size:12px;color:var(--gray-600);margin-bottom:8px">Estimados mensuales para proyectar el flujo hacia adelante. Cada mes, lo que ya se concretó (ventas reales, sueldos cargados, facturas de insumo) reemplaza al estimado.</div>
-    <div class="row2"><div><label class="fl">Ventas estimadas /mes (₲)</label><input type="number" id="finProyVtas" value="${fp.ventas_mes||''}" placeholder="750000000"></div><div><label class="fl">Crecimiento anual (%)</label><input type="number" step="0.1" id="finProyCrec" value="${fp.crecimiento_pct!=null?fp.crecimiento_pct:25}" placeholder="25"></div></div>
+    <div class="row2"><div><label class="fl">Ventas estimadas /mes (₲)</label><input type="number" id="finProyVtas" value="${fp.ventas_mes||''}" placeholder="750000000"></div><div><label class="fl">Crecimiento anual (%)</label><input type="number" step="0.1" id="finProyCrec" value="${fp.crecimiento_pct!=null?fp.crecimiento_pct:15}" placeholder="15"></div></div>
     <label class="fl">Costo de producción (%)</label><input type="number" id="finProyPct" value="${fp.costo_pct!=null?fp.costo_pct:70}" placeholder="70">
     <div style="font-size:11px;color:var(--gray-500);margin-top:10px;font-weight:600">Sueldos estimados /mes (₲)</div>
     <div class="row3" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px"><div><label class="fl">Planta</label><input type="number" id="finProySuePl" value="${fp.sue_planta||''}" placeholder="30000000"></div><div><label class="fl">Comerciales</label><input type="number" id="finProySueCo" value="${fp.sue_comercial||''}" placeholder="28000000"></div><div><label class="fl">Superior</label><input type="number" id="finProySueSu" value="${fp.sue_superior||''}" placeholder="17000000"></div></div>
@@ -3447,7 +3447,7 @@ function finRenderFlujo(){ const modo=_finFluModo; const per=ds=>{ if(!ds)return
     const put=(k,pm,frac,mlbl,suf)=>{ touch(k); const pv=Math.round(pm.proj*frac), pc=Math.round(pm.cost*frac), ps=Math.round((pm.spry||0)*frac), pco=Math.round((pm.comis||0)*frac);
       if(pv){ P[k].vproy=(P[k].vproy||0)+pv; (DET[k]=DET[k]||{}); (DET[k].vproy=DET[k].vproy||[]).push({desc:'Ventas estimadas de '+mlbl+suf,monto:pv,fecha:''}); }
       if(pc){ P[k].cprod=(P[k].cprod||0)+pc; (DET[k]=DET[k]||{}); (DET[k].cprod=DET[k].cprod||[]).push({desc:'Costo estimado de '+mlbl+suf,monto:pc,fecha:''}); }
-      if(ps){ P[k].spry=(P[k].spry||0)+ps; (DET[k]=DET[k]||{}); (DET[k].spry=DET[k].spry||[]).push({desc:'Sueldos estimados de '+mlbl+suf,monto:ps,fecha:''}); }
+      if(ps){ P[k].spry=(P[k].spry||0)+ps; (DET[k]=DET[k]||{}); const dl=(DET[k].spry=DET[k].spry||[]); const psP=sueldosMes?Math.round(ps*suePlanta/sueldosMes):0, psC=sueldosMes?Math.round(ps*sueComercial/sueldosMes):0, psS=ps-psP-psC; if(psP) dl.push({desc:'Planta ('+mlbl+')'+suf,monto:psP,fecha:''}); if(psC) dl.push({desc:'Comerciales ('+mlbl+')'+suf,monto:psC,fecha:''}); if(psS) dl.push({desc:'Superior ('+mlbl+')'+suf,monto:psS,fecha:''}); }
       if(pco){ P[k].comis=(P[k].comis||0)+pco; (DET[k]=DET[k]||{}); (DET[k].comis=DET[k].comis||[]).push({desc:'Comisiones ('+comisionPct+'% de ventas) de '+mlbl+suf,monto:pco,fecha:''}); } };
     Object.keys(projByMonth).forEach(M=>{ const pm=projByMonth[M]; const mlbl=finMesLbl(M);
       if(modo!=='sem'){ if(periods.indexOf(M)>=0) put(M,pm,1,mlbl,''); }
