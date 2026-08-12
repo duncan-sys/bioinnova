@@ -260,6 +260,7 @@ textarea{resize:vertical;min-height:66px}
     </div>
     <div id="prodCatWrap">
       <button class="btn btn-primary btn-block" id="btnNuevoProducto" style="margin-bottom:10px;display:none" onclick="productoEditor()">＋ Nuevo producto</button>
+      <button class="btn btn-sec btn-block" id="btnDesglosarNuc" style="margin-bottom:10px;display:none;font-size:12px" onclick="desglosarNucleos()">🧬 Desglosar núcleos en fórmulas</button>
       <div style="margin-bottom:10px"><input type="search" id="prodBuscar" placeholder="🔎 Buscar producto…" oninput="renderProductosCat()"></div>
       <div class="card"><div class="card-h"><span>Productos terminados</span><span id="prodCount" style="font-weight:500;color:var(--gray-400)"></span></div><div id="prodList"></div></div>
     </div>
@@ -497,7 +498,7 @@ textarea{resize:vertical;min-height:66px}
       <button class="fintab" id="finT_banco" onclick="finSetTab('banco')">🏦 Fijos</button>
       <button class="fintab" id="finT_flujo" onclick="finSetTab('flujo')">📊 Flujo</button>
     </div>
-    <div style="font-size:9px;color:var(--gray-400);text-align:right;margin:-6px 0 8px">BioInnova <span id="finVer">v86</span></div>
+    <div style="font-size:9px;color:var(--gray-400);text-align:right;margin:-6px 0 8px">BioInnova <span id="finVer">v87</span></div>
     <div id="finW_ventas">
       <button class="btn btn-primary btn-block" style="margin-bottom:8px" onclick="finVentaModal()">＋ Nueva venta</button>
       <input type="search" id="finVBuscar" placeholder="🔎 Buscar cliente / factura…" oninput="finRenderVentas()" style="margin-bottom:8px">
@@ -770,6 +771,32 @@ const PL_FORMULAS_BASE=[
 // Fórmulas propias (agregadas desde la app) — se mezclan con las de fábrica
 function getFormulasExtra(){ return getArr('bio:formulas'); }
 function saveFormulasExtra(a){ setArr('bio:formulas',a); rebuildFormulas(); }
+// ── Desglosar núcleos: reemplaza el núcleo (como ingrediente) por sus insumos propios, según la inclusión ──
+const NUCLEO_CODES=['BIO25-001','BIO25-002','BIO25-003','BIO25-004','BIO25-014'];
+let _desgloseCambios=null;
+function _explodeFormula(f, nuc){ const out=[], byCode={}; const kof=i=>String(i.c||('N:'+(i.n||''))).toUpperCase();
+  (f.ins||[]).forEach(ing=>{ if(nuc[String(ing.c||'').toUpperCase()]) return; const k=kof(ing); if(byCode[k]!=null) out[byCode[k]].p+=Number(ing.p)||0; else { byCode[k]=out.length; out.push({c:ing.c||'',n:ing.n||'',p:Number(ing.p)||0,t:ing.t||'p'}); } });
+  (f.ins||[]).forEach(ing=>{ const nk=String(ing.c||'').toUpperCase(); const N=nuc[nk]; if(!N) return; const incl=Number(ing.p)||0; (N.ins||[]).forEach(ni=>{ const amt=incl*(Number(ni.p)||0)/100; const k=kof(ni); if(byCode[k]!=null) out[byCode[k]].p+=amt; else { byCode[k]=out.length; out.push({c:ni.c||'',n:ni.n||'',p:amt,t:ni.t||'p'}); } }); });
+  out.forEach(o=>o.p=Math.round(o.p*10000)/10000); return out; }
+function desglosarNucleos(){ if(!puedeEditarFormula()){ showToast('Sin permiso'); return; }
+  const nuc={}; PL_FORMULAS.forEach(f=>{ if(f.ins && NUCLEO_CODES.indexOf(String(f.c||'').toUpperCase())>=0) nuc[String(f.c).toUpperCase()]=f; });
+  const faltan=NUCLEO_CODES.filter(c=>!nuc[c]);
+  const cambios=[]; PL_FORMULAS.forEach(f=>{ if(!f.ins) return; if(NUCLEO_CODES.indexOf(String(f.c||'').toUpperCase())>=0) return; const usa=f.ins.filter(i=>nuc[String(i.c||'').toUpperCase()]); if(!usa.length) return; cambios.push({f, ins:_explodeFormula(f,nuc), nucs:usa.map(i=>i.c)}); });
+  _desgloseCambios=cambios;
+  const lista=cambios.map(x=>`<div style="font-size:12px;padding:4px 0;border-bottom:1px solid var(--gray-100)">${esc(x.f.n||x.f.c)} <span style="color:var(--gray-400);font-size:10px">← ${esc(x.nucs.join(', '))}</span></div>`).join('');
+  gs('modalBox').innerHTML=`<h3>Desglosar núcleos</h3>
+    <div style="font-size:12px;color:var(--gray-600);margin-bottom:8px">Reemplaza el núcleo por sus insumos propios (según la inclusión) en <b>${cambios.length}</b> fórmula(s), fusionando insumos repetidos. Los núcleos quedan como productos aparte. Se guarda como fórmula propia (revisable/reversible).</div>
+    ${faltan.length?`<div style="font-size:11px;color:var(--red);margin-bottom:8px">⚠ No tengo cargada la fórmula de: <b>${faltan.join(', ')}</b>. Las fórmulas que usen esos núcleos no se desglosarán en esa parte.</div>`:''}
+    <div style="max-height:42vh;overflow:auto;background:var(--gray-100);border-radius:8px;padding:8px 10px">${lista||'<div class="empty" style="padding:8px">Ninguna fórmula usa estos núcleos.</div>'}</div>
+    <div class="row2" style="margin-top:12px"><button class="btn btn-sec" onclick="cerrarModal()">Cancelar</button><button class="btn btn-primary" onclick="desglosarNucleosOk()"${cambios.length?'':' disabled'}>Aplicar a ${cambios.length}</button></div>`;
+  gs('modal').classList.add('show');
+}
+function desglosarNucleosOk(){ if(!puedeEditarFormula()) return; const cambios=_desgloseCambios||[]; if(!cambios.length){ cerrarModal(); return; }
+  let fa=getFormulasExtra(); const now=new Date().toISOString(); const recs=[];
+  cambios.forEach(x=>{ const f=x.f; const rec={ id:'FM-'+(f.c||f.n), c:f.c||'', n:f.n||'', kg:f.kg||30, ins:x.ins, custom:true, ts:now, pending:true }; const key=precioKey(rec); fa=fa.filter(y=>precioKey(y)!==key); fa.unshift(rec); recs.push(rec); });
+  saveFormulasExtra(fa); recs.forEach(rec=>{ if(typeof cloudPush==='function') cloudPush('formula',rec); });
+  cerrarModal(); showToast('✓ '+cambios.length+' fórmulas desglosadas'); if(typeof renderProductosCat==='function') renderProductosCat();
+}
 let PL_FORMULAS = PL_FORMULAS_BASE.slice();
 function rebuildFormulas(){ const byKey={}; PL_FORMULAS_BASE.forEach(f=>byKey[precioKey(f)]=f); getFormulasExtra().forEach(f=>{ if(f&&(f.c||f.n)) byKey[precioKey(f)]=f; }); PL_FORMULAS = Object.values(byKey); }
 // Bolsas de un producto por kg de producción
@@ -2667,7 +2694,7 @@ function openProductos(){ if(!(puedeVer('formulas')||puedeVer('inventario'))){ s
 function prodSetTab(t){ _prodTab=t; const cat=t==='cat', inv=t==='inv', gar=t==='gar';
   gs('prodCatWrap').style.display=cat?'':'none'; gs('prodInvWrap').style.display=inv?'':'none'; if(gs('prodGarWrap')) gs('prodGarWrap').style.display=gar?'':'none';
   gs('prodTabCat').className='btn '+(cat?'btn-primary':'btn-sec'); gs('prodTabInv').className='btn '+(inv?'btn-primary':'btn-sec'); if(gs('prodTabGar')) gs('prodTabGar').className='btn '+(gar?'btn-primary':'btn-sec');
-  if(cat){ const b=gs('btnNuevoProducto'); if(b) b.style.display=puedeEditarFormula()?'':'none'; renderProductosCat(); } else if(inv) renderProductosInv(); else renderProductosGar();
+  if(cat){ const b=gs('btnNuevoProducto'); if(b) b.style.display=puedeEditarFormula()?'':'none'; const bd=gs('btnDesglosarNuc'); if(bd) bd.style.display=puedeEditarFormula()?'':'none'; renderProductosCat(); } else if(inv) renderProductosInv(); else renderProductosGar();
 }
 function renderProductosCat(){ const q=(gs('prodBuscar').value||'').trim().toLowerCase(); let ls=precioList(); if(q) ls=ls.filter(p=>((p.n||'')+' '+(p.c||'')).toLowerCase().includes(q)); if(gs('prodCount')) gs('prodCount').textContent=ls.length+' productos';
   gs('prodList').innerHTML=ls.map(p=>{ const key=precioKey(p); const st=ptStock(key); const fx=tieneFormula(p);
