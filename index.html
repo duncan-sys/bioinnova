@@ -497,7 +497,7 @@ textarea{resize:vertical;min-height:66px}
       <button class="fintab" id="finT_banco" onclick="finSetTab('banco')">🏦 Fijos</button>
       <button class="fintab" id="finT_flujo" onclick="finSetTab('flujo')">📊 Flujo</button>
     </div>
-    <div style="font-size:9px;color:var(--gray-400);text-align:right;margin:-6px 0 8px">BioInnova <span id="finVer">v85</span></div>
+    <div style="font-size:9px;color:var(--gray-400);text-align:right;margin:-6px 0 8px">BioInnova <span id="finVer">v86</span></div>
     <div id="finW_ventas">
       <button class="btn btn-primary btn-block" style="margin-bottom:8px" onclick="finVentaModal()">＋ Nueva venta</button>
       <input type="search" id="finVBuscar" placeholder="🔎 Buscar cliente / factura…" oninput="finRenderVentas()" style="margin-bottom:8px">
@@ -2307,7 +2307,7 @@ function renderViatDet(){
     <div style="font-size:12px;color:var(--gray-600);margin-top:4px">Anticipo <b>${gsFmt(r.anticipo)}</b> · ${fmtFecha(r.anticipo_fecha)}${r.anticipo_ref?' · '+esc(r.anticipo_ref):''} ${(esGerente()&&r.estado!=='liquidada')?`<span onclick="viatEditHdr()" style="color:var(--green);cursor:pointer">✎</span>`:''}</div>`;
   const gl=(r.gastos||[]).slice().sort((a,b)=>String(a.fecha).localeCompare(String(b.fecha)));
   gs('viatGCount').textContent=gl.length?gl.length+' gastos':'';
-  gs('viatGList').innerHTML= gl.length? gl.map(g=>`<div class="li" style="cursor:${editable?'pointer':'default'}" ${editable?`onclick="viatGastoModal('${g.id}')"`:''}><div style="min-width:0"><div class="li-t">${esc(g.concepto||g.categoria||'Gasto')}</div><div class="li-s">${fmtFecha(g.fecha)} · ${esc(g.categoria||'')}${g.proveedor?' · '+esc(g.proveedor):''}${g.factura?' · Fact '+esc(g.factura):''}</div></div><div style="font-weight:700;flex-shrink:0">${gsFmt(g.monto)}</div></div>`).join('') : '<div class="empty">Sin gastos aún.</div>';
+  gs('viatGList').innerHTML= gl.length? gl.map(g=>`<div class="li" style="cursor:${editable?'pointer':'default'}" ${editable?`onclick="viatGastoModal('${g.id}')"`:''}><div style="min-width:0"><div class="li-t">${esc(g.concepto||g.categoria||'Gasto')}</div><div class="li-s">${fmtFecha(g.fecha)} · ${esc(g.categoria||'')}${g.proveedor?' · '+esc(g.proveedor):''}${g.ruc?' · RUC '+esc(g.ruc):''}${g.factura?' · Fact '+esc(g.factura):''}</div></div><div style="font-weight:700;flex-shrink:0">${gsFmt(g.monto)}</div></div>`).join('') : '<div class="empty">Sin gastos aún.</div>';
   gs('btnAddGasto').style.display=editable?'':'none';
   const salTxt=Math.abs(sal)<1?'Cerró justo (saldo 0)':(sal>0?`Sobrante a devolver: <b style="color:var(--green)">${gsFmt(sal)}</b>`:`A acreditar al comercial: <b style="color:var(--red)">${gsFmt(-sal)}</b>`);
   gs('viatResumen').innerHTML=`<div style="display:flex;justify-content:space-between"><span>Anticipo</span><b>${gsFmt(r.anticipo)}</b></div>
@@ -2326,13 +2326,14 @@ function viatGastoModal(gid){ const r=getRend().find(x=>x.id===curViatId); if(!r
    <div class="row2"><div><label class="fl">Fecha</label><input type="date" id="gvFecha" value="${g?g.fecha:hoy()}"></div><div><label class="fl">Monto (₲)</label><input type="number" id="gvMonto" inputmode="numeric" placeholder="0" value="${g?g.monto:''}"></div></div>
    <label class="fl">Categoría</label><select id="gvCat">${VIAT_CATS.map(c=>`<option ${g&&g.categoria===c?'selected':''}>${c}</option>`).join('')}</select>
    <label class="fl">Concepto / detalle</label><input id="gvConcepto" placeholder="Ej: carga de combustible" value="${g?esc(g.concepto):''}">
-   <div class="row2"><div><label class="fl">Proveedor</label><input id="gvProv" value="${g?esc(g.proveedor):''}"></div><div><label class="fl">N° factura</label><input id="gvFact" value="${g?esc(g.factura):''}"></div></div>
+   <label class="fl">Proveedor</label><input id="gvProv" value="${g?esc(g.proveedor):''}">
+   <div class="row2"><div><label class="fl">RUC</label><input id="gvRuc" inputmode="numeric" placeholder="ej: 80012345-6" value="${g?esc(g.ruc):''}"></div><div><label class="fl">N° factura</label><input id="gvFact" value="${g?esc(g.factura):''}"></div></div>
    <div class="row2" style="margin-top:12px"><button class="btn btn-sec" onclick="${g?`viatBorrarGasto('${g.id}')`:'cerrarModal()'}"${g?' style="color:var(--red)"':''}>${g?'Borrar':'Cancelar'}</button><button class="btn btn-primary" onclick="viatGuardarGasto()">Guardar</button></div>`;
   gs('modal').classList.add('show');
 }
 function viatGuardarGasto(){ const a=getRend(); const r=a.find(x=>x.id===curViatId); if(!r) return;
   const monto=num(gs('gvMonto').value); if(!monto||monto<=0){ showToast('Ingresá el monto'); return; }
-  const g={ id:_viatGId||('GV-'+Date.now()), fecha:gs('gvFecha').value||hoy(), monto:Math.abs(monto), categoria:gs('gvCat').value, concepto:(gs('gvConcepto').value||'').trim(), proveedor:(gs('gvProv').value||'').trim(), factura:(gs('gvFact').value||'').trim() };
+  const g={ id:_viatGId||('GV-'+Date.now()), fecha:gs('gvFecha').value||hoy(), monto:Math.abs(monto), categoria:gs('gvCat').value, concepto:(gs('gvConcepto').value||'').trim(), proveedor:(gs('gvProv').value||'').trim(), ruc:(gs('gvRuc').value||'').trim(), factura:(gs('gvFact').value||'').trim() };
   r.gastos=r.gastos||[]; if(_viatGId){ r.gastos=r.gastos.map(x=>x.id===_viatGId?g:x); } else r.gastos.push(g);
   r.ts=new Date().toISOString(); r.pending=true; saveRend(a); cloudPush('viat',r); _viatGId=null; cerrarModal(); renderViatDet();
 }
@@ -2363,7 +2364,7 @@ function viatGuardarHdr(){ const a=getRend(); const r=a.find(x=>x.id===curViatId
 function viatBorrar(id){ if(!esGerente()){ showToast('Solo el gerente'); return; } if(!confirm('¿Borrar esta rendición completa?')) return; saveRend(getRend().filter(x=>x.id!==id)); cloudDelete('viat',id); openViaticos(); }
 function viatPrint(){ const r=getRend().find(x=>x.id===curViatId); if(!r) return; const w=window.open('','_blank'); if(!w){ showToast('Permití las ventanas emergentes'); return; }
   const base=`${location.origin}${location.pathname.replace(/[^/]*$/,'')}logo.jpg`; const tot=viatTotal(r), sal=viatSaldo(r);
-  const filas=(r.gastos||[]).slice().sort((a,b)=>String(a.fecha).localeCompare(String(b.fecha))).map(g=>`<tr><td>${fmtFecha(g.fecha)}</td><td>${esc(g.categoria||'')}</td><td>${esc(g.concepto||'')}</td><td>${esc(g.proveedor||'')}</td><td>${esc(g.factura||'')}</td><td class="r">${gsFmt(g.monto)}</td></tr>`).join('');
+  const filas=(r.gastos||[]).slice().sort((a,b)=>String(a.fecha).localeCompare(String(b.fecha))).map(g=>`<tr><td>${fmtFecha(g.fecha)}</td><td>${esc(g.categoria||'')}</td><td>${esc(g.concepto||'')}</td><td>${esc(g.proveedor||'')}${g.ruc?'<br><span style="font-size:9px;color:#666">RUC '+esc(g.ruc)+'</span>':''}</td><td>${esc(g.factura||'')}</td><td class="r">${gsFmt(g.monto)}</td></tr>`).join('');
   const salLbl=Math.abs(sal)<1?'Saldo (cerró justo)':(sal>0?'SOBRANTE A DEVOLVER por el comercial':'A ACREDITAR al comercial');
   w.document.write(`<html><head><meta charset="utf-8"><title>Rendición viáticos — ${esc(r.comercial)}</title><style>
    *{box-sizing:border-box} body{font-family:Arial,sans-serif;color:#1a202c;font-size:12px;margin:0} .wrap{max-width:800px;margin:0 auto;padding:24px}
