@@ -497,7 +497,7 @@ textarea{resize:vertical;min-height:66px}
       <button class="fintab" id="finT_banco" onclick="finSetTab('banco')">🏦 Fijos</button>
       <button class="fintab" id="finT_flujo" onclick="finSetTab('flujo')">📊 Flujo</button>
     </div>
-    <div style="font-size:9px;color:var(--gray-400);text-align:right;margin:-6px 0 8px">BioInnova <span id="finVer">v77</span></div>
+    <div style="font-size:9px;color:var(--gray-400);text-align:right;margin:-6px 0 8px">BioInnova <span id="finVer">v78</span></div>
     <div id="finW_ventas">
       <button class="btn btn-primary btn-block" style="margin-bottom:8px" onclick="finVentaModal()">＋ Nueva venta</button>
       <input type="search" id="finVBuscar" placeholder="🔎 Buscar cliente / factura…" oninput="finRenderVentas()" style="margin-bottom:8px">
@@ -575,7 +575,7 @@ function num(v){ if(v==null||v==='')return null; const n=parseFloat(String(v).re
 const CATEGORIAS=['Cría','Recría','Terminación'];
 const KPIS={
  'Cría':[
-   {k:'Condición corporal de la vaca',u:'escala 1–5',min:3,max:3.5},
+   {k:'Condición corporal de la vaca',u:'escala 1–5',min:1,max:5},
    {k:'Consumo del producto',u:'g/an/día',min:90,max:120},
    {k:'GMD ternero pre-destete',u:'kg/día',min:0.5,max:0.8},
    {k:'Peso al destete',u:'kg',min:150,max:240},
@@ -587,7 +587,7 @@ const KPIS={
    {k:'Peso de entrada',u:'kg',min:160,max:240},
    {k:'GMD',u:'kg/día',min:0.4,max:0.8},
    {k:'Consumo suplemento',u:'% PV',min:0.3,max:0.5},
-   {k:'Condición corporal',u:'escala 1–5',min:3,max:3.5},
+   {k:'Condición corporal',u:'escala 1–5',min:1,max:5},
    {k:'Uniformidad del lote (CV)',u:'%',min:0,max:10},
    {k:'Disponibilidad de pastura',u:'kg MS/ha',min:1500,max:3000},
  ],
@@ -606,7 +606,7 @@ const KPIS={
 // Cría se subdivide en 3 componentes con suplementación y KPIs independientes.
 const KPIS_CRIA={
  vacas:[
-   {k:'Condición corporal de la vaca',u:'escala 1–5',min:3,max:3.5},
+   {k:'Condición corporal de la vaca',u:'escala 1–5',min:1,max:5},
    {k:'Consumo del producto',u:'g/an/día',min:90,max:120},
    {k:'Tasa de preñez',u:'%',min:70,max:95},
    {k:'Tasa de marcación',u:'%',min:65,max:92},
@@ -620,7 +620,7 @@ const KPIS_CRIA={
    {k:'Mortandad de terneros',u:'%',min:0,max:3},
  ],
  toros:[
-   {k:'Condición corporal',u:'escala 1–5',min:3,max:3.5},
+   {k:'Condición corporal',u:'escala 1–5',min:1,max:5},
    {k:'Circunferencia escrotal',u:'cm',min:32,max:50},
    {k:'Motilidad espermática',u:'%',min:60,max:100},
    {k:'Morfología (% normales)',u:'%',min:70,max:100},
@@ -1095,8 +1095,8 @@ const SYNC_DEFS = {
 };
 function getPrestamos(){ return getArr('bio:prestamos'); }
 function savePrestamos(a){ setArr('bio:prestamos',a); }
-function prestamoRow(p){ return { id:p.id, concepto:p.concepto||'', banco:p.banco||'', grupo:p.grupo||'banco', tipo:p.tipo||'unica', monto:Number(p.monto)||0, moneda:p.moneda||'PYG', tc:p.tc||null, fecha:p.fecha||null, cuotas_n:Number(p.cuotas_n)||1, estado:p.estado||'activo', nota:p.nota||'', por:p.por||'', ts:p.ts||null }; }
-function rowPrestamo(r){ return { id:r.id, concepto:r.concepto||'', banco:r.banco||'', grupo:r.grupo||'banco', tipo:r.tipo||'unica', monto:Number(r.monto)||0, moneda:r.moneda||'PYG', tc:r.tc?Number(r.tc):null, fecha:r.fecha||'', cuotas_n:Number(r.cuotas_n)||1, estado:r.estado||'activo', nota:r.nota||'', por:r.por||'', ts:r.ts, pending:false }; }
+function prestamoRow(p){ return { id:p.id, concepto:p.concepto||'', banco:p.banco||'', grupo:p.grupo||'banco', tipo:p.tipo||'unica', monto:Number(p.monto)||0, moneda:p.moneda||'PYG', tc:p.tc||null, fecha:p.fecha||null, cuotas_n:Number(p.cuotas_n)||1, rolling:!!p.rolling, estado:p.estado||'activo', nota:p.nota||'', por:p.por||'', ts:p.ts||null }; }
+function rowPrestamo(r){ return { id:r.id, concepto:r.concepto||'', banco:r.banco||'', grupo:r.grupo||'banco', tipo:r.tipo||'unica', monto:Number(r.monto)||0, moneda:r.moneda||'PYG', tc:r.tc?Number(r.tc):null, fecha:r.fecha||'', cuotas_n:Number(r.cuotas_n)||1, rolling:!!r.rolling, estado:r.estado||'activo', nota:r.nota||'', por:r.por||'', ts:r.ts, pending:false }; }
 function getCheques(){ return getArr('bio:cheques'); }
 function saveCheques(a){ setArr('bio:cheques',a); }
 function chequeRow(c){ return { id:c.id, proveedor:c.proveedor||'', compra_id:c.compra_id||'', factura:c.factura||'', banco:c.banco||'', num:c.num||'', monto:Number(c.monto)||0, moneda:c.moneda||'PYG', tc:c.tc||null, fecha:c.fecha||null, emitido:c.emitido||null, estado:c.estado||'pendiente', nota:c.nota||'', por:c.por||'', ts:c.ts||null }; }
@@ -3300,25 +3300,29 @@ function finChequeEstado(id,caido){ if(!canEdit()) return; const a=getCheques();
 function finChequeBorrar(id){ if(!canEdit()) return; if(!confirm('¿Borrar este cheque?')) return; saveCheques(getCheques().filter(x=>x.id!==id)); cloudDelete('cheque',id); cerrarModal(); finSetTab(_finTab); }
 // ---- Cuotas de banco / préstamos ----
 function _prestamoFechas(pr){ const out=[]; if(!pr||!pr.fecha) return out; const n=Math.max(1,pr.cuotas_n||1);
-  if(pr.tipo==='mensual'){ const b=_fluDate(pr.fecha); for(let i=0;i<n;i++){ const d=new Date(b.getFullYear(),b.getMonth()+i,b.getDate()); out.push({fecha:_fluKey(d),monto:pr.monto}); } }
-  else if(pr.tipo==='semanal'){ const b=_fluDate(pr.fecha); for(let i=0;i<n;i++){ const d=new Date(b); d.setDate(d.getDate()+i*7); out.push({fecha:_fluKey(d),monto:pr.monto}); } }
+  // "se mueve para adelante": si la fecha original ya pasó, arranca desde hoy (no acumula cuotas vencidas)
+  let baseStr=pr.fecha; if(pr.rolling){ const h=hoy(); if(String(pr.fecha)<h) baseStr=h; }
+  if(pr.tipo==='mensual'){ const b=_fluDate(baseStr); for(let i=0;i<n;i++){ const d=new Date(b.getFullYear(),b.getMonth()+i,b.getDate()); out.push({fecha:_fluKey(d),monto:pr.monto}); } }
+  else if(pr.tipo==='semanal'){ const b=_fluDate(baseStr); for(let i=0;i<n;i++){ const d=new Date(b); d.setDate(d.getDate()+i*7); out.push({fecha:_fluKey(d),monto:pr.monto}); } }
+  else if(pr.tipo==='capital'){ const b=_fluDate(baseStr); let bal=pr.monto; for(let i=0;i<n;i++){ const d=new Date(b); d.setDate(d.getDate()+i*180); const pago=Math.round(bal*0.10); if(pago<=0) break; out.push({fecha:_fluKey(d),monto:pago}); bal-=pago; } }
   else { out.push({fecha:pr.fecha,monto:pr.monto}); } return out; }
 function finRenderBanco(){ const hoyS=hoy(); const q=(gs('finBcoBuscar').value||'').trim().toLowerCase(); let ls=getPrestamos().slice().sort((a,b)=>String(a.fecha||'').localeCompare(String(b.fecha||'')));
   if(q) ls=ls.filter(p=>((p.concepto||'')+' '+(p.banco||'')).toLowerCase().includes(q));
   const totGs=ls.filter(p=>p.estado!=='pagado').reduce((a,p)=>a+_prestamoFechas(p).reduce((s,c)=>s+finGs(p,c.monto),0),0);
   if(gs('finBcoResumen')) gs('finBcoResumen').innerHTML='Compromisos fijos: <b style="color:var(--red)">'+finGsFmt(totGs)+'</b> · '+ls.length+' ítem(s)';
-  gs('finBcoList').innerHTML=ls.map(p=>{ const fs=_prestamoFechas(p); const prox=fs.find(c=>String(c.fecha)>=hoyS)||fs[fs.length-1]||{}; const tot=fs.reduce((s,c)=>s+finGs(p,c.monto),0); const rec=(p.tipo==='mensual'||p.tipo==='semanal'); const cada=p.tipo==='semanal'?'/sem':'/mes'; const lbl=p.tipo==='semanal'?'semanal':'mensual';
-    return `<div class="li" onclick="finPrestamoModal('${p.id}')"><div style="min-width:0"><div class="li-t">${esc(p.concepto||p.banco||'—')} ${rec?`<span style="font-size:9px;color:var(--gray-400)">${p.cuotas_n} cuota(s) ${lbl}</span>`:'<span style="font-size:9px;color:var(--gray-400)">pago único</span>'}</div><div class="li-s">${p.banco?esc(p.banco)+' · ':''}${rec?'próx. '+fmtFecha(prox.fecha):'vence '+fmtFecha(p.fecha)}${rec?' · '+finFmt(p.monto,p.moneda)+cada:''}</div></div><div style="text-align:right;flex-shrink:0"><div style="font-weight:700;color:var(--red)">${finFmt(rec?tot:p.monto,p.moneda)}</div><div style="font-size:10px;color:var(--gray-400)">${rec?'total '+fs.length+' cuotas':'único'}</div></div></div>`; }).join('')||'<div class="empty">Sin compromisos fijos.</div>';
+  gs('finBcoList').innerHTML=ls.map(p=>{ const fs=_prestamoFechas(p); const prox=fs.find(c=>String(c.fecha)>=hoyS)||fs[fs.length-1]||{}; const tot=fs.reduce((s,c)=>s+finGs(p,c.monto),0); const cap=(p.tipo==='capital'); const rec=(p.tipo==='mensual'||p.tipo==='semanal'||cap); const cada=p.tipo==='semanal'?'/sem':cap?'':'/mes'; const lbl=p.tipo==='semanal'?'semanal':cap?'amortización 10% c/180d':'mensual';
+    return `<div class="li" onclick="finPrestamoModal('${p.id}')"><div style="min-width:0"><div class="li-t">${esc(p.concepto||p.banco||'—')} ${rec?`<span style="font-size:9px;color:var(--gray-400)">${cap?lbl:p.cuotas_n+' cuota(s) '+lbl}</span>`:'<span style="font-size:9px;color:var(--gray-400)">pago único</span>'}${p.rolling?' <span style="font-size:9px;color:var(--green)">↻ rueda</span>':''}</div><div class="li-s">${p.banco?esc(p.banco)+' · ':''}${rec?'próx. '+fmtFecha(prox.fecha)+(prox.monto?' · '+finFmt(prox.monto,p.moneda):''):'vence '+fmtFecha(p.fecha)}${(rec&&!cap)?cada:''}</div></div><div style="text-align:right;flex-shrink:0"><div style="font-weight:700;color:var(--red)">${finFmt(rec?tot:p.monto,p.moneda)}</div><div style="font-size:10px;color:var(--gray-400)">${cap?'total '+fs.length+' amort.':rec?'total '+fs.length+' cuotas':'único'}</div></div></div>`; }).join('')||'<div class="empty">Sin compromisos fijos.</div>';
 }
-function finPrestamoModal(id){ if(!canEdit()){ showToast('Sin permiso'); return; } const p=id?getPrestamos().find(x=>x.id===id):null; const tp=(p&&p.tipo)||'unica'; const mens=(tp==='mensual'||tp==='semanal');
+function finPrestamoModal(id){ if(!canEdit()){ showToast('Sin permiso'); return; } const p=id?getPrestamos().find(x=>x.id===id):null; const tp=(p&&p.tipo)||'unica'; const mens=(tp!=='unica'); const esCap=(tp==='capital');
   gs('modalBox').innerHTML=`<h3>${p?'Editar':'Nueva'} cuota fija / préstamo</h3>
     <label class="fl">Concepto</label><input id="finBcoConc" value="${esc(p&&p.concepto)}" placeholder="ej: Alquiler local, Amortización capital operativo" autocomplete="off">
     <label class="fl">Categoría (fila en el flujo)</label><select id="finBcoGrupo">${[['banco','Cuota banco'],['capital','Capital operativo'],['alquiler','Alquiler'],['deuda','Deudas']].map(x=>`<option value="${x[0]}" ${((p&&p.grupo)||'banco')===x[0]?'selected':''}>${x[1]}</option>`).join('')}</select>
     <label class="fl">Banco / entidad</label><input id="finBcoBanco" value="${esc(p&&p.banco)}" placeholder="ej: Continental, Propietario" autocomplete="off">
-    <label class="fl">Tipo</label><select id="finBcoTipo" onchange="finBcoTipoToggle()"><option value="unica" ${tp==='unica'?'selected':''}>Pago único (una fecha)</option><option value="mensual" ${tp==='mensual'?'selected':''}>Cuota mensual (se repite)</option><option value="semanal" ${tp==='semanal'?'selected':''}>Cuota semanal (se repite)</option></select>
-    <div class="row2"><div><label class="fl">Monto ${mens?'por cuota':''}</label><input type="number" id="finBcoMonto" value="${p?p.monto:''}" placeholder="0"></div><div><label class="fl">Moneda</label><select id="finBcoMon" onchange="finTcToggle('Bco')"><option value="PYG" ${!p||p.moneda!=='USD'?'selected':''}>Guaraníes ₲</option><option value="USD" ${p&&p.moneda==='USD'?'selected':''}>Dólares US$</option></select></div></div>
+    <label class="fl">Tipo</label><select id="finBcoTipo" onchange="finBcoTipoToggle()"><option value="unica" ${tp==='unica'?'selected':''}>Pago único (una fecha)</option><option value="mensual" ${tp==='mensual'?'selected':''}>Cuota mensual (se repite)</option><option value="semanal" ${tp==='semanal'?'selected':''}>Cuota semanal (se repite)</option><option value="capital" ${tp==='capital'?'selected':''}>Capital revolvente (amortiza 10% c/180 días)</option></select>
+    <label style="display:flex;align-items:center;gap:8px;margin-top:8px;font-size:12px;cursor:pointer"><input type="checkbox" id="finBcoRolling" ${p&&p.rolling?'checked':''} style="width:16px;height:16px"> Se mueve hacia adelante (sin fecha fija — no acumula vencidas)</label>
+    <div class="row2"><div><label class="fl">${esCap?'Capital total':('Monto'+(mens?' por cuota':''))}</label><input type="number" id="finBcoMonto" value="${p?p.monto:''}" placeholder="0"></div><div><label class="fl">Moneda</label><select id="finBcoMon" onchange="finTcToggle('Bco')"><option value="PYG" ${!p||p.moneda!=='USD'?'selected':''}>Guaraníes ₲</option><option value="USD" ${p&&p.moneda==='USD'?'selected':''}>Dólares US$</option></select></div></div>
     <div class="row2"><div id="finBcoTcWrap" style="display:${p&&p.moneda==='USD'?'':'none'}"><label class="fl">TC ₲/US$</label><input type="number" id="finBcoTc" value="${p&&p.tc?p.tc:cotizDolar()}"></div><div></div></div>
-    <div class="row2"><div><label class="fl" id="finBcoFechaLbl">${mens?'Fecha de la 1ª cuota':'Fecha de vencimiento'}</label><input type="date" id="finBcoFecha" value="${p&&p.fecha?p.fecha:hoy()}"></div><div id="finBcoCuotasWrap" style="display:${mens?'':'none'}"><label class="fl">Cuotas restantes</label><input type="number" id="finBcoCuotas" value="${p?p.cuotas_n:12}" placeholder="12"></div></div>
+    <div class="row2"><div><label class="fl" id="finBcoFechaLbl">${mens?'Fecha de la 1ª cuota':'Fecha de vencimiento'}</label><input type="date" id="finBcoFecha" value="${p&&p.fecha?p.fecha:hoy()}"></div><div id="finBcoCuotasWrap" style="display:${mens?'':'none'}"><label class="fl">${esCap?'Ciclos (180 días)':'Cuotas restantes'}</label><input type="number" id="finBcoCuotas" value="${p?p.cuotas_n:12}" placeholder="12"></div></div>
     <label class="fl">Nota</label><input id="finBcoNota" value="${esc(p&&p.nota)}" placeholder="opcional" autocomplete="off">
     <div style="font-size:11px;color:var(--gray-400);margin-top:4px">Se suma al flujo en la fila de su categoría. Las cuotas mensuales/semanales proyectan la cantidad que indiques hacia adelante (ej: deuda de 1.800M a 60M/sem = 30 cuotas semanales).</div>
     <div class="row2" style="margin-top:12px">${p?`<button class="btn btn-sec" onclick="finPrestamoBorrar('${p.id}')" style="color:var(--red)">Borrar</button>`:'<button class="btn btn-sec" onclick="cerrarModal()">Cancelar</button>'}<button class="btn btn-primary" onclick="finPrestamoGuardar('${p?p.id:''}')">Guardar</button></div>`;
@@ -3328,7 +3332,7 @@ function finBcoTipoToggle(){ const rec=gs('finBcoTipo').value!=='unica'; gs('fin
 function finPrestamoGuardar(id){ if(!canEdit()) return; const conc=(gs('finBcoConc').value||'').trim(); const monto=num(gs('finBcoMonto').value); const fecha=gs('finBcoFecha').value; if(!monto||monto<=0){ showToast('Poné el monto'); return; } if(!fecha){ showToast('Poné la fecha'); return; }
   const tipo=gs('finBcoTipo').value; const mon=gs('finBcoMon').value; const tc=mon==='USD'?(num(gs('finBcoTc').value)||0):null; if(mon==='USD'&&!tc){ showToast('Cargá el tipo de cambio'); return; }
   const cuotas_n=(tipo!=='unica')?Math.max(1,Math.round(num(gs('finBcoCuotas').value)||1)):1;
-  const p={ id:id||('PB-'+Date.now()), concepto:conc, banco:(gs('finBcoBanco').value||'').trim(), grupo:gs('finBcoGrupo').value||'banco', tipo, monto:Math.round(monto), moneda:mon, tc, fecha, cuotas_n, estado:'activo', nota:(gs('finBcoNota').value||'').trim(), por:(getSession()&&getSession().nombre)||'', ts:new Date().toISOString(), pending:true };
+  const p={ id:id||('PB-'+Date.now()), concepto:conc, banco:(gs('finBcoBanco').value||'').trim(), grupo:gs('finBcoGrupo').value||'banco', tipo, monto:Math.round(monto), moneda:mon, tc, fecha, cuotas_n, rolling:!!(gs('finBcoRolling')&&gs('finBcoRolling').checked), estado:'activo', nota:(gs('finBcoNota').value||'').trim(), por:(getSession()&&getSession().nombre)||'', ts:new Date().toISOString(), pending:true };
   const a=getPrestamos().filter(x=>x.id!==p.id); a.unshift(p); savePrestamos(a); cloudPush('prestamo',p); cerrarModal(); showToast('✓ Guardado'); finSetTab(_finTab);
 }
 function finPrestamoBorrar(id){ if(!canEdit()) return; if(!confirm('¿Borrar este compromiso con banco?')) return; savePrestamos(getPrestamos().filter(x=>x.id!==id)); cloudDelete('prestamo',id); cerrarModal(); finSetTab(_finTab); }
@@ -3413,15 +3417,19 @@ function finRenderFlujo(){ const modo=_finFluModo; const per=ds=>{ if(!ds)return
   getPrestamos().forEach(pr=>{ if(pr.estado==='pagado') return; const fld=pr.grupo==='capital'?'capital':pr.grupo==='alquiler'?'alquiler':pr.grupo==='deuda'?'deuda':'banco';
     _prestamoFechas(pr).forEach(c=>{ const g=finGs(pr,c.monto); addD(perRoll(c.fecha),fld,g, (pr.concepto||'—')+(pr.banco?' · '+pr.banco:'')+' · '+fmtFecha(c.fecha), c.fecha); gBanco+=g; }); });
   // facturas de insumos de producción reales por mes (para descontar del costo proyectado)
-  const insumoMes={}; const _esInsumo=c=>{ const cat=(c.categoria||'').toLowerCase(); return cat.indexOf('nsumo')>=0 || cat.indexOf('ateria prima')>=0; };
-  getCompras().forEach(c=>{ if(_esInsumo(c)){ const mk=String(c.fecha||'').slice(0,7); if(mk) insumoMes[mk]=(insumoMes[mk]||0)+finGs(c,c.monto); } });
+  // gastos reales por mes que reemplazan lo proyectado: insumos->costo, sueldos->sueldos proy, comisiones->comisiones
+  const insumoMes={}, comisionRealMes={};
+  getCompras().forEach(c=>{ const cat=(c.categoria||'').toLowerCase(); const mk=String(c.fecha||'').slice(0,7); if(!mk) return; const g=finGs(c,c.monto);
+    if(cat.indexOf('nsumo')>=0||cat.indexOf('ateria prima')>=0) insumoMes[mk]=(insumoMes[mk]||0)+g;
+    if(cat.indexOf('sueldo')>=0) sueldoRealMes[mk]=(sueldoRealMes[mk]||0)+g;
+    if(cat.indexOf('omision')>=0) comisionRealMes[mk]=(comisionRealMes[mk]||0)+g; });
   // ventas proyectadas (estimado mensual, neto de ventas reales facturadas) y costo de producción (% del estimado, neto de facturas de insumo reales). Se distribuyen luego entre los períodos del mes.
   const projByMonth={}; const hasProj=(ventasMes>0||sueldosMes>0||comisionPct>0);
   if(hasProj){ const monthAdd=(ym,n)=>{ let [y,m]=ym.split('-').map(Number); m+=n; y+=Math.floor((m-1)/12); m=((m-1)%12+12)%12+1; return y+'-'+String(m).padStart(2,'0'); };
     const sm=(start>hoyS?start:hoyS).slice(0,7); let mdm=sm; Object.keys(P).forEach(k=>{ const km=k.slice(0,7); if(km>mdm) mdm=km; });
     const horizon=(monthAdd(sm,11)>mdm)?monthAdd(sm,11):mdm; let M=sm, guard=0;
     while(M<=horizon && guard++<60){ const proj=Math.max(0,ventasMes-(salesMes[M]||0)); const cost=Math.max(0,Math.round(costoPct/100*ventasMes)-(insumoMes[M]||0));
-      const spry=Math.max(0,sueldosMes-(sueldoRealMes[M]||0)); const ventasTot=proj+(salesMes[M]||0); const comis=Math.round(comisionPct/100*ventasTot);
+      const spry=Math.max(0,sueldosMes-(sueldoRealMes[M]||0)); const ventasTot=proj+(salesMes[M]||0); const comis=Math.max(0,Math.round(comisionPct/100*ventasTot)-(comisionRealMes[M]||0));
       projByMonth[M]={proj,cost,spry,comis}; gVproy+=proj; gCprod+=cost; gSpry+=spry; gComis+=comis; touch(perRoll(M+'-01')); M=monthAdd(M,1); } }
   // tarjetas resumen
   const porCobrar=gCxc, porPagar=gCxp+gSue+gCheq+gBanco, saldoFin=saldoIni+(gVproy+gCxc+gCobR)-(gCprod+gCxp+gPagR+gCheq+gBanco+gSue+gSpry+gComis);
