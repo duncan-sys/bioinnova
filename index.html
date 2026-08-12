@@ -628,7 +628,9 @@ const KPIS_CRIA={
    {k:'Libido / capacidad de servicio',u:'escala 1–5',min:3,max:5},
  ]
 };
-const CRIA_COMPS=[['vacas','🐄 Vacas (madres)'],['terneros','🐮 Terneros'],['toros','🐂 Toros (padres)']];
+// Terneros dejó de ser componente independiente: ahora es un sub-bloque "ternero al pie" dentro de Vacas (madres).
+// Se mantiene compLabel/KPIS_CRIA.terneros para mostrar visitas viejas y los KPIs del ternero al pie.
+const CRIA_COMPS=[['vacas','🐄 Vacas (madres)'],['toros','🐂 Toros (padres)']];
 function compLabel(c){ return {vacas:'Vacas (madres)',terneros:'Terneros',toros:'Toros (padres)'}[c]||''; }
 function kpisDe(cat, comp){ if(cat==='Cría') return KPIS_CRIA[comp||'vacas']||KPIS_CRIA.vacas; return KPIS[cat]||[]; }
 const PRODUCTOS={
@@ -1031,6 +1033,7 @@ async function fetchPerfil(id,email){
   return {rol:'lectura',nombre:email};
 }
 function applyAuth(){
+  migrarTerneros();
   if(!AUTH_ON){ const ov=gs('loginOverlay'); if(ov) ov.style.display='none'; goHome(); return; }
   const s=getSession();
   if(!s||!s.token){ gs('loginOverlay').style.display='flex'; return; }
@@ -1484,12 +1487,35 @@ function borrarEstancia(id){
 // ── VISITA ──
 function nuevaVisita(){ if(!puedeVer('visita')||!canEdit()){ showToast('Sin permiso'); return; } editVisitaId=null; abrirFormVisita(null); }
 function nuevaVisitaCliente(){ if(!canEdit()){ showToast('Tu rol es de solo lectura'); return; } editVisitaId=null; abrirFormVisita(curCliente); }
-function nuevoEval(){ return { categoria:CATEGORIAS[0], componente:'vacas', lote:'', producto:'', presentacion:'', consumo:'', peso:'', consumo_g:'', dias:'', animales:'', kpis:{}, comentario:'' }; }
+function nuevoEval(){ return { categoria:CATEGORIAS[0], componente:'vacas', lote:'', producto:'', presentacion:'', consumo:'', peso:'', consumo_g:'', dias:'', animales:'', kpis:{}, comentario:'', ter_alpie:false, ter_cant:'', ter_kpis:{} }; }
 // convierte una visita (nueva con evaluaciones, o vieja con categoría única) a un array de evaluaciones
 function visitaEvals(v){
   if(v.evaluaciones && v.evaluaciones.length) return v.evaluaciones;
   if(v.categoria) return [{ categoria:v.categoria, lote:v.lote||'', producto:v.producto||'', presentacion:v.presentacion||'', consumo:v.consumo||'', dias_sistema:v.dias_sistema, n_animales:v.n_animales, kpis:v.kpis||[], comentario:'' }];
   return [];
+}
+// Migración: convierte evaluaciones "Terneros" (componente independiente, modelo viejo) en
+// sub-datos "ternero al pie" de la evaluación de Vacas del mismo lote. Idempotente + respaldo único.
+function migrarTerneros(){
+  try{
+    let vs=getVisitas(); if(!vs||!vs.length){ localStorage.setItem('bio:migr:terneros','1'); return; }
+    if(!localStorage.getItem('bio:migr:terneros')){ try{ localStorage.setItem('bio:visitas:backup:preTerneros', JSON.stringify(vs)); }catch(_){} }
+    const cambiaron=[];
+    vs.forEach(v=>{
+      if(!v.evaluaciones||!v.evaluaciones.length) return;
+      const ters=v.evaluaciones.filter(e=>e.componente==='terneros');
+      if(!ters.length) return;
+      let mut=false;
+      ters.forEach(te=>{
+        const key=String(te.lote||'').trim().toLowerCase();
+        const madre=v.evaluaciones.find(e=>e.componente==='vacas' && String(e.lote||'').trim().toLowerCase()===key);
+        if(madre){ madre.ter_alpie=true; madre.ter_cant=(te.n_animales!=null?te.n_animales:null); madre.ter_kpis=(te.kpis||[]); te._drop=true; mut=true; }
+      });
+      if(mut){ v.evaluaciones=v.evaluaciones.filter(e=>!e._drop); v.ts=new Date().toISOString(); v.pending=true; cambiaron.push(v); }
+    });
+    if(cambiaron.length){ saveVisitas(vs); cambiaron.forEach(v=>{ try{ cloudPush('visitas', v); }catch(_){} }); }
+    localStorage.setItem('bio:migr:terneros','1');
+  }catch(e){}
 }
 function abrirFormVisita(clienteId){
   const cl=getClientes();
@@ -1511,7 +1537,7 @@ function visitaClienteChange(){
   renderEvals();
 }
 // ── Bloques de evaluación (categoría + lote) ──
-function renderEvals(){ const wrap=gs('evalsWrap'); if(!wrap) return; wrap.innerHTML=consumoDatalistHtml()+_evals.map((ev,i)=>evalBlockHtml(ev,i)).join(''); _evals.forEach((ev,i)=>{ evalPesoLive(i); evalMermaLive(i); }); }
+function renderEvals(){ const wrap=gs('evalsWrap'); if(!wrap) return; wrap.innerHTML=consumoDatalistHtml()+_evals.map((ev,i)=>evalBlockHtml(ev,i)).join(''); _evals.forEach((ev,i)=>{ evalPesoLive(i); evalMermaLive(i); terCantLive(i); }); }
 // % del peso vivo = (gramos/1000) / peso × 100
 function evalPesoLive(i){ const el=gs('ev'+i+'_pv'); if(!el) return; const peso=num(gs('ev'+i+'_peso')?gs('ev'+i+'_peso').value:''); const g=num(gs('ev'+i+'_consg')?gs('ev'+i+'_consg').value:'');
   if(peso&&g){ const pv=(g/1000)/peso*100; el.innerHTML='= <b>'+pv.toFixed(2)+' % del peso vivo</b> <span style="color:var(--gray-400)">('+g+' g ÷ '+peso+' kg)</span>'; }
@@ -1581,17 +1607,49 @@ function evalBlockHtml(ev,i){
       <div style="font-size:12px;font-weight:700;color:var(--gray-700);margin:10px 0 2px">KPIs — ${esc(cat==='Cría'?('Cría · '+compLabel(comp)):cat)}</div>
       ${kpisHtml}
       ${(cat==='Cría'&&comp==='vacas')?`<div id="ev${i}_merma" style="font-size:12px;margin:4px 0 6px;min-height:16px"></div>`:''}
+      ${(cat==='Cría'&&comp==='vacas')?terneroBlockHtml(ev,i):''}
       <label class="fl">Comentario / diagnóstico de este lote <span style="color:var(--gray-400);font-weight:400">(opcional)</span></label>
       <textarea id="ev${i}_com" placeholder="Hallazgos y recomendación de este lote…">${esc(ev.comentario)}</textarea>
     </div>
   </div>`;
 }
+// Sub-bloque "ternero al pie" dentro de la evaluación de Vacas (madres).
+function terneroBlockHtml(ev,i){
+  const on=!!ev.ter_alpie;
+  const kpisT=KPIS_CRIA.terneros.map((d,j)=>{ const val=(ev.ter_kpis&&ev.ter_kpis[j]!=null)?ev.ter_kpis[j]:''; const st=kpiEstado(val,d);
+    return `<div class="kpi"><div class="kpi-top"><span class="kpi-n">${esc(d.k)}</span><span class="kpi-ref">🟢 ${esc(refTxt(d))}</span></div>
+    <div class="kpi-in"><input type="text" inputmode="decimal" id="ev${i}_tkv${j}" value="${esc(val)}" placeholder="valor" oninput="terKpiLive(${i},${j})"><span id="ev${i}_tks${j}" class="sem ${st.cls}">${st.txt}</span></div></div>`; }).join('');
+  return `<div style="margin:8px 0 4px;padding:10px;border:1px dashed var(--amber,#c8820a);border-radius:8px;background:#fffdf7">
+    <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;color:var(--gray-700);cursor:pointer">
+      <input type="checkbox" id="ev${i}_teralpie" ${on?'checked':''} onchange="terAlpieToggle(${i})" style="width:16px;height:16px"> 🐮 Vacas con ternero al pie
+    </label>
+    <div id="ev${i}_terbox" style="${on?'':'display:none'};margin-top:8px">
+      <label class="fl">Cantidad de terneros al pie</label>
+      <input type="number" id="ev${i}_tercant" inputmode="numeric" value="${ev.ter_cant!=null?ev.ter_cant:''}" placeholder="0" oninput="terCantLive(${i})">
+      <div id="ev${i}_terpie" style="font-size:12px;color:var(--green);margin:2px 0 8px;min-height:14px"></div>
+      <div style="font-size:12px;font-weight:700;color:var(--gray-700);margin:6px 0 2px">KPIs del ternero</div>
+      ${kpisT}
+    </div>
+  </div>`;
+}
+function terAlpieToggle(i){ syncEvals(); _evals[i].ter_alpie=gs('ev'+i+'_teralpie').checked; renderEvals(); }
+function terCantLive(i){ const el=gs('ev'+i+'_terpie'); if(!el) return; const t=num(gs('ev'+i+'_tercant')?gs('ev'+i+'_tercant').value:''); const vac=num(gs('ev'+i+'_anim')?gs('ev'+i+'_anim').value:'');
+  if(t!=null&&vac){ el.innerHTML='= <b>'+(Math.round(t/vac*1000)/10)+'% de terneros al pie</b> <span style="color:var(--gray-400)">('+t+' terneros ÷ '+vac+' vacas)</span>'; }
+  else if(t!=null&&!vac){ el.innerHTML='<span style="color:var(--amber)">⚠ Cargá el <b>Nº de vacas</b> arriba para calcular el % al pie</span>'; }
+  else el.textContent=''; }
+function terKpiLive(i,j){ const d=KPIS_CRIA.terneros[j]; if(!d) return; const st=kpiEstado(gs('ev'+i+'_tkv'+j).value,d); const el=gs('ev'+i+'_tks'+j); if(el){ el.className='sem '+st.cls; el.textContent=st.txt; } }
 function syncEvals(){
   _evals=_evals.map((ev,i)=>{
     const cat=gs('ev'+i+'_cat')?gs('ev'+i+'_cat').value:ev.categoria;
     const comp = cat==='Cría' ? (gs('ev'+i+'_comp')?gs('ev'+i+'_comp').value:(ev.componente||'vacas')) : '';
     const kpis={}; kpisDe(cat,comp).forEach((d,j)=>{ const el=gs('ev'+i+'_kv'+j); if(el) kpis[j]=el.value; });
-    return { categoria:cat, componente:comp,
+    let ter_alpie=!!ev.ter_alpie, ter_cant=(ev.ter_cant!=null?ev.ter_cant:''), ter_kpis=(ev.ter_kpis&&typeof ev.ter_kpis==='object'&&!Array.isArray(ev.ter_kpis))?{...ev.ter_kpis}:{};
+    if(cat==='Cría'&&comp==='vacas'){
+      const cb=gs('ev'+i+'_teralpie'); if(cb) ter_alpie=cb.checked;
+      const tc=gs('ev'+i+'_tercant'); if(tc) ter_cant=tc.value;
+      KPIS_CRIA.terneros.forEach((d,j)=>{ const el=gs('ev'+i+'_tkv'+j); if(el) ter_kpis[j]=el.value; });
+    }
+    return { categoria:cat, componente:comp, ter_alpie, ter_cant, ter_kpis,
       lote: gs('ev'+i+'_lote')?gs('ev'+i+'_lote').value:ev.lote,
       producto: gs('ev'+i+'_prod')?gs('ev'+i+'_prod').value:ev.producto,
       presentacion: gs('ev'+i+'_pres')?gs('ev'+i+'_pres').value:ev.presentacion,
@@ -1626,8 +1684,13 @@ function guardarVisita(imprimir){
     const kpis=kpisDe(cat,comp).map((d,j)=>{ const val=String((ev.kpis&&ev.kpis[j]!=null)?ev.kpis[j]:'').trim(); return {k:d.k,u:d.u,min:d.min,max:d.max,valor:val,estado:kpiEstado(val,d).rep}; });
     const consumo=String(ev.consumo||'').trim(); addConsumo(consumo);
     const esT=cat==='Terminación';
-    return { categoria:cat, componente:comp, lote:(ev.lote||''), producto:(ev.producto||''), presentacion:String(ev.presentacion||'').trim(), consumo, peso:num(ev.peso), consumo_g:num(ev.consumo_g), dias_sistema:num(ev.dias), n_animales:num(ev.animales), precio_kg_carne:(esT?num(ev.precio_kg_carne):null), consumo_kg:(esT?num(ev.consumo_kg):null), costo_producto:(esT?num(ev.costo_producto):null), kpis, comentario:String(ev.comentario||'').trim() };
-  }).filter(ev=> ev.lote || ev.producto || ev.n_animales!=null || ev.comentario || ev.peso!=null || ev.consumo_g!=null || ev.precio_kg_carne!=null || ev.consumo_kg!=null || ev.costo_producto!=null || ev.kpis.some(k=>k.valor));
+    let terF={ter_alpie:false};
+    if(cat==='Cría'&&comp==='vacas'&&ev.ter_alpie){
+      const terKpis=KPIS_CRIA.terneros.map((d,j)=>{ const val=String((ev.ter_kpis&&ev.ter_kpis[j]!=null)?ev.ter_kpis[j]:'').trim(); return {k:d.k,u:d.u,min:d.min,max:d.max,valor:val,estado:kpiEstado(val,d).rep}; });
+      terF={ ter_alpie:true, ter_cant:num(ev.ter_cant), ter_kpis:terKpis };
+    }
+    return { categoria:cat, componente:comp, lote:(ev.lote||''), producto:(ev.producto||''), presentacion:String(ev.presentacion||'').trim(), consumo, peso:num(ev.peso), consumo_g:num(ev.consumo_g), dias_sistema:num(ev.dias), n_animales:num(ev.animales), precio_kg_carne:(esT?num(ev.precio_kg_carne):null), consumo_kg:(esT?num(ev.consumo_kg):null), costo_producto:(esT?num(ev.costo_producto):null), kpis, comentario:String(ev.comentario||'').trim(), ...terF };
+  }).filter(ev=> ev.lote || ev.producto || ev.n_animales!=null || ev.comentario || ev.peso!=null || ev.consumo_g!=null || ev.precio_kg_carne!=null || ev.consumo_kg!=null || ev.costo_producto!=null || ev.ter_alpie || ev.kpis.some(k=>k.valor));
   if(!evaluaciones.length){ showToast('Cargá al menos una categoría/lote con datos'); return; }
   const estId=gs('vEstancia').value||'';
   const v={
@@ -1655,9 +1718,15 @@ function verVisita(id){
   const c=clienteById(v.cliente_id), e=estanciaById(v.estancia_id);
   const bloques=visitaEvals(v).map(ev=>{
     const filas=(ev.kpis||[]).map(k=>`<tr><td>${esc(k.k)}</td><td style="text-align:center">${k.valor||'—'} ${esc(unidadCorta(k.u))}</td><td style="text-align:center">${semHtmlMini(k.estado)}</td></tr>`).join('');
+    const terMini=(ev.componente==='vacas'&&ev.ter_alpie)?(()=>{
+      const pie=(ev.n_animales&&ev.ter_cant!=null)?' · '+(Math.round(ev.ter_cant/ev.n_animales*1000)/10)+'% al pie':'';
+      const fT=(ev.ter_kpis||[]).map(k=>`<tr><td>${esc(k.k)}</td><td style="text-align:center">${k.valor||'—'} ${esc(unidadCorta(k.u))}</td><td style="text-align:center">${semHtmlMini(k.estado)}</td></tr>`).join('');
+      return `<div style="margin-top:6px;padding:6px 8px;border-left:3px solid var(--amber,#c8820a);background:#fffdf7;border-radius:6px"><div style="font-size:11px;font-weight:700">🐮 Terneros al pie${ev.ter_cant!=null?': '+ev.ter_cant:''}${pie}</div><table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:4px"><tbody>${fT}</tbody></table></div>`;
+    })():'';
     return `<div style="margin-top:10px;border-top:1px solid var(--gray-200);padding-top:8px">
       <div style="font-size:12px;font-weight:700"><span class="chip ${catClass(ev.categoria)}">${esc(ev.categoria)}${(ev.categoria==='Cría'&&ev.componente)?' · '+esc(compLabel(ev.componente)):''}</span>${ev.lote?' Lote '+esc(ev.lote):''} <span style="color:var(--gray-400);font-weight:400">· ${ev.n_animales||0} an.${ev.producto?' · '+esc(ev.producto):''}</span></div>
       <table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:4px"><tbody>${filas}</tbody></table>
+      ${terMini}
       ${gananciaDiariaHtml(ev)}
       ${ev.comentario?'<div style="font-size:11px;color:var(--gray-600);margin-top:3px">💬 '+esc(ev.comentario)+'</div>':''}</div>`;
   }).join('');
@@ -3593,25 +3662,56 @@ function informeComercialPDF(id){
 function informePDF(id){
   const v=getVisitas().find(x=>x.id===id); if(!v){ showToast('Visita no encontrada'); return; }
   const c=clienteById(v.cliente_id)||{}, e=estanciaById(v.estancia_id)||{};
-  const secciones=visitaEvals(v).map(ev=>{
-    const filas=(ev.kpis||[]).map(k=>{ const cls=k.estado&&k.estado.includes('rango')?'ok':(k.estado&&k.estado!=='—'?'warn':'na');
-      return `<tr><td>${esc(k.k)}</td><td class="c">${esc(k.u||'')}</td><td class="c">${k.min!=null?k.min:'—'}</td><td class="c">${k.max!=null?k.max:'—'}</td><td class="c b">${k.valor||'—'}</td><td class="c ${cls}">${esc(k.estado||'—')}</td></tr>`; }).join('');
+  const kpiFilas=(arr)=>(arr||[]).map(k=>{ const cls=k.estado&&k.estado.includes('rango')?'ok':(k.estado&&k.estado!=='—'?'warn':'na');
+    return `<tr><td>${esc(k.k)}</td><td class="c">${esc(k.u||'')}</td><td class="c">${k.min!=null?k.min:'—'}</td><td class="c">${k.max!=null?k.max:'—'}</td><td class="c b">${k.valor||'—'}</td><td class="c ${cls}">${esc(k.estado||'—')}</td></tr>`; }).join('');
+  const kvOf=(ev,nm)=>{ const k=(ev.kpis||[]).find(x=>x.k===nm); return k&&k.valor!==''&&k.valor!=null?k.valor:null; };
+  const seccionEval=(ev)=>{
+    const filas=kpiFilas(ev.kpis);
     const _amber='<span style="color:#c8820a">';
     let consProd;
     if(ev.consumo_g && ev.peso) consProd=ev.consumo_g+' g/día ('+((ev.consumo_g/1000)/ev.peso*100).toFixed(2)+'% PV)';
     else if(ev.consumo_g && !ev.peso) consProd=ev.consumo_g+' g/día · '+_amber+'⚠ falta el peso para calcular % PV</span>';
     else if(!ev.consumo_g && ev.peso) consProd=_amber+'⚠ falta el consumo (g/día) para calcular % PV</span>';
     else consProd='—';
-    const mermaHtml=(()=>{ if(ev.categoria!=='Cría') return ''; const kv=nm=>{ const k=(ev.kpis||[]).find(x=>x.k===nm); const n=k?num(k.valor):null; return n; }; const pr=kv('Tasa de preñez'), ma=kv('Tasa de marcación'); if(pr==null||ma==null) return ''; const m=Math.round((pr-ma)*10)/10; return `<div class="diag" style="margin-top:6px;border-color:#c8820a"><b>Merma preñez→marcación:</b> ${m}% <span style="color:#718096">(${pr}% preñez − ${ma}% marcación)</span></div>`; })();
+    const mermaHtml=(()=>{ if(ev.categoria!=='Cría') return ''; const pr=num(kvOf(ev,'Tasa de preñez')), ma=num(kvOf(ev,'Tasa de marcación')); if(pr==null||ma==null) return ''; const m=Math.round((pr-ma)*10)/10; return `<div class="diag" style="margin-top:6px;border-color:#c8820a"><b>Merma preñez→marcación:</b> ${m}% <span style="color:#718096">(${pr}% preñez − ${ma}% marcación)</span></div>`; })();
+    // sub-bloque: terneros al pie (dentro de la evaluación de vacas)
+    const terHtml=(ev.componente==='vacas'&&ev.ter_alpie)?(()=>{
+      const pct=(ev.n_animales&&ev.ter_cant!=null)?(Math.round(ev.ter_cant/ev.n_animales*1000)/10):null;
+      return `<div class="ter"><div class="ter-t">🐮 Terneros al pie — <b>${ev.ter_cant!=null?ev.ter_cant:'—'}</b> terneros${pct!=null?` · <b>${pct}%</b> al pie (${ev.ter_cant}/${ev.n_animales} vacas)`:''}</div>
+        <table><thead><tr><th>KPI ternero</th><th class="c">Unidad</th><th class="c">Obj. Mín</th><th class="c">Obj. Máx</th><th class="c">Medido</th><th class="c">Estado</th></tr></thead><tbody>${kpiFilas(ev.ter_kpis)}</tbody></table></div>`;
+    })():'';
     return `<h3 class="cat">${esc(ev.categoria)}${(ev.categoria==='Cría'&&ev.componente)?' · '+esc(compLabel(ev.componente)):''}${ev.lote?' — Lote: '+esc(ev.lote):''}</h3>
       <table class="datos"><tr><td class="k">Nº de animales</td><td class="v">${ev.n_animales!=null?ev.n_animales:'—'}</td><td class="k">Días en sistema</td><td class="v">${ev.dias_sistema!=null?ev.dias_sistema:'—'}</td></tr>
       <tr><td class="k">Producto</td><td class="v">${esc(ev.producto||'—')}</td><td class="k">Consumo obs.</td><td class="v">${esc(ev.consumo||'—')}</td></tr>
       <tr><td class="k">Peso actual</td><td class="v">${ev.peso?esc(ev.peso)+' kg':'—'}</td><td class="k">Consumo producto</td><td class="v">${consProd}</td></tr></table>
       <table><thead><tr><th>KPI</th><th class="c">Unidad</th><th class="c">Obj. Mín</th><th class="c">Obj. Máx</th><th class="c">Medido</th><th class="c">Estado</th></tr></thead><tbody>${filas}</tbody></table>
+      ${terHtml}
       ${mermaHtml}
       ${(()=>{ const h=gananciaDiariaHtml(ev); return h? '<div class="diag" style="margin-top:6px;border-color:#2f7d3b">'+h.replace(/<div[^>]*>/,'').replace(/<\/div>$/,'')+'</div>':''; })()}
       ${ev.comentario?`<div class="diag" style="margin-top:6px">${esc(ev.comentario)}</div>`:''}`;
-  }).join('');
+  };
+  // Resumen consolidado del lote (vacas + terneros + toros, o varias categorías del mismo lote)
+  const resumenLote=(nombre,list)=>{
+    const multi = list.length>1 || list.some(e=>e.componente==='vacas'&&e.ter_alpie);
+    if(!multi) return '';
+    const compLbl=(ev)=> ev.categoria==='Cría' ? (ev.componente==='vacas'?'vacas':(ev.componente==='toros'?'toros':(compLabel(ev.componente)||'').toLowerCase())) : ev.categoria.toLowerCase();
+    const parts=[]; const vE=list.find(e=>e.componente==='vacas'&&e.ter_alpie);
+    list.forEach(ev=>{ if(ev.n_animales!=null) parts.push(`${ev.n_animales} ${compLbl(ev)}`); if(ev.componente==='vacas'&&ev.ter_alpie&&ev.ter_cant!=null) parts.push(`${ev.ter_cant} terneros`); });
+    const CLAVE=[['Condición corporal de la vaca','CC vaca',''],['Tasa de preñez','Preñez','%'],['Tasa de marcación','Marcación','%'],['GMD','GMD','kg/d'],['Peso al destete','P.destete','kg'],['Circunferencia escrotal','C.escrotal','cm'],['Condición corporal','CC toro','']];
+    const chips=[];
+    list.forEach(ev=>{ CLAVE.forEach(([nm,short,u])=>{ const val=kvOf(ev,nm); if(val!=null) chips.push(`${short} ${val}${u?' '+u:''}`); }); });
+    if(vE&&vE.ter_cant!=null&&vE.n_animales) chips.push('Terneros al pie '+(Math.round(vE.ter_cant/vE.n_animales*1000)/10)+'%');
+    const recos=list.map(e=>String(e.comentario||'').trim()).filter(Boolean);
+    return `<div class="resumen">
+      <div class="rt">RESUMEN DEL LOTE${nombre?' — '+esc(nombre):''}</div>
+      <div class="rc">${parts.length?esc(parts.join(' · ')):'—'}</div>
+      ${chips.length?`<div class="rk">${chips.map(c=>`<span>${esc(c)}</span>`).join('')}</div>`:''}
+      ${recos.length?`<div class="rr">→ ${esc(recos.join(' · '))}</div>`:''}
+    </div>`;
+  };
+  const evs=visitaEvals(v); const orden=[]; const grupos={};
+  evs.forEach(ev=>{ const key=String(ev.lote||'').trim()||'__nolote'; if(!grupos[key]){ grupos[key]=[]; orden.push(key); } grupos[key].push(ev); });
+  const secciones=orden.map(key=>{ const list=grupos[key]; const nombre=key==='__nolote'?'':key; return list.map(seccionEval).join('')+resumenLote(nombre,list); }).join('');
   const w=window.open('','_blank');
   w.document.write(`<html><head><meta charset="utf-8"><title>Informe técnico — ${esc(c.nombre||'')}</title><style>
     *{box-sizing:border-box} body{font-family:Arial,Helvetica,sans-serif;color:#1a202c;margin:0;font-size:12.5px}
@@ -3627,7 +3727,16 @@ function informePDF(id){
     .diag{background:#f7fafc;border-left:3px solid #2f7d3b;padding:10px 12px;border-radius:6px;margin-top:6px;white-space:pre-wrap}
     .foot{margin-top:26px;border-top:1px solid #cbd5e0;padding-top:10px;color:#718096;font-size:10.5px;text-align:center}
     .firma{display:flex;justify-content:space-between;margin-top:30px;font-size:12px}
-    @media print{.wrap{padding:12mm} .noprint{display:none}}
+    .ter{margin:2px 0 6px;padding:8px 10px;border-left:3px solid #c8820a;background:#fffdf7;border-radius:6px}
+    .ter-t{font-size:12px;font-weight:700;color:#8a5a06;margin-bottom:5px}
+    .resumen{background:#eef5ef;border:1px solid #2f7d3b;border-radius:8px;padding:10px 12px;margin:8px 0 18px}
+    .resumen .rt{font-size:10.5px;font-weight:800;color:#2f7d3b;letter-spacing:.04em}
+    .resumen .rc{font-weight:700;margin-top:2px;font-size:12.5px}
+    .resumen .rk{margin-top:5px;display:flex;flex-wrap:wrap;gap:5px}
+    .resumen .rk span{background:#fff;border:1px solid #cbd5e0;border-radius:12px;padding:1px 8px;font-size:11px}
+    .resumen .rr{margin-top:6px;font-size:11.5px;color:#c8820a}
+    .ter table,.resumen table{margin-bottom:0}
+    @media print{.wrap{padding:12mm} .noprint{display:none} .resumen,.ter,h3.cat{break-inside:avoid}}
   </style></head><body><div class="wrap">
     <div class="top"><img src="${location.origin}${location.pathname.replace(/[^/]*$/,'')}logo.jpg" alt="BioInnova"><p>INFORME TÉCNICO A CAMPO · Nutrición de bovinos de corte</p></div>
     <h2>1. Datos de la visita</h2>
