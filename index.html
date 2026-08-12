@@ -498,7 +498,7 @@ textarea{resize:vertical;min-height:66px}
       <button class="fintab" id="finT_banco" onclick="finSetTab('banco')">🏦 Fijos</button>
       <button class="fintab" id="finT_flujo" onclick="finSetTab('flujo')">📊 Flujo</button>
     </div>
-    <div style="font-size:9px;color:var(--gray-400);text-align:right;margin:-6px 0 8px">BioInnova <span id="finVer">v87</span></div>
+    <div style="font-size:9px;color:var(--gray-400);text-align:right;margin:-6px 0 8px">BioInnova <span id="finVer">v88</span></div>
     <div id="finW_ventas">
       <button class="btn btn-primary btn-block" style="margin-bottom:8px" onclick="finVentaModal()">＋ Nueva venta</button>
       <input type="search" id="finVBuscar" placeholder="🔎 Buscar cliente / factura…" oninput="finRenderVentas()" style="margin-bottom:8px">
@@ -2698,7 +2698,8 @@ function prodSetTab(t){ _prodTab=t; const cat=t==='cat', inv=t==='inv', gar=t===
 }
 function renderProductosCat(){ const q=(gs('prodBuscar').value||'').trim().toLowerCase(); let ls=precioList(); if(q) ls=ls.filter(p=>((p.n||'')+' '+(p.c||'')).toLowerCase().includes(q)); if(gs('prodCount')) gs('prodCount').textContent=ls.length+' productos';
   gs('prodList').innerHTML=ls.map(p=>{ const key=precioKey(p); const st=ptStock(key); const fx=tieneFormula(p);
-    return `<div class="li" onclick="productoEditor('${encodeURIComponent(key)}')"><div style="min-width:0"><div class="li-t">${esc(p.n)} ${fx?'<span style="font-size:10px;color:var(--green)">fórmula</span>':'<span style="font-size:10px;color:var(--gray-400)">sin fórmula</span>'}</div><div class="li-s">${p.c?esc(p.c)+' · ':''}${p.kg||prodKgBolsa(p)}kg · Contado ${gsFmt(p.p0)}/kg</div></div><div style="text-align:right;flex-shrink:0"><div style="font-weight:700">${st.toLocaleString('es-PY')}</div><div style="font-size:10px;color:var(--gray-400)">bolsas</div></div></div>`; }).join('') || '<div class="empty">Sin productos.</div>';
+    const gk=garantiaDe(key); const gok=garTieneDatos(gk);
+    return `<div class="li" onclick="productoEditor('${encodeURIComponent(key)}')"><div style="min-width:0"><div class="li-t">${esc(p.n)} ${fx?'<span style="font-size:10px;color:var(--green)">fórmula</span>':'<span style="font-size:10px;color:var(--gray-400)">sin fórmula</span>'}</div><div class="li-s">${p.c?esc(p.c)+' · ':''}${p.kg||prodKgBolsa(p)}kg · Contado ${gsFmt(p.p0)}/kg</div></div><div style="display:flex;align-items:center;gap:8px;flex-shrink:0"><button onclick="event.stopPropagation();garVer('${encodeURIComponent(key)}')" title="Nivel de garantía" style="border:none;background:${gok?'var(--green-lt)':'var(--gray-100)'};color:${gok?'var(--green)':'var(--gray-400)'};border-radius:8px;padding:6px 9px;cursor:pointer;font-size:14px">📄</button><div style="text-align:right"><div style="font-weight:700">${st.toLocaleString('es-PY')}</div><div style="font-size:10px;color:var(--gray-400)">bolsas</div></div></div></div>`; }).join('') || '<div class="empty">Sin productos.</div>';
 }
 function _removePrecioOv(key){ const ov=getPreciosOv(); const ex=ov.find(o=>precioKey(o)===key); if(ex){ savePreciosOv(ov.filter(o=>o.id!==ex.id)); if(typeof cloudDelete==='function') cloudDelete('precio',ex.id); } }
 function productoEditor(keyEnc){ if(!puedeEditarFormula()){ showToast('Sin permiso'); return; }
@@ -2843,7 +2844,8 @@ function garVer(keyEnc){ const key=decodeURIComponent(keyEnc); const p=precioLis
   gs('modalBox').innerHTML=`<h3>Índice de garantía</h3><div style="font-size:12px;color:var(--gray-600);margin-bottom:8px">${esc(p.n)}</div>
     <div style="max-height:56vh;overflow:auto;background:var(--gray-100);border-radius:8px;padding:10px"><style>${garDocCss()}</style>${ok?garDocInner(g,p):'<div class="empty">Sin garantía cargada.</div>'}</div>
     ${ed?`<button class="btn btn-primary btn-block" style="margin-top:10px" onclick="garEditor('${keyEnc}')">✎ ${ok?'Editar':'Cargar'} garantía</button>`:''}
-    <div class="row2" style="margin-top:8px">${ok?`<button class="btn btn-amber" onclick="garPrint('${keyEnc}')">🖨️ Imprimir</button>`:'<div></div>'}${(ed&&ok)?`<button class="btn btn-sec" style="color:var(--red)" onclick="garBorrar('${keyEnc}')">Quitar</button>`:'<div></div>'}</div>
+    ${ok?`<div class="row2" style="margin-top:8px"><button class="btn btn-amber" onclick="garPrint('${keyEnc}')">🖨️ PDF</button><button class="btn btn-sec" onclick="garExcel('${keyEnc}')">📥 Excel</button></div>`:''}
+    ${(ed&&ok)?`<button class="btn btn-sec btn-block" style="margin-top:8px;color:var(--red)" onclick="garBorrar('${keyEnc}')">Quitar garantía</button>`:''}
     <button class="btn btn-ghost btn-block" style="margin-top:8px" onclick="cerrarModal()">Cerrar</button>`;
   gs('modal').classList.add('show');
 }
@@ -2884,6 +2886,21 @@ function garBorrar(keyEnc){ if(!esGerente()) return; if(!confirm('¿Quitar la ga
 function garPrint(keyEnc){ const key=decodeURIComponent(keyEnc); const p=precioList().find(x=>precioKey(x)===key); const g=garantiaDe(key); if(!garTieneDatos(g)){ showToast('Sin garantía'); return; } const w=window.open('','_blank'); if(!w){ showToast('Permití las ventanas emergentes'); return; }
   w.document.write(`<html><head><meta charset="utf-8"><title>Garantía — ${esc(p?p.n:'')}</title><style>body{margin:0;padding:24px;background:#fff}${garDocCss()}@media print{body{padding:0}.noprint{display:none}}</style></head><body>${garDocInner(g,p)}<div class="noprint" style="text-align:center;margin-top:16px"><button onclick="window.print()" style="background:#2f7d3b;color:#fff;border:none;padding:10px 22px;border-radius:8px;cursor:pointer">🖨️ Imprimir / Guardar PDF</button> <button onclick="window.close()" style="background:#e2e8f0;color:#334155;border:none;padding:10px 22px;border-radius:8px;cursor:pointer;margin-left:8px">← Volver</button></div></body></html>`);
   w.document.close();
+}
+function garExcel(keyEnc){ const key=decodeURIComponent(keyEnc); const p=precioList().find(x=>precioKey(x)===key); const g=garantiaDe(key); if(!garTieneDatos(g)){ showToast('Sin garantía'); return; }
+  const nm=(p?p.n:(g.prod_nom||'')); const comp=(g.composicion||[]).filter(x=>x.nut);
+  const bd='border:.5pt solid #cbd5e0;padding:4px 7px';
+  const rows=comp.map(x=>{ const tip=(x.tipo&&x.tipo!=='—')?(x.tipo+'. '):''; return `<tr><td style="${bd}">${esc(x.nut)}</td><td style="${bd}" align="right">${esc(tip+x.valor+(x.unidad?(' '+x.unidad):''))}</td></tr>`; }).join('');
+  const sec=(t,b)=>b?`<tr><td colspan="2" style="background:#eef5ef;font-weight:bold;${bd}">${esc(t)}</td></tr><tr><td colspan="2" style="${bd}">${esc(b)}</td></tr>`:'';
+  const html='<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="utf-8"></head><body>'+
+    '<table style="border-collapse:collapse;font-family:Calibri,Arial;font-size:11pt">'+
+    `<tr><td colspan="2" style="background:#2f7d3b;color:#fff;font-size:15pt;font-weight:bold;padding:8px">BIOINNOVA S.A. — Análisis garantizado</td></tr>`+
+    `<tr><td colspan="2" style="background:#eef5ef;font-weight:bold;padding:5px">${esc(nm)}${g.registro?(' · Reg. SENACSA N° '+esc(g.registro)):''}${g.especie?(' · '+esc(g.especie)):''}${(p&&p.kg)?(' · '+p.kg+' kg'):''}</td></tr>`+
+    `<tr><td style="background:#2f7d3b;color:#fff;font-weight:bold;${bd}">Nutriente</td><td style="background:#2f7d3b;color:#fff;font-weight:bold;${bd}" align="right">Garantía</td></tr>`+
+    rows+sec('Ingredientes',g.ingredientes)+sec('Indicaciones de uso',g.indicaciones)+sec('Dosis / modo de empleo',g.dosis)+
+    '</table></body></html>';
+  const blob=new Blob(['﻿'+html],{type:'application/vnd.ms-excel;charset=utf-8'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='Garantia-'+String(nm).replace(/[^\w\-]+/g,'_')+'.xls'; document.body.appendChild(a); a.click(); a.remove(); showToast('✓ Excel descargado');
 }
 // garantías (con datos) correspondientes a los ítems de una cotización
 function garForCotizItems(items){ const byName={}; precioList().forEach(p=>{ byName[String(p.n).trim().toLowerCase()]={key:precioKey(p),p}; }); const out=[]; (items||[]).forEach(i=>{ const m=byName[String(i.nombre||'').trim().toLowerCase()]; if(!m) return; const g=garantiaDe(m.key); if(garTieneDatos(g) && !out.some(o=>o.key===m.key)){ out.push({key:m.key, nom:i.nombre, g, p:m.p}); } }); return out; }
