@@ -498,7 +498,7 @@ textarea{resize:vertical;min-height:66px}
       <button class="fintab" id="finT_banco" onclick="finSetTab('banco')">🏦 Fijos</button>
       <button class="fintab" id="finT_flujo" onclick="finSetTab('flujo')">📊 Flujo</button>
     </div>
-    <div style="font-size:9px;color:var(--gray-400);text-align:right;margin:-6px 0 8px">BioInnova <span id="finVer">v88</span></div>
+    <div style="font-size:9px;color:var(--gray-400);text-align:right;margin:-6px 0 8px">BioInnova <span id="finVer">v89</span></div>
     <div id="finW_ventas">
       <button class="btn btn-primary btn-block" style="margin-bottom:8px" onclick="finVentaModal()">＋ Nueva venta</button>
       <input type="search" id="finVBuscar" placeholder="🔎 Buscar cliente / factura…" oninput="finRenderVentas()" style="margin-bottom:8px">
@@ -3401,7 +3401,7 @@ function finProyModal(){ if(!canEdit()){ showToast('Sin permiso'); return; } con
     <div style="font-size:11px;color:var(--gray-500);margin-top:10px;font-weight:600">Sueldos estimados /mes (₲)</div>
     <div class="row3" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px"><div><label class="fl">Planta</label><input type="number" id="finProySuePl" value="${fp.sue_planta||''}" placeholder="30000000"></div><div><label class="fl">Comerciales</label><input type="number" id="finProySueCo" value="${fp.sue_comercial||''}" placeholder="28000000"></div><div><label class="fl">Superior</label><input type="number" id="finProySueSu" value="${fp.sue_superior||''}" placeholder="17000000"></div></div>
     <div style="font-size:10px;color:var(--gray-400);margin-top:2px">La carga social se suma a planta y comerciales (no al superior).</div>
-    <div class="row2"><div><label class="fl">Carga social (%)</label><input type="number" step="0.1" id="finProyCarga" value="${fp.carga_social_pct!=null?fp.carga_social_pct:16.5}" placeholder="16.5"></div><div><label class="fl">IVA (%)</label><input type="number" step="0.1" id="finProyIva" value="${fp.iva_pct!=null?fp.iva_pct:10}" placeholder="10"></div></div>
+    <div class="row2"><div><label class="fl">Carga social (%)</label><input type="number" step="0.1" id="finProyCarga" value="${fp.carga_social_pct!=null?fp.carga_social_pct:16.5}" placeholder="16.5"></div><div><label class="fl">IVA a descontar ventas (%)</label><input type="number" step="0.1" id="finProyIva" value="${fp.iva_pct!=null?fp.iva_pct:10}" placeholder="10"></div></div>
     <label class="fl">Comisiones (% de ventas)</label><input type="number" step="0.1" id="finProyComis" value="${fp.comision_pct!=null?fp.comision_pct:''}" placeholder="3">
     <div class="row2" style="margin-top:12px">${getFinProy()?`<button class="btn btn-sec" onclick="finProyBorrar()" style="color:var(--red)">Borrar</button>`:'<button class="btn btn-sec" onclick="cerrarModal()">Cancelar</button>'}<button class="btn btn-primary" onclick="finProyGuardar()">Guardar</button></div>`;
   gs('modal').classList.add('show');
@@ -3436,6 +3436,7 @@ function finRenderFlujo(){ const modo=_finFluModo; const per=ds=>{ if(!ds)return
   const suePlantaG=Math.round(suePlanta*(1+cargaPct/100)), sueComercialG=Math.round(sueComercial*(1+cargaPct/100)), sueSuperiorG=sueSuperior;
   const sueldosMes=suePlantaG+sueComercialG+sueSuperiorG;
   const comisionPct=(fp&&Number(fp.comision_pct))||0; const crecPct=(fp&&fp.crecimiento_pct!=null)?Number(fp.crecimiento_pct):0; const ivaPct=(fp&&fp.iva_pct!=null)?Number(fp.iva_pct):10;
+  const ivaFactor=ivaPct>0?100/(100+ivaPct):1;   // ventas netas de IVA (se descuenta el IVA incluido)
   // barras de configuración: saldo inicial + ventas proyectadas
   const detBreak = fc?('₲ '+saldoGs.toLocaleString('es-PY')+(saldoUsd?' · US$ '+saldoUsd.toLocaleString('es-PY',{maximumFractionDigits:2})+' · TC '+tcIni.toLocaleString('es-PY'):'')):'';
   if(gs('finFluCaja')){
@@ -3450,13 +3451,13 @@ function finRenderFlujo(){ const modo=_finFluModo; const per=ds=>{ if(!ds)return
   const addD=(k,f,val,desc,fecha)=>{ if(!k||!val)return; add(k,f,val); (DET[k]=DET[k]||{}); (DET[k][f]=DET[k][f]||[]).push({desc:desc||'',monto:val,fecha:fecha||''}); };
   // cheques: una compra vinculada a un cheque (pendiente o ya caído) queda cubierta y no cuenta como pago pendiente; solo los cheques pendientes se proyectan como egreso el día que caen.
   const chAll=getCheques(); const chCov={}; chAll.forEach(c=>{ if(c.compra_id) chCov[c.compra_id]=true; }); const chList=chAll.filter(c=>c.estado!=='caido');
-  let gCxc=0,gCobR=0,gCxp=0,gPagR=0,gSue=0,gCheq=0,gBanco=0,gVproy=0,gCprod=0,gSpry=0,gComis=0,gIva=0;
+  let gCxc=0,gCobR=0,gCxp=0,gPagR=0,gSue=0,gCheq=0,gBanco=0,gVproy=0,gCprod=0,gSpry=0,gComis=0;
   const sueldoRealMes={};   // sueldos reales cargados por mes (para netear el sueldo proyectado)
   getSueldos().forEach(su=>{ const mk=(su.periodo||String(su.fecha||'').slice(0,7)); if(mk) sueldoRealMes[mk]=(sueldoRealMes[mk]||0)+finGs(su,su.total||0); });
   // Ventas: saldo pendiente -> Cuentas por cobrar (por vencimiento); abonos desde el arranque -> Cobranzas realizadas (por fecha de cobro)
-  getVentas().forEach(v=>{ const smk=String(v.fecha||'').slice(0,7); if(smk) salesMes[smk]=(salesMes[smk]||0)+finGs(v,v.monto); const nom=v.cliente||v.concepto||'—'; const fx=v.factura?' · Fact '+v.factura:'';
-    (v.cuotas||[]).forEach(cu=>{ const s=finCuotaSaldo(cu); if(s>0){ const g=finGs(v,s); addD(perRoll(cu.venc),'cxc',g, nom+fx+' · vence '+fmtFecha(cu.venc), cu.venc); gCxc+=g; }
-      (cu.abonos||[]).forEach(a=>{ if(String(a.fecha)>=start){ const g=finGs(v,a.monto); addD(per(a.fecha),'cobR',g, nom+fx+' · cobrado '+fmtFecha(a.fecha), a.fecha); gCobR+=g; } }); }); });
+  getVentas().forEach(v=>{ const smk=String(v.fecha||'').slice(0,7); if(smk) salesMes[smk]=(salesMes[smk]||0)+Math.round(finGs(v,v.monto)*ivaFactor); const nom=v.cliente||v.concepto||'—'; const fx=v.factura?' · Fact '+v.factura:'';
+    (v.cuotas||[]).forEach(cu=>{ const s=finCuotaSaldo(cu); if(s>0){ const g=Math.round(finGs(v,s)*ivaFactor); addD(perRoll(cu.venc),'cxc',g, nom+fx+' · vence '+fmtFecha(cu.venc)+' (neto IVA)', cu.venc); gCxc+=g; }
+      (cu.abonos||[]).forEach(a=>{ if(String(a.fecha)>=start){ const g=Math.round(finGs(v,a.monto)*ivaFactor); addD(per(a.fecha),'cobR',g, nom+fx+' · cobrado '+fmtFecha(a.fecha)+' (neto IVA)', a.fecha); gCobR+=g; } }); }); });
   // Compras: saldo pendiente -> Cuentas por pagar; abonos desde el arranque -> Pagos realizados
   getCompras().forEach(c=>{ if(chCov[c.id]) return; const nom=c.proveedor||c.categoria||'—'; const fx=c.factura?' · Fact '+c.factura:'';
     (c.cuotas||[]).forEach(cu=>{ const s=finCuotaSaldo(cu); if(s>0){ const g=finGs(c,s); addD(perRoll(cu.venc),'cxp',g, nom+fx+' · vence '+fmtFecha(cu.venc), cu.venc); gCxp+=g; }
@@ -3481,12 +3482,12 @@ function finRenderFlujo(){ const modo=_finFluModo; const per=ds=>{ if(!ds)return
   if(hasProj){ const monthAdd=(ym,n)=>{ let [y,m]=ym.split('-').map(Number); m+=n; y+=Math.floor((m-1)/12); m=((m-1)%12+12)%12+1; return y+'-'+String(m).padStart(2,'0'); };
     const sm=(start>hoyS?start:hoyS).slice(0,7); let mdm=sm; Object.keys(P).forEach(k=>{ const km=k.slice(0,7); if(km>mdm) mdm=km; });
     const horizon=(monthAdd(sm,11)>mdm)?monthAdd(sm,11):mdm; let M=sm, guard=0, mi=0;
-    while(M<=horizon && guard++<60){ const factor=Math.pow(1+crecPct/100, mi/12); const vm=ventasMes*factor;
+    while(M<=horizon && guard++<60){ const factor=Math.pow(1+crecPct/100, mi/12); const vm=ventasMes*factor*ivaFactor;   // estimado mensual neto de IVA
       const proj=Math.max(0,Math.round(vm)-(salesMes[M]||0)); const cost=Math.max(0,Math.round(costoPct/100*vm)-(insumoMes[M]||0));
-      const spry=Math.max(0,sueldosMes-(sueldoRealMes[M]||0)); const ventasTot=proj+(salesMes[M]||0); const comis=Math.max(0,Math.round(comisionPct/100*ventasTot)-(comisionRealMes[M]||0)); const iva=Math.max(0,Math.round(ivaPct/100*ventasTot)-Math.round(ivaPct/100*(cost+(gravadasMes[M]||0))));   // IVA neto = debito(ventas) - credito(compras gravadas)
-      projByMonth[M]={proj,cost,spry,comis,iva}; gVproy+=proj; gCprod+=cost; gSpry+=spry; gComis+=comis; gIva+=iva; touch(perRoll(M+'-01')); M=monthAdd(M,1); mi++; } }
+      const spry=Math.max(0,sueldosMes-(sueldoRealMes[M]||0)); const ventasTot=proj+(salesMes[M]||0); const comis=Math.max(0,Math.round(comisionPct/100*ventasTot)-(comisionRealMes[M]||0));
+      projByMonth[M]={proj,cost,spry,comis}; gVproy+=proj; gCprod+=cost; gSpry+=spry; gComis+=comis; touch(perRoll(M+'-01')); M=monthAdd(M,1); mi++; } }
   // tarjetas resumen
-  const porCobrar=gCxc, porPagar=gCxp+gSue+gCheq+gBanco, saldoFin=saldoIni+(gVproy+gCxc+gCobR)-(gCprod+gCxp+gPagR+gCheq+gBanco+gSue+gSpry+gComis+gIva);
+  const porCobrar=gCxc, porPagar=gCxp+gSue+gCheq+gBanco, saldoFin=saldoIni+(gVproy+gCxc+gCobR)-(gCprod+gCxp+gPagR+gCheq+gBanco+gSue+gSpry+gComis);
   if(gs('finFluResumen')) gs('finFluResumen').innerHTML=`<div style="display:flex;gap:8px;flex-wrap:wrap">
     <div style="flex:1;min-width:110px;background:var(--gray-100);border-radius:10px;padding:10px;text-align:center"><div style="font-size:10px;color:var(--gray-500)">Por cobrar</div><div style="font-size:15px;font-weight:700;color:var(--amber)">${finGsFmt(porCobrar)}</div></div>
     <div style="flex:1;min-width:110px;background:var(--gray-100);border-radius:10px;padding:10px;text-align:center"><div style="font-size:10px;color:var(--gray-500)">Por pagar</div><div style="font-size:15px;font-weight:700;color:var(--red)">${finGsFmt(porPagar)}</div></div>
@@ -3496,17 +3497,16 @@ function finRenderFlujo(){ const modo=_finFluModo; const per=ds=>{ if(!ds)return
   let periods=[]; if(ks.length){ if(modo==='sem'){ let d=_fluDate(ks[0]); const e=_fluDate(ks[ks.length-1]); let g=0; while(d<=e && g++<200){ periods.push(_fluKey(d)); d.setDate(d.getDate()+7); } } else { let [y,m]=ks[0].split('-').map(Number); const [ye,me]=ks[ks.length-1].split('-').map(Number); let g=0; while((y<ye||(y===ye&&m<=me)) && g++<200){ periods.push(y+'-'+String(m).padStart(2,'0')); m++; if(m>12){m=1;y++;} } } }
   // distribuir el proyectado mensual entre los períodos (por días, para que cada semana muestre lo mismo)
   if(hasProj){ const dim=ym=>{ const p=ym.split('-').map(Number); return new Date(p[0],p[1],0).getDate(); };
-    const put=(k,pm,frac,mlbl,suf)=>{ touch(k); const pv=Math.round(pm.proj*frac), pc=Math.round(pm.cost*frac), ps=Math.round((pm.spry||0)*frac), pco=Math.round((pm.comis||0)*frac), pi=Math.round((pm.iva||0)*frac);
+    const put=(k,pm,frac,mlbl,suf)=>{ touch(k); const pv=Math.round(pm.proj*frac), pc=Math.round(pm.cost*frac), ps=Math.round((pm.spry||0)*frac), pco=Math.round((pm.comis||0)*frac);
       if(pv){ P[k].vproy=(P[k].vproy||0)+pv; (DET[k]=DET[k]||{}); (DET[k].vproy=DET[k].vproy||[]).push({desc:'Ventas estimadas de '+mlbl+suf,monto:pv,fecha:''}); }
       if(pc){ P[k].cprod=(P[k].cprod||0)+pc; (DET[k]=DET[k]||{}); (DET[k].cprod=DET[k].cprod||[]).push({desc:'Costo estimado de '+mlbl+suf,monto:pc,fecha:''}); }
       if(ps){ P[k].spry=(P[k].spry||0)+ps; (DET[k]=DET[k]||{}); const dl=(DET[k].spry=DET[k].spry||[]); const cg=cargaPct?' +'+cargaPct+'% carga':''; const psP=sueldosMes?Math.round(ps*suePlantaG/sueldosMes):0, psC=sueldosMes?Math.round(ps*sueComercialG/sueldosMes):0, psS=ps-psP-psC; if(psP) dl.push({desc:'Planta'+cg+' ('+mlbl+')'+suf,monto:psP,fecha:''}); if(psC) dl.push({desc:'Comerciales'+cg+' ('+mlbl+')'+suf,monto:psC,fecha:''}); if(psS) dl.push({desc:'Superior ('+mlbl+')'+suf,monto:psS,fecha:''}); }
-      if(pco){ P[k].comis=(P[k].comis||0)+pco; (DET[k]=DET[k]||{}); (DET[k].comis=DET[k].comis||[]).push({desc:'Comisiones ('+comisionPct+'% de ventas) de '+mlbl+suf,monto:pco,fecha:''}); }
-      if(pi){ P[k].iva=(P[k].iva||0)+pi; (DET[k]=DET[k]||{}); (DET[k].iva=DET[k].iva||[]).push({desc:'IVA neto ('+ivaPct+'% ventas − '+ivaPct+'% compras) de '+mlbl+suf,monto:pi,fecha:''}); } };
+      if(pco){ P[k].comis=(P[k].comis||0)+pco; (DET[k]=DET[k]||{}); (DET[k].comis=DET[k].comis||[]).push({desc:'Comisiones ('+comisionPct+'% de ventas) de '+mlbl+suf,monto:pco,fecha:''}); } };
     Object.keys(projByMonth).forEach(M=>{ const pm=projByMonth[M]; const mlbl=finMesLbl(M);
       if(modo!=='sem'){ if(periods.indexOf(M)>=0) put(M,pm,1,mlbl,''); }
       else { const dm=dim(M); periods.forEach(k=>{ const b=_fluDate(k); let days=0; for(let i=0;i<7;i++){ const d=new Date(b); d.setDate(d.getDate()+i); if(_fluKey(d).slice(0,7)===M) days++; } if(days>0) put(k,pm,days/dm,mlbl,' (parte de la semana)'); }); }
     }); }
-  periods.forEach(k=>{ const p=P[k]||{vproy:0,cxc:0,cobR:0,cprod:0,cxp:0,pagR:0,cheq:0,banco:0,capital:0,alquiler:0,deuda:0,spry:0,comis:0,iva:0,sue:0}; p.totIn=(p.vproy||0)+p.cxc+(p.cobR||0); p.totEg=(p.cprod||0)+p.cxp+(p.pagR||0)+p.cheq+(p.banco||0)+(p.capital||0)+(p.alquiler||0)+(p.deuda||0)+(p.spry||0)+(p.comis||0)+(p.iva||0)+p.sue; p.neto=p.totIn-p.totEg; P[k]=p; });
+  periods.forEach(k=>{ const p=P[k]||{vproy:0,cxc:0,cobR:0,cprod:0,cxp:0,pagR:0,cheq:0,banco:0,capital:0,alquiler:0,deuda:0,spry:0,comis:0,iva:0,sue:0}; p.totIn=(p.vproy||0)+p.cxc+(p.cobR||0); p.totEg=(p.cprod||0)+p.cxp+(p.pagR||0)+p.cheq+(p.banco||0)+(p.capital||0)+(p.alquiler||0)+(p.deuda||0)+(p.spry||0)+(p.comis||0)+p.sue; p.neto=p.totIn-p.totEg; P[k]=p; });
   _finFluDet={det:DET,modo:modo};
   let ac=saldoIni; periods.forEach(k=>{ ac+=P[k].neto; P[k].acum=ac; });
   // toggle
@@ -3526,7 +3526,7 @@ function finRenderFlujo(){ const modo=_finFluModo; const per=ds=>{ if(!ds)return
   const netoRow=`<tr class="neto"><td class="lbl">Neto del período</td>${periods.map(k=>{ const v=P[k].neto; return `<td class="num${k===curK?' now':''}" title="${finGsFmt(v)}" style="color:${v<0?'var(--red)':'var(--green)'}">${v?_fluFmt(v):'<span class=z>·</span>'}</td>`; }).join('')}</tr>`;
   const acumRow=`<tr class="acum"><td class="lbl">Saldo de caja</td>${periods.map(k=>{ const v=P[k].acum; return `<td class="num${k===curK?' now':''}" title="${finGsFmt(v)}" style="${v<0?'color:#ffd0d0':''}">${_fluFmt(v)||'0'}</td>`; }).join('')}</tr>`;
   const body=secRow('INGRESOS')+dataRow('','Ventas proyectadas','vproy','#7ba87b')+dataRow('','Cuentas por cobrar','cxc','var(--amber)')+dataRow('','Cobranzas realizadas','cobR','var(--green)')+dataRow('totin','Total ingresos','totIn','')+
-    secRow('EGRESOS')+dataRow('','Costos de producción','cprod','#d98a8a')+dataRow('','Cuentas por pagar','cxp','var(--amber)')+dataRow('','Pagos realizados','pagR','var(--red)')+dataRow('','Cheques diferidos','cheq','var(--red)')+dataRow('','Cuota banco','banco','var(--red)')+dataRow('','Capital operativo','capital','var(--red)')+dataRow('','Alquiler','alquiler','var(--red)')+dataRow('','Deudas','deuda','var(--red)')+dataRow('','Sueldos proyectados','spry','#d98a8a')+dataRow('','Sueldos a pagar','sue','var(--red)')+dataRow('','Comisiones','comis','var(--red)')+dataRow('','IVA (neto)','iva','var(--red)')+dataRow('toteg','Total egresos','totEg','')+
+    secRow('EGRESOS')+dataRow('','Costos de producción','cprod','#d98a8a')+dataRow('','Cuentas por pagar','cxp','var(--amber)')+dataRow('','Pagos realizados','pagR','var(--red)')+dataRow('','Cheques diferidos','cheq','var(--red)')+dataRow('','Cuota banco','banco','var(--red)')+dataRow('','Capital operativo','capital','var(--red)')+dataRow('','Alquiler','alquiler','var(--red)')+dataRow('','Deudas','deuda','var(--red)')+dataRow('','Sueldos proyectados','spry','#d98a8a')+dataRow('','Sueldos a pagar','sue','var(--red)')+dataRow('','Comisiones','comis','var(--red)')+dataRow('toteg','Total egresos','totEg','')+
     netoRow+acumRow;
   const css=`<style>.flu{border-collapse:separate;border-spacing:0;font-size:10.5px;white-space:nowrap}.flu th,.flu td{padding:5px 8px;border-bottom:1px solid var(--gray-200)}.flu .lbl{position:sticky;left:0;background:#fff;text-align:left;font-weight:600;min-width:148px;box-shadow:1px 0 0 var(--gray-200);z-index:2}.flu .corner{position:sticky;left:0;z-index:3;background:#1e3f63;color:#fff;text-align:left}.flu .mth{background:#eef2f7;color:#1e3f63;font-weight:700;text-align:center;font-size:10px}.flu .wk{text-align:center;color:var(--gray-600);font-size:9.5px}.flu .wk .d{font-weight:700;color:var(--gray-800);font-size:10.5px}.flu td.num{text-align:right;font-variant-numeric:tabular-nums}.flu td.now,.flu th.now{background:var(--green-lt)}.flu tr.sec .secl{background:#1e3f63;color:#fff;font-weight:800;font-size:10px;letter-spacing:.5px}.flu tr.sec .secbar{background:#1e3f63}.flu tr.totin .lbl,.flu tr.totin td.num{background:#eaf7ee;font-weight:800}.flu tr.toteg .lbl,.flu tr.toteg td.num{background:#fdecec;font-weight:800}.flu tr.neto .lbl,.flu tr.neto td.num{background:#f8fafc;font-weight:800}.flu tr.acum .lbl,.flu tr.acum td.num{background:#1e3f63;color:#fff;font-weight:800}.flu tr.totin td.now,.flu tr.toteg td.now,.flu tr.neto td.now{background:#dff0e6}.flu .z{color:var(--gray-300)}.flu td.clk{cursor:pointer}.flu td.clk:hover{text-decoration:underline;background:#fffbe6}</style>`;
   gs('finFluTabla').innerHTML=bar+css+`<table class="flu"><thead>${head1}${head2}</thead><tbody>${body}</tbody></table>`;
