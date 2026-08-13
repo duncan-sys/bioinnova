@@ -3735,7 +3735,14 @@ function informePDF(id){
     .resumen .rk span{background:#fff;border:1px solid #cbd5e0;border-radius:12px;padding:1px 8px;font-size:11px}
     .resumen .rr{margin-top:6px;font-size:11.5px;color:#c8820a}
     .ter table,.resumen table{margin-bottom:0}
-    @media print{body{padding-bottom:0} .wrap{padding:12mm} .noprint{display:none} .resumen,.ter,h3.cat{break-inside:avoid}}
+    @page{size:A4;margin:12mm}
+    @media print{
+      html,body{background:#fff} body{margin:0;padding:0} .wrap{max-width:none;margin:0;padding:0}
+      .noprint{display:none!important}
+      thead{display:table-header-group}
+      tr,.kpi,table,.ter,.resumen,.diag,.firma{break-inside:avoid}
+      h2,h3.cat{break-after:avoid}
+    }
   </style></head><body><div class="wrap">
     <div class="top"><img src="${location.origin}${location.pathname.replace(/[^/]*$/,'')}logo.jpg" alt="BioInnova"><p>INFORME TÉCNICO A CAMPO · Nutrición de bovinos de corte</p></div>
     <h2>1. Datos de la visita</h2>
@@ -3750,29 +3757,28 @@ function informePDF(id){
     <h2>4. Cierre</h2>
     <div class="firma"><div>Próxima visita: <b>${v.proxima?fmtFecha(v.proxima):'____ / ____ / ______'}</b></div><div>Firma del técnico: __________________</div></div>
     <div class="foot">Bioinnova S.A.  ·  Nutrición de bovinos de corte  ·  Informe generado el ${fmtFecha(hoy())}</div>
-    <div class="noprint" style="position:fixed;left:0;right:0;bottom:0;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;padding:10px;background:#fff;border-top:1px solid #cbd5e0;box-shadow:0 -2px 8px rgba(0,0,0,.08);z-index:5">
-      <button onclick="guardarPDF(this)" style="background:#16a34a;color:#fff;border:none;padding:10px 20px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">📄 Guardar PDF</button>
-      <button onclick="window.print()" style="background:#2f7d3b;color:#fff;border:none;padding:10px 20px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">🖨️ Imprimir</button>
-      <button onclick="parent.cerrarInforme&&parent.cerrarInforme()" style="background:#e2e8f0;color:#334155;border:none;padding:10px 20px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">← Volver</button>
+    <div class="noprint" style="position:fixed;left:0;right:0;bottom:0;display:flex;gap:10px;align-items:center;justify-content:center;flex-wrap:wrap;padding:12px;background:#fff;border-top:1px solid #cbd5e0;box-shadow:0 -2px 10px rgba(0,0,0,.10);z-index:5">
+      <button onclick="window.print()" style="background:#16a34a;color:#fff;border:none;padding:12px 24px;border-radius:8px;font-size:15px;font-weight:700;cursor:pointer">📄 Guardar / Imprimir PDF</button>
+      <button onclick="(window.frameElement?(parent.cerrarInforme&&parent.cerrarInforme()):window.close())" style="background:#e2e8f0;color:#334155;border:none;padding:12px 20px;border-radius:8px;font-size:15px;font-weight:700;cursor:pointer">✕ Cerrar</button>
+      <span style="flex-basis:100%;text-align:center;font-size:11px;color:#718096">En la ventana de impresión, elegí <b>“Guardar como PDF”</b> como destino.</span>
     </div>
   </div>
-  <script src="${location.origin}${location.pathname.replace(/[^/]*$/,'')}html2pdf.bundle.min.js"><\/script>
-  <script>
-  var PDF_NAME=${JSON.stringify('Informe-'+String(c.nombre||'').replace(/[^\w\-]+/g,'_')+'-'+String(v.fecha||'').replace(/[^\w\-]+/g,'')+'.pdf')};
-  function guardarPDF(btn){ if(typeof html2pdf==='undefined'){ alert('No se pudo cargar el generador de PDF. Verificá tu conexión.'); return; }
-    var t=btn?btn.textContent:''; if(btn){ btn.textContent='Generando…'; btn.disabled=true; }
-    var el=document.querySelector('.wrap');
-    var opt={ margin:8, filename:PDF_NAME, image:{type:'jpeg',quality:0.95}, html2canvas:{scale:2,useCORS:true,backgroundColor:'#ffffff'}, jsPDF:{unit:'mm',format:'a4',orientation:'portrait'}, pagebreak:{mode:['css','legacy']} };
-    var done=function(){ if(btn){ btn.textContent=t; btn.disabled=false; } };
-    html2pdf().set(opt).from(el).save().then(done).catch(function(){ done(); alert('No se pudo generar el PDF. Probá con Imprimir → Guardar como PDF.'); });
-  }
-  <\/script></body></html>`;
-  // Se renderiza en un IFRAME embebido a pantalla completa (no en una ventana emergente):
-  // en un iframe la página se pinta por completo y html2canvas captura el contenido de forma
-  // confiable en compu y celular. La ventana emergente producía lienzos en blanco.
+  </body></html>`;
+  // El informe se abre como una PESTAÑA normal del navegador (documento HTML real vía blob) y
+  // se exporta con la IMPRESIÓN NATIVA (Guardar como PDF). Antes se rasterizaba con html2canvas,
+  // que en informes largos superaba el límite de altura del lienzo (~16k px) y dejaba hojas en
+  // blanco. La impresión nativa pagina bien, con texto nítido y sin límite de páginas.
+  try{
+    const blob=new Blob([doc],{type:'text/html'});
+    const url=URL.createObjectURL(blob);
+    const w=window.open(url,'_blank');
+    if(w){ setTimeout(()=>{ try{ URL.revokeObjectURL(url); }catch(_){} }, 120000); return; }
+    try{ URL.revokeObjectURL(url); }catch(_){}
+  }catch(_){}
+  // Respaldo si el navegador bloquea la pestaña emergente: overlay con iframe dentro de la app.
   cerrarInforme();
   const _ov=document.createElement('div'); _ov.id='informeOverlay';
-  _ov.style.cssText='position:fixed;inset:0;z-index:100000;background:#525659';
+  _ov.style.cssText='position:fixed;inset:0;z-index:100000;background:#f1f5f9;overflow:auto';
   const _if=document.createElement('iframe'); _if.setAttribute('title','Informe técnico');
   _if.style.cssText='width:100%;height:100%;border:0;display:block';
   _if.srcdoc=doc;
