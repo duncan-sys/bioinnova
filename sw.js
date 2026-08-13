@@ -3,7 +3,7 @@
 // versión cuando hay internet; cae al caché solo si está offline. El resto de
 // los assets, stale-while-revalidate. Así la app se actualiza sola online y
 // sigue funcionando sin señal. Los datos viven en localStorage + Supabase.
-const CACHE = 'bioinnova-v95';
+const CACHE = 'bioinnova-v96';
 const ASSETS = ['./', './index.html', './manifest.webmanifest', './icon.svg', './logo.svg', './logo.jpg', './html2pdf.bundle.min.js', './jspdf.umd.min.js', './jspdf.plugin.autotable.min.js'];
 
 self.addEventListener('install', e => {
@@ -25,10 +25,12 @@ self.addEventListener('fetch', e => {
   if (url.origin !== self.location.origin) return;   // no interceptar terceros (Supabase, etc.)
   const isDoc = req.mode === 'navigate' || url.pathname === '/' || url.pathname.endsWith('/') || url.pathname.endsWith('index.html');
   if (isDoc) {
-    // network-first: siempre lo último; caché como respaldo offline
+    // network-first con bypass del cache HTTP ({cache:'reload'}): siempre trae el index.html
+    // fresco desde la red (evita que la copia cacheada ~10 min de GitHub Pages muestre una
+    // version vieja). Cae al cache solo si no hay conexion.
     e.respondWith(
-      fetch(req).then(res => { if (res && res.status === 200) { const c = res.clone(); caches.open(CACHE).then(ca => ca.put(req, c)); } return res; })
-        .catch(() => caches.match(req).then(m => m || caches.match('./index.html')))
+      fetch(req, { cache: 'reload' }).then(res => { if (res && res.status === 200) { const c = res.clone(); caches.open(CACHE).then(ca => ca.put(req, c)); } return res; })
+        .catch(() => fetch(req).catch(() => caches.match(req).then(m => m || caches.match('./index.html'))))
     );
   } else {
     // stale-while-revalidate para el resto
