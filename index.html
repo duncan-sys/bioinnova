@@ -498,7 +498,7 @@ textarea{resize:vertical;min-height:66px}
       <button class="fintab" id="finT_banco" onclick="finSetTab('banco')">🏦 Fijos</button>
       <button class="fintab" id="finT_flujo" onclick="finSetTab('flujo')">📊 Flujo</button>
     </div>
-    <div style="font-size:9px;color:var(--gray-400);text-align:right;margin:-6px 0 8px">BioInnova <span id="finVer">v94</span></div>
+    <div style="font-size:9px;color:var(--gray-400);text-align:right;margin:-6px 0 8px">BioInnova <span id="finVer">v95</span></div>
     <div id="finW_ventas">
       <button class="btn btn-primary btn-block" style="margin-bottom:8px" onclick="finVentaModal()">＋ Nueva venta</button>
       <input type="search" id="finVBuscar" placeholder="🔎 Buscar cliente / factura…" oninput="finRenderVentas()" style="margin-bottom:8px">
@@ -1735,7 +1735,7 @@ function verVisita(id){
     ${bloques}
     ${v.diagnostico?'<div class="sect-t">Diagnóstico general</div><div style="font-size:12px">'+esc(v.diagnostico)+'</div>':''}
     ${v.recomendacion?'<div class="sect-t">Recomendación general</div><div style="font-size:12px">'+esc(v.recomendacion)+'</div>':''}
-    <button class="btn btn-primary btn-block" style="margin-top:14px;background:#16a34a" onclick="informePDFDescargar('${v.id}')">📄 Guardar PDF</button>
+    <button class="btn btn-primary btn-block" style="margin-top:14px;background:#16a34a" onclick="informePDFDescargar('${v.id}')">📄 Generar PDF</button>
     <div class="row2" style="margin-top:8px">${canEdit()?`<button class="btn btn-sec" onclick="editarVisita('${v.id}')">✎ Editar</button>`:''}<button class="btn btn-amber" onclick="informePDF('${v.id}')" style="${canEdit()?'':'flex:1'}">🖨️ Ver / Imprimir</button></div>
     ${canEdit()?`<button class="btn btn-sec btn-block" style="margin-top:8px;color:var(--red)" onclick="borrarVisita('${v.id}')">Borrar visita</button>`:''}
     <button class="btn btn-ghost btn-block" style="margin-top:8px" onclick="cerrarModal()">Cerrar</button>`;
@@ -3683,8 +3683,12 @@ function _bioLogoData(){
 // repetidos y texto nitido/seleccionable. Reemplaza el problema de hojas en blanco.
 async function informePDFDescargar(id){
   const v=getVisitas().find(x=>x.id===id); if(!v){ showToast('Visita no encontrada'); return; }
+  // Abrimos la pestaña del visor YA, dentro del gesto del clic, para que el celular no la bloquee.
+  // Luego, cuando el PDF esté listo, la navegamos al blob. Así el usuario lo ve y lo guarda/comparte a mano.
+  let _visor=null; try{ _visor=window.open('','_blank'); }catch(_){}
+  if(_visor){ try{ _visor.document.write('<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><title>Generando PDF…</title><body style="margin:0;font:16px -apple-system,Segoe UI,Roboto,sans-serif;color:#334155;display:flex;align-items:center;justify-content:center;height:100vh">Generando PDF…</body>'); }catch(_){} }
   showToast('Generando PDF…');
-  try{ await ensurePdfLibs(); }catch(e){ alert('No se pudo cargar el generador de PDF. La primera vez necesita conexión; después funciona sin señal.'); return; }
+  try{ await ensurePdfLibs(); }catch(e){ if(_visor){ try{ _visor.close(); }catch(_){} } alert('No se pudo cargar el generador de PDF. La primera vez necesita conexión; después funciona sin señal.'); return; }
   const c=clienteById(v.cliente_id)||{}, e=estanciaById(v.estancia_id)||{};
   const logo=await _bioLogoData();
   const { jsPDF }=window.jspdf;
@@ -3779,8 +3783,15 @@ async function informePDFDescargar(id){
   const pc=doc.internal.getNumberOfPages();
   for(let i=1;i<=pc;i++){ doc.setPage(i); doc.setDrawColor.apply(doc,lineC); doc.setLineWidth(0.1); doc.line(M,H-11,W-M,H-11); doc.setFont('helvetica','normal'); doc.setFontSize(7.5); doc.setTextColor.apply(doc,grayC); doc.text('Bioinnova S.A.  ·  Nutricion de bovinos de corte  ·  Generado el '+fmtFecha(hoy()),M,H-7); doc.text('Pag. '+i+'/'+pc,W-M,H-7,{align:'right'}); }
   const fname='Informe-'+String(c.nombre||'').replace(/[^\w\-]+/g,'_')+'-'+String(v.fecha||'').replace(/[^\w\-]+/g,'')+'.pdf';
-  doc.save(fname);
-  showToast('✓ PDF descargado');
+  try{ doc.setProperties({title:fname}); }catch(_){}
+  // Generamos el PDF y lo ABRIMOS en el visor (no descarga directa): el usuario lo guarda/comparte a mano.
+  const url=doc.output('bloburl');
+  if(_visor){ try{ _visor.location.href=url; }catch(_){ _visor=null; } }
+  if(!_visor){
+    const w2=window.open(url,'_blank');
+    if(!w2){ const a=document.createElement('a'); a.href=url; a.download=fname; document.body.appendChild(a); a.click(); setTimeout(()=>{ try{ a.remove(); }catch(_){} },0); }
+  }
+  showToast('✓ PDF generado');
 }
 function informePDF(id){
   const v=getVisitas().find(x=>x.id===id); if(!v){ showToast('Visita no encontrada'); return; }
@@ -3881,7 +3892,7 @@ function informePDF(id){
     <div class="firma"><div>Próxima visita: <b>${v.proxima?fmtFecha(v.proxima):'____ / ____ / ______'}</b></div><div>Firma del técnico: __________________</div></div>
     <div class="foot">Bioinnova S.A.  ·  Nutrición de bovinos de corte  ·  Informe generado el ${fmtFecha(hoy())}</div>
     <div class="noprint" style="position:fixed;left:0;right:0;bottom:0;display:flex;gap:10px;align-items:center;justify-content:center;flex-wrap:wrap;padding:12px;background:#fff;border-top:1px solid #cbd5e0;box-shadow:0 -2px 10px rgba(0,0,0,.10);z-index:5">
-      <button onclick="var a=(window.opener||parent); if(a&&a.informePDFDescargar){a.informePDFDescargar('${v.id}')}else{window.print()}" style="background:#16a34a;color:#fff;border:none;padding:12px 24px;border-radius:8px;font-size:15px;font-weight:700;cursor:pointer">📄 Guardar PDF</button>
+      <button onclick="var a=(window.opener||parent); if(a&&a.informePDFDescargar){a.informePDFDescargar('${v.id}')}else{window.print()}" style="background:#16a34a;color:#fff;border:none;padding:12px 24px;border-radius:8px;font-size:15px;font-weight:700;cursor:pointer">📄 Generar PDF</button>
       <button onclick="window.print()" style="background:#2f7d3b;color:#fff;border:none;padding:12px 20px;border-radius:8px;font-size:15px;font-weight:700;cursor:pointer">🖨️ Imprimir</button>
       <button onclick="(window.frameElement?(parent.cerrarInforme&&parent.cerrarInforme()):window.close())" style="background:#e2e8f0;color:#334155;border:none;padding:12px 20px;border-radius:8px;font-size:15px;font-weight:700;cursor:pointer">✕ Cerrar</button>
     </div>
