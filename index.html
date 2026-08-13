@@ -3085,7 +3085,7 @@ function agPrint(){
      <button onclick="window.close()" style="background:#e2e8f0;color:#334155;border:none;padding:10px 20px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">← Volver</button>
    </div>
   </div>
-  <script src="https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.2/dist/html2pdf.bundle.min.js"><\/script>
+  <script src="${location.origin}${location.pathname.replace(/[^/]*$/,'')}html2pdf.bundle.min.js"><\/script>
   <script>
   var PDF_NAME=${JSON.stringify(fname)};
   function guardarPDF(btn){ if(typeof html2pdf==='undefined'){ alert('No se pudo cargar el generador de PDF. Verificá tu conexión.'); return; }
@@ -3646,7 +3646,7 @@ function informeComercialPDF(id){
       <button onclick="window.close()" style="background:#e2e8f0;color:#334155;border:none;padding:10px 20px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">← Volver</button>
     </div>
   </div>
-  <script src="https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.2/dist/html2pdf.bundle.min.js"><\/script>
+  <script src="${location.origin}${location.pathname.replace(/[^/]*$/,'')}html2pdf.bundle.min.js"><\/script>
   <script>
   var PDF_NAME=${JSON.stringify(fname)};
   function guardarPDF(btn){ if(typeof html2pdf==='undefined'){ alert('No se pudo cargar el generador de PDF. Verificá tu conexión.'); return; }
@@ -3712,9 +3712,8 @@ function informePDF(id){
   const evs=visitaEvals(v); const orden=[]; const grupos={};
   evs.forEach(ev=>{ const key=String(ev.lote||'').trim()||'__nolote'; if(!grupos[key]){ grupos[key]=[]; orden.push(key); } grupos[key].push(ev); });
   const secciones=orden.map(key=>{ const list=grupos[key]; const nombre=key==='__nolote'?'':key; return list.map(seccionEval).join('')+resumenLote(nombre,list); }).join('');
-  const w=window.open('','_blank');
-  w.document.write(`<html><head><meta charset="utf-8"><title>Informe técnico — ${esc(c.nombre||'')}</title><style>
-    *{box-sizing:border-box} body{font-family:Arial,Helvetica,sans-serif;color:#1a202c;margin:0;font-size:12.5px}
+  const doc=`<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Informe técnico — ${esc(c.nombre||'')}</title><style>
+    *{box-sizing:border-box} body{font-family:Arial,Helvetica,sans-serif;color:#1a202c;margin:0;font-size:12.5px;padding-bottom:76px}
     .wrap{max-width:780px;margin:0 auto;padding:26px}
     .top{background:#fff;border:1px solid #cbd5e0;padding:14px 22px;border-radius:12px;margin-bottom:16px;text-align:center}
     .top img{height:52px} .top p{margin:6px 0 0;font-size:12px;color:#255f2e;font-weight:600}
@@ -3736,7 +3735,7 @@ function informePDF(id){
     .resumen .rk span{background:#fff;border:1px solid #cbd5e0;border-radius:12px;padding:1px 8px;font-size:11px}
     .resumen .rr{margin-top:6px;font-size:11.5px;color:#c8820a}
     .ter table,.resumen table{margin-bottom:0}
-    @media print{.wrap{padding:12mm} .noprint{display:none} .resumen,.ter,h3.cat{break-inside:avoid}}
+    @media print{body{padding-bottom:0} .wrap{padding:12mm} .noprint{display:none} .resumen,.ter,h3.cat{break-inside:avoid}}
   </style></head><body><div class="wrap">
     <div class="top"><img src="${location.origin}${location.pathname.replace(/[^/]*$/,'')}logo.jpg" alt="BioInnova"><p>INFORME TÉCNICO A CAMPO · Nutrición de bovinos de corte</p></div>
     <h2>1. Datos de la visita</h2>
@@ -3751,13 +3750,13 @@ function informePDF(id){
     <h2>4. Cierre</h2>
     <div class="firma"><div>Próxima visita: <b>${v.proxima?fmtFecha(v.proxima):'____ / ____ / ______'}</b></div><div>Firma del técnico: __________________</div></div>
     <div class="foot">Bioinnova S.A.  ·  Nutrición de bovinos de corte  ·  Informe generado el ${fmtFecha(hoy())}</div>
-    <div class="noprint" style="display:flex;gap:8px;justify-content:center;margin-top:18px">
+    <div class="noprint" style="position:fixed;left:0;right:0;bottom:0;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;padding:10px;background:#fff;border-top:1px solid #cbd5e0;box-shadow:0 -2px 8px rgba(0,0,0,.08);z-index:5">
       <button onclick="guardarPDF(this)" style="background:#16a34a;color:#fff;border:none;padding:10px 20px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">📄 Guardar PDF</button>
       <button onclick="window.print()" style="background:#2f7d3b;color:#fff;border:none;padding:10px 20px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">🖨️ Imprimir</button>
-      <button onclick="window.close()" style="background:#e2e8f0;color:#334155;border:none;padding:10px 20px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">← Volver</button>
+      <button onclick="parent.cerrarInforme&&parent.cerrarInforme()" style="background:#e2e8f0;color:#334155;border:none;padding:10px 20px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">← Volver</button>
     </div>
   </div>
-  <script src="https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.2/dist/html2pdf.bundle.min.js"><\/script>
+  <script src="${location.origin}${location.pathname.replace(/[^/]*$/,'')}html2pdf.bundle.min.js"><\/script>
   <script>
   var PDF_NAME=${JSON.stringify('Informe-'+String(c.nombre||'').replace(/[^\w\-]+/g,'_')+'-'+String(v.fecha||'').replace(/[^\w\-]+/g,'')+'.pdf')};
   function guardarPDF(btn){ if(typeof html2pdf==='undefined'){ alert('No se pudo cargar el generador de PDF. Verificá tu conexión.'); return; }
@@ -3767,9 +3766,19 @@ function informePDF(id){
     var done=function(){ if(btn){ btn.textContent=t; btn.disabled=false; } };
     html2pdf().set(opt).from(el).save().then(done).catch(function(){ done(); alert('No se pudo generar el PDF. Probá con Imprimir → Guardar como PDF.'); });
   }
-  <\/script></body></html>`);
-  w.document.close();
+  <\/script></body></html>`;
+  // Se renderiza en un IFRAME embebido a pantalla completa (no en una ventana emergente):
+  // en un iframe la página se pinta por completo y html2canvas captura el contenido de forma
+  // confiable en compu y celular. La ventana emergente producía lienzos en blanco.
+  cerrarInforme();
+  const _ov=document.createElement('div'); _ov.id='informeOverlay';
+  _ov.style.cssText='position:fixed;inset:0;z-index:100000;background:#525659';
+  const _if=document.createElement('iframe'); _if.setAttribute('title','Informe técnico');
+  _if.style.cssText='width:100%;height:100%;border:0;display:block';
+  _if.srcdoc=doc;
+  _ov.appendChild(_if); document.body.appendChild(_ov);
 }
+function cerrarInforme(){ const o=document.getElementById('informeOverlay'); if(o) o.remove(); }
 
 // ── Offline / PWA ──
 if('serviceWorker' in navigator){
