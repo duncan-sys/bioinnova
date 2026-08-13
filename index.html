@@ -1735,7 +1735,8 @@ function verVisita(id){
     ${bloques}
     ${v.diagnostico?'<div class="sect-t">Diagnóstico general</div><div style="font-size:12px">'+esc(v.diagnostico)+'</div>':''}
     ${v.recomendacion?'<div class="sect-t">Recomendación general</div><div style="font-size:12px">'+esc(v.recomendacion)+'</div>':''}
-    <div class="row2" style="margin-top:14px">${canEdit()?`<button class="btn btn-sec" onclick="editarVisita('${v.id}')">✎ Editar</button>`:''}<button class="btn btn-amber" onclick="informePDF('${v.id}')" style="${canEdit()?'':'flex:1'}">🖨️ Informe</button></div>
+    <button class="btn btn-primary btn-block" style="margin-top:14px;background:#16a34a" onclick="informePDFDescargar('${v.id}')">📄 Guardar PDF</button>
+    <div class="row2" style="margin-top:8px">${canEdit()?`<button class="btn btn-sec" onclick="editarVisita('${v.id}')">✎ Editar</button>`:''}<button class="btn btn-amber" onclick="informePDF('${v.id}')" style="${canEdit()?'':'flex:1'}">🖨️ Ver / Imprimir</button></div>
     ${canEdit()?`<button class="btn btn-sec btn-block" style="margin-top:8px;color:var(--red)" onclick="borrarVisita('${v.id}')">Borrar visita</button>`:''}
     <button class="btn btn-ghost btn-block" style="margin-top:8px" onclick="cerrarModal()">Cerrar</button>`;
   gs('modal').classList.add('show');
@@ -3659,6 +3660,128 @@ function informeComercialPDF(id){
   <\/script></body></html>`);
   w.document.close();
 }
+// Carga perezosa de jsPDF + autoTable (copias locales; se cachean para offline).
+let _pdfLibsP=null;
+function ensurePdfLibs(){
+  if(window.jspdf&&window.jspdf.jsPDF&&window.jspdf.jsPDF.API&&window.jspdf.jsPDF.API.autoTable) return Promise.resolve();
+  if(_pdfLibsP) return _pdfLibsP;
+  const load=src=>new Promise((res,rej)=>{ const s=document.createElement('script'); s.src=src; s.onload=res; s.onerror=()=>rej(new Error('load '+src)); document.head.appendChild(s); });
+  _pdfLibsP=load('jspdf.umd.min.js').then(()=>load('jspdf.plugin.autotable.min.js')).then(()=>{ if(!(window.jspdf&&window.jspdf.jsPDF)) throw new Error('jsPDF no disponible'); }).catch(e=>{ _pdfLibsP=null; throw e; });
+  return _pdfLibsP;
+}
+function _bioLogoData(){
+  return new Promise(res=>{
+    if(window.__bioLogoData!==undefined) return res(window.__bioLogoData);
+    const img=new Image();
+    img.onload=()=>{ try{ const cv=document.createElement('canvas'); cv.width=img.naturalWidth; cv.height=img.naturalHeight; cv.getContext('2d').drawImage(img,0,0); window.__bioLogoData={data:cv.toDataURL('image/jpeg',0.92),w:img.naturalWidth,h:img.naturalHeight}; }catch(_){ window.__bioLogoData=null; } res(window.__bioLogoData); };
+    img.onerror=()=>{ window.__bioLogoData=null; res(null); };
+    img.src='logo.jpg';
+  });
+}
+// Descarga directa del informe como PDF VECTORIAL (jsPDF + autoTable): un clic = archivo.
+// No rasteriza (nada de html2canvas), pagina informes largos con encabezados de tabla
+// repetidos y texto nitido/seleccionable. Reemplaza el problema de hojas en blanco.
+async function informePDFDescargar(id){
+  const v=getVisitas().find(x=>x.id===id); if(!v){ showToast('Visita no encontrada'); return; }
+  showToast('Generando PDF…');
+  try{ await ensurePdfLibs(); }catch(e){ alert('No se pudo cargar el generador de PDF. La primera vez necesita conexión; después funciona sin señal.'); return; }
+  const c=clienteById(v.cliente_id)||{}, e=estanciaById(v.estancia_id)||{};
+  const logo=await _bioLogoData();
+  const { jsPDF }=window.jspdf;
+  const doc=new jsPDF({unit:'mm',format:'a4',orientation:'portrait',compress:true});
+  const W=doc.internal.pageSize.getWidth(), H=doc.internal.pageSize.getHeight(), M=14, CW=W-2*M, foot=H-12;
+  const green=[47,125,59],greenD=[37,95,46],headBg=[238,245,239],okBg=[230,242,232],amber=[200,130,10],amberBg=[253,243,224],amberBoxBg=[255,253,247],grayC=[113,128,150],lineC=[203,213,224],ink=[26,32,44];
+  let y=M;
+  const ensure=h=>{ if(y+h>foot){ doc.addPage(); y=M; } };
+  const kvOf2=(ev,nm)=>{ const k=(ev.kpis||[]).find(x=>x.k===nm); return k&&k.valor!==''&&k.valor!=null?k.valor:null; };
+  const estClean=s=>!s?'-':(String(s).replace(/[✔▼▲]/g,'').replace(/–/g,'-').trim()||'-');
+  const h2=t=>{ ensure(11); doc.setTextColor.apply(doc,green); doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.text(t,M,y+3); doc.setDrawColor.apply(doc,green); doc.setLineWidth(0.5); doc.line(M,y+5,W-M,y+5); doc.setLineWidth(0.1); y+=9; };
+  const catBar=t=>{ ensure(24); doc.setFillColor.apply(doc,green); doc.roundedRect(M,y,CW,7,1.2,1.2,'F'); doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(9.5); doc.text(t,M+2.5,y+4.8); y+=8.5; };
+  const textBlock=(txt,o)=>{ o=o||{}; const pad=2.2, fs=o.fs||8.8; doc.setFontSize(fs); doc.setFont('helvetica',o.bold?'bold':'normal'); const lines=doc.splitTextToSize(String(txt),CW-2*pad-(o.leftbar?1.8:0)); const lh=fs*0.45+0.5, bh=lines.length*lh+2*pad; ensure(bh+2); if(o.fill){ doc.setFillColor.apply(doc,o.fill); doc.roundedRect(M,y,CW,bh,1.2,1.2,'F'); } if(o.leftbar){ doc.setFillColor.apply(doc,o.leftbar); doc.rect(M,y,1.2,bh,'F'); } doc.setTextColor.apply(doc,o.color||ink); let ty=y+pad+lh*0.7; lines.forEach(l=>{ doc.text(l,M+pad+(o.leftbar?1.8:0),ty); ty+=lh; }); y+=bh+2; };
+  const kpiTable=(arr,headLbl)=>{ doc.autoTable({ startY:y, margin:{left:M,right:M,top:M,bottom:14},
+    head:[[headLbl||'KPI','Unidad','Obj. Min','Obj. Max','Medido','Estado']],
+    body:(arr||[]).map(k=>[k.k,k.u||'',k.min!=null?String(k.min):'-',k.max!=null?String(k.max):'-',k.valor||'-',estClean(k.estado)]),
+    theme:'grid', styles:{fontSize:8,cellPadding:1.5,lineColor:lineC,lineWidth:0.1,textColor:ink,overflow:'linebreak'},
+    headStyles:{fillColor:headBg,textColor:greenD,fontStyle:'bold'},
+    columnStyles:{1:{halign:'center',cellWidth:20},2:{halign:'center',cellWidth:18},3:{halign:'center',cellWidth:18},4:{halign:'center',fontStyle:'bold',cellWidth:20},5:{halign:'center',cellWidth:24}},
+    didParseCell:dd=>{ if(dd.section==='body'&&dd.column.index===5){ const r=String(dd.cell.raw||''); if(/rango/i.test(r)){ dd.cell.styles.fillColor=okBg; dd.cell.styles.textColor=greenD; dd.cell.styles.fontStyle='bold'; } else if(r&&r!=='-'){ dd.cell.styles.fillColor=amberBg; dd.cell.styles.textColor=amber; dd.cell.styles.fontStyle='bold'; } } }
+  }); y=doc.lastAutoTable.finalY; };
+  const datosTable=rows=>{ doc.autoTable({ startY:y, margin:{left:M,right:M,top:M,bottom:14}, body:rows, theme:'plain',
+    styles:{fontSize:8.5,cellPadding:1,textColor:ink,overflow:'linebreak'},
+    columnStyles:{0:{textColor:grayC,cellWidth:28},1:{fontStyle:'bold',cellWidth:62},2:{textColor:grayC,cellWidth:30},3:{fontStyle:'bold'}} }); y=doc.lastAutoTable.finalY+1.5; };
+  doc.setDrawColor.apply(doc,lineC); doc.setFillColor(255,255,255); doc.roundedRect(M,y,CW,20,2.5,2.5,'FD');
+  if(logo&&logo.data){ const lh=9,lw=Math.min(48,lh*(logo.w/logo.h)); doc.addImage(logo.data,'JPEG',W/2-lw/2,y+3.2,lw,lh,undefined,'FAST'); }
+  doc.setTextColor.apply(doc,greenD); doc.setFont('helvetica','bold'); doc.setFontSize(10.5);
+  doc.text('INFORME TECNICO A CAMPO  ·  Nutricion de bovinos de corte',W/2,y+16.8,{align:'center'});
+  y+=25;
+  h2('1. Datos de la visita');
+  datosTable([
+    ['Cliente',c.nombre||'-','Estancia',e.nombre||'-'],
+    ...((c.ruc||c.direccion)?[['RUC',c.ruc||'-','Direccion',c.direccion||'-']]:[]),
+    ['Fecha de visita',fmtFecha(v.fecha),'Tecnico comercial',v.tecnico||'-']
+  ]);
+  y+=1.5;
+  h2('2. Evaluacion por categoria y lote');
+  const evs=visitaEvals(v); const orden=[]; const grupos={};
+  evs.forEach(ev=>{ const key=String(ev.lote||'').trim()||'__nolote'; if(!grupos[key]){ grupos[key]=[]; orden.push(key); } grupos[key].push(ev); });
+  const evalSection=ev=>{
+    const esCria=ev.categoria==='Cría'; const comp=ev.componente;
+    catBar(ev.categoria+(esCria&&comp?' · '+compLabel(comp):'')+(ev.lote?'   |   Lote: '+ev.lote:''));
+    let consProd='-';
+    if(ev.consumo_g&&ev.peso) consProd=ev.consumo_g+' g/dia ('+((ev.consumo_g/1000)/ev.peso*100).toFixed(2)+'% PV)';
+    else if(ev.consumo_g) consProd=ev.consumo_g+' g/dia';
+    datosTable([
+      ['N° de animales',ev.n_animales!=null?String(ev.n_animales):'-','Dias en sistema',ev.dias_sistema!=null?String(ev.dias_sistema):'-'],
+      ['Producto',ev.producto||'-','Consumo obs.',ev.consumo||'-'],
+      ['Peso actual',ev.peso?ev.peso+' kg':'-','Consumo producto',consProd]
+    ]);
+    kpiTable(ev.kpis,'KPI'); y+=1;
+    if(comp==='vacas'&&ev.ter_alpie){
+      const pct=(ev.n_animales&&ev.ter_cant!=null)?(Math.round(ev.ter_cant/ev.n_animales*1000)/10):null;
+      ensure(7); doc.setFont('helvetica','bold'); doc.setFontSize(8.6); doc.setTextColor.apply(doc,amber);
+      doc.text('Terneros al pie: '+(ev.ter_cant!=null?ev.ter_cant:'-')+' terneros'+(pct!=null?'   ·   '+pct+'% al pie ('+ev.ter_cant+'/'+ev.n_animales+' vacas)':''),M,y+2); y+=4.5;
+      kpiTable(ev.ter_kpis,'KPI ternero'); y+=1;
+    }
+    if(esCria){ const pr=num(kvOf2(ev,'Tasa de preñez')), ma=num(kvOf2(ev,'Tasa de marcación')); if(pr!=null&&ma!=null){ const m=Math.round((pr-ma)*10)/10; textBlock('Merma preñez > marcacion: '+m+'%   ('+pr+'% preñez - '+ma+'% marcacion)',{fill:amberBoxBg,leftbar:amber,fs:8.5}); } }
+    if(ev.comentario) textBlock(ev.comentario,{fill:[247,250,252],leftbar:green,fs:8.8});
+    y+=1;
+  };
+  const resumenBox=(nombre,list)=>{
+    if(!(list.length>1||list.some(x=>x.componente==='vacas'&&x.ter_alpie))) return;
+    const cl=ev=> ev.categoria==='Cría' ? (ev.componente==='vacas'?'vacas':(ev.componente==='toros'?'toros':(compLabel(ev.componente)||'').toLowerCase())) : ev.categoria.toLowerCase();
+    const parts=[]; const vE=list.find(x=>x.componente==='vacas'&&x.ter_alpie);
+    list.forEach(ev=>{ if(ev.n_animales!=null) parts.push(ev.n_animales+' '+cl(ev)); if(ev.componente==='vacas'&&ev.ter_alpie&&ev.ter_cant!=null) parts.push(ev.ter_cant+' terneros'); });
+    const CLAVE=[['Condición corporal de la vaca','CC vaca',''],['Tasa de preñez','Preñez','%'],['Tasa de marcación','Marcacion','%'],['GMD','GMD','kg/d'],['Peso al destete','P.destete','kg'],['Circunferencia escrotal','C.escrotal','cm'],['Condición corporal','CC toro','']];
+    const chips=[]; list.forEach(ev=>{ CLAVE.forEach(a=>{ const val=kvOf2(ev,a[0]); if(val!=null) chips.push(a[1]+' '+val+(a[2]?' '+a[2]:'')); }); });
+    if(vE&&vE.ter_cant!=null&&vE.n_animales) chips.push('Terneros al pie '+(Math.round(vE.ter_cant/vE.n_animales*1000)/10)+'%');
+    const recos=list.map(x=>String(x.comentario||'').trim()).filter(Boolean);
+    const pad=3, lh=4;
+    doc.setFontSize(9); const cab=doc.splitTextToSize(parts.join('   ·   ')||'-',CW-2*pad);
+    doc.setFontSize(8.3); const chL=chips.length?doc.splitTextToSize(chips.join('    ·    '),CW-2*pad):[];
+    const rcL=recos.length?doc.splitTextToSize('> '+recos.join('   ·   '),CW-2*pad):[];
+    const bh=pad+4.2+cab.length*lh+chL.length*lh+(rcL.length?rcL.length*lh:0)+pad;
+    ensure(bh+3); doc.setFillColor.apply(doc,headBg); doc.setDrawColor.apply(doc,green); doc.setLineWidth(0.3); doc.roundedRect(M,y,CW,bh,2,2,'FD'); doc.setLineWidth(0.1);
+    let ty=y+pad+3;
+    doc.setFont('helvetica','bold'); doc.setFontSize(7.5); doc.setTextColor.apply(doc,green); doc.text(('RESUMEN DEL LOTE'+(nombre?' - '+nombre:'')).toUpperCase(),M+pad,ty); ty+=4.2;
+    doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor.apply(doc,ink); cab.forEach(l=>{ doc.text(l,M+pad,ty); ty+=lh; });
+    if(chL.length){ doc.setFont('helvetica','normal'); doc.setFontSize(8.3); doc.setTextColor.apply(doc,ink); chL.forEach(l=>{ doc.text(l,M+pad,ty); ty+=lh; }); }
+    if(rcL.length){ doc.setFont('helvetica','normal'); doc.setFontSize(8.3); doc.setTextColor.apply(doc,amber); rcL.forEach(l=>{ doc.text(l,M+pad,ty); ty+=lh; }); }
+    y+=bh+3;
+  };
+  orden.forEach(key=>{ const list=grupos[key]; list.forEach(evalSection); resumenBox(key==='__nolote'?'':key,list); });
+  h2('3. Diagnostico y recomendacion general');
+  if(v.diagnostico) textBlock(v.diagnostico,{fill:[247,250,252],leftbar:green,fs:9}); else { ensure(6); doc.setTextColor.apply(doc,grayC); doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.text('-',M,y+3); y+=6; }
+  if(v.recomendacion) textBlock('Recomendacion: '+v.recomendacion,{fill:amberBoxBg,leftbar:amber,fs:9});
+  h2('4. Cierre');
+  ensure(14); doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor.apply(doc,ink);
+  doc.text('Proxima visita: '+(v.proxima?fmtFecha(v.proxima):'____ / ____ / ______'),M,y+4);
+  doc.text('Firma del tecnico: __________________',W-M,y+4,{align:'right'}); y+=12;
+  const pc=doc.internal.getNumberOfPages();
+  for(let i=1;i<=pc;i++){ doc.setPage(i); doc.setDrawColor.apply(doc,lineC); doc.setLineWidth(0.1); doc.line(M,H-11,W-M,H-11); doc.setFont('helvetica','normal'); doc.setFontSize(7.5); doc.setTextColor.apply(doc,grayC); doc.text('Bioinnova S.A.  ·  Nutricion de bovinos de corte  ·  Generado el '+fmtFecha(hoy()),M,H-7); doc.text('Pag. '+i+'/'+pc,W-M,H-7,{align:'right'}); }
+  const fname='Informe-'+String(c.nombre||'').replace(/[^\w\-]+/g,'_')+'-'+String(v.fecha||'').replace(/[^\w\-]+/g,'')+'.pdf';
+  doc.save(fname);
+  showToast('✓ PDF descargado');
+}
 function informePDF(id){
   const v=getVisitas().find(x=>x.id===id); if(!v){ showToast('Visita no encontrada'); return; }
   const c=clienteById(v.cliente_id)||{}, e=estanciaById(v.estancia_id)||{};
@@ -3758,9 +3881,9 @@ function informePDF(id){
     <div class="firma"><div>Próxima visita: <b>${v.proxima?fmtFecha(v.proxima):'____ / ____ / ______'}</b></div><div>Firma del técnico: __________________</div></div>
     <div class="foot">Bioinnova S.A.  ·  Nutrición de bovinos de corte  ·  Informe generado el ${fmtFecha(hoy())}</div>
     <div class="noprint" style="position:fixed;left:0;right:0;bottom:0;display:flex;gap:10px;align-items:center;justify-content:center;flex-wrap:wrap;padding:12px;background:#fff;border-top:1px solid #cbd5e0;box-shadow:0 -2px 10px rgba(0,0,0,.10);z-index:5">
-      <button onclick="window.print()" style="background:#16a34a;color:#fff;border:none;padding:12px 24px;border-radius:8px;font-size:15px;font-weight:700;cursor:pointer">📄 Guardar / Imprimir PDF</button>
+      <button onclick="var a=(window.opener||parent); if(a&&a.informePDFDescargar){a.informePDFDescargar('${v.id}')}else{window.print()}" style="background:#16a34a;color:#fff;border:none;padding:12px 24px;border-radius:8px;font-size:15px;font-weight:700;cursor:pointer">📄 Guardar PDF</button>
+      <button onclick="window.print()" style="background:#2f7d3b;color:#fff;border:none;padding:12px 20px;border-radius:8px;font-size:15px;font-weight:700;cursor:pointer">🖨️ Imprimir</button>
       <button onclick="(window.frameElement?(parent.cerrarInforme&&parent.cerrarInforme()):window.close())" style="background:#e2e8f0;color:#334155;border:none;padding:12px 20px;border-radius:8px;font-size:15px;font-weight:700;cursor:pointer">✕ Cerrar</button>
-      <span style="flex-basis:100%;text-align:center;font-size:11px;color:#718096">En la ventana de impresión, elegí <b>“Guardar como PDF”</b> como destino.</span>
     </div>
   </div>
   </body></html>`;
