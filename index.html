@@ -498,7 +498,7 @@ textarea{resize:vertical;min-height:66px}
       <button class="fintab" id="finT_banco" onclick="finSetTab('banco')">🏦 Fijos</button>
       <button class="fintab" id="finT_flujo" onclick="finSetTab('flujo')">📊 Flujo</button>
     </div>
-    <div style="font-size:9px;color:var(--gray-400);text-align:right;margin:-6px 0 8px">BioInnova <span id="finVer">v96</span></div>
+    <div style="font-size:9px;color:var(--gray-400);text-align:right;margin:-6px 0 8px">BioInnova <span id="finVer">v97</span></div>
     <div id="finW_ventas">
       <button class="btn btn-primary btn-block" style="margin-bottom:8px" onclick="finVentaModal()">＋ Nueva venta</button>
       <input type="search" id="finVBuscar" placeholder="🔎 Buscar cliente / factura…" oninput="finRenderVentas()" style="margin-bottom:8px">
@@ -3417,15 +3417,18 @@ function finChequeBorrar(id){ if(!canEdit()) return; if(!confirm('¿Borrar este 
 function _prestamoFechas(pr){ const out=[]; if(!pr||!pr.fecha) return out; const n=Math.max(1,pr.cuotas_n||1);
   // "se mueve para adelante": si la fecha original ya pasó, arranca desde hoy (no acumula cuotas vencidas)
   let baseStr=pr.fecha; if(pr.rolling){ const h=hoy(); if(String(pr.fecha)<h) baseStr=h; }
-  if(pr.tipo==='mensual'){ const b=_fluDate(baseStr); for(let i=0;i<n;i++){ const d=new Date(b.getFullYear(),b.getMonth()+i,b.getDate()); out.push({fecha:_fluKey(d),monto:pr.monto}); } }
+  if(pr.tipo==='mensual'){ let b=_fluDate(baseStr);
+    // Alquiler: 1 por mes desde el mes actual como mínimo; si hay meses atrasados, se corren al final (no se pagan 2 juntos)
+    if(pr.grupo==='alquiler'){ const nw=_fluDate(hoy()); const cm=new Date(nw.getFullYear(),nw.getMonth(),b.getDate()); if(b<cm) b=cm; }
+    for(let i=0;i<n;i++){ const d=new Date(b.getFullYear(),b.getMonth()+i,b.getDate()); out.push({fecha:_fluKey(d),monto:pr.monto}); } }
   else if(pr.tipo==='semanal'){ const b=_fluDate(baseStr); for(let i=0;i<n;i++){ const d=new Date(b); d.setDate(d.getDate()+i*7); out.push({fecha:_fluKey(d),monto:pr.monto}); } }
-  else if(pr.tipo==='capital'){ const b=_fluDate(baseStr); let bal=pr.monto; for(let i=0;i<n;i++){ const d=new Date(b); d.setDate(d.getDate()+i*180); const pago=Math.round(bal*0.10); if(pago<=0) break; out.push({fecha:_fluKey(d),monto:pago}); bal-=pago; } }
+  else if(pr.tipo==='capital'){ out.push({fecha:baseStr,monto:pr.monto}); }   // solo la próxima amortización; el saldo refinanciado no genera egreso hasta que se cargue el próximo vencimiento
   else { out.push({fecha:pr.fecha,monto:pr.monto}); } return out; }
 function finRenderBanco(){ const hoyS=hoy(); const q=(gs('finBcoBuscar').value||'').trim().toLowerCase(); let ls=getPrestamos().slice().sort((a,b)=>String(a.fecha||'').localeCompare(String(b.fecha||'')));
   if(q) ls=ls.filter(p=>((p.concepto||'')+' '+(p.banco||'')).toLowerCase().includes(q));
   const totGs=ls.filter(p=>p.estado!=='pagado').reduce((a,p)=>a+_prestamoFechas(p).reduce((s,c)=>s+finGs(p,c.monto),0),0);
   if(gs('finBcoResumen')) gs('finBcoResumen').innerHTML='Compromisos fijos: <b style="color:var(--red)">'+finGsFmt(totGs)+'</b> · '+ls.length+' ítem(s)';
-  gs('finBcoList').innerHTML=ls.map(p=>{ const fs=_prestamoFechas(p); const prox=fs.find(c=>String(c.fecha)>=hoyS)||fs[fs.length-1]||{}; const tot=fs.reduce((s,c)=>s+finGs(p,c.monto),0); const cap=(p.tipo==='capital'); const rec=(p.tipo==='mensual'||p.tipo==='semanal'||cap); const cada=p.tipo==='semanal'?'/sem':cap?'':'/mes'; const lbl=p.tipo==='semanal'?'semanal':cap?'amortización 10% c/180d':'mensual';
+  gs('finBcoList').innerHTML=ls.map(p=>{ const fs=_prestamoFechas(p); const prox=fs.find(c=>String(c.fecha)>=hoyS)||fs[fs.length-1]||{}; const tot=fs.reduce((s,c)=>s+finGs(p,c.monto),0); const cap=(p.tipo==='capital'); const rec=(p.tipo==='mensual'||p.tipo==='semanal'||cap); const cada=p.tipo==='semanal'?'/sem':cap?'':'/mes'; const lbl=p.tipo==='semanal'?'semanal':cap?'amortización (próximo vencimiento)':'mensual';
     return `<div class="li" onclick="finPrestamoModal('${p.id}')"><div style="min-width:0"><div class="li-t">${esc(p.concepto||p.banco||'—')} ${rec?`<span style="font-size:9px;color:var(--gray-400)">${cap?lbl:p.cuotas_n+' cuota(s) '+lbl}</span>`:'<span style="font-size:9px;color:var(--gray-400)">pago único</span>'}${p.rolling?' <span style="font-size:9px;color:var(--green)">↻ rueda</span>':''}</div><div class="li-s">${p.banco?esc(p.banco)+' · ':''}${rec?'próx. '+fmtFecha(prox.fecha)+(prox.monto?' · '+finFmt(prox.monto,p.moneda):''):'vence '+fmtFecha(p.fecha)}${(rec&&!cap)?cada:''}</div></div><div style="text-align:right;flex-shrink:0"><div style="font-weight:700;color:var(--red)">${finFmt(rec?tot:p.monto,p.moneda)}</div><div style="font-size:10px;color:var(--gray-400)">${cap?'total '+fs.length+' amort.':rec?'total '+fs.length+' cuotas':'único'}</div></div></div>`; }).join('')||'<div class="empty">Sin compromisos fijos.</div>';
 }
 function finPrestamoModal(id){ if(!canEdit()){ showToast('Sin permiso'); return; } const p=id?getPrestamos().find(x=>x.id===id):null; const tp=(p&&p.tipo)||'unica'; const mens=(tp!=='unica'); const esCap=(tp==='capital');
@@ -3557,7 +3560,7 @@ function finRenderFlujo(){ const modo=_finFluModo; const per=ds=>{ if(!ds)return
       const spry=Math.max(0,sueldosMes-(sueldoRealMes[M]||0)); const ventasTot=proj+(salesMes[M]||0); const comis=Math.max(0,Math.round(comisionPct/100*ventasTot)-(comisionRealMes[M]||0));
       projByMonth[M]={proj,cost,spry,comis}; gVproy+=proj; gCprod+=cost; gSpry+=spry; gComis+=comis; touch(perRoll(M+'-01')); M=monthAdd(M,1); mi++; } }
   // tarjetas resumen
-  const porCobrar=gCxc, porPagar=gCxp+gSue+gCheq+gBanco, saldoFin=saldoIni+(gVproy+gCxc+gCobR)-(gCprod+gCxp+gPagR+gCheq+gBanco+gSue+gSpry+gComis);
+  const porCobrar=gCxc, porPagar=gCxp+gCheq+gBanco, saldoFin=saldoIni+(gVproy+gCxc+gCobR)-(gCprod+gCxp+gPagR+gCheq+gBanco+gSpry+gComis);
   if(gs('finFluResumen')) gs('finFluResumen').innerHTML=`<div style="display:flex;gap:8px;flex-wrap:wrap">
     <div style="flex:1;min-width:110px;background:var(--gray-100);border-radius:10px;padding:10px;text-align:center"><div style="font-size:10px;color:var(--gray-500)">Por cobrar</div><div style="font-size:15px;font-weight:700;color:var(--amber)">${finGsFmt(porCobrar)}</div></div>
     <div style="flex:1;min-width:110px;background:var(--gray-100);border-radius:10px;padding:10px;text-align:center"><div style="font-size:10px;color:var(--gray-500)">Por pagar</div><div style="font-size:15px;font-weight:700;color:var(--red)">${finGsFmt(porPagar)}</div></div>
@@ -3576,7 +3579,7 @@ function finRenderFlujo(){ const modo=_finFluModo; const per=ds=>{ if(!ds)return
       if(modo!=='sem'){ if(periods.indexOf(M)>=0) put(M,pm,1,mlbl,''); }
       else { const dm=dim(M); periods.forEach(k=>{ const b=_fluDate(k); let days=0; for(let i=0;i<7;i++){ const d=new Date(b); d.setDate(d.getDate()+i); if(_fluKey(d).slice(0,7)===M) days++; } if(days>0) put(k,pm,days/dm,mlbl,' (parte de la semana)'); }); }
     }); }
-  periods.forEach(k=>{ const p=P[k]||{vproy:0,cxc:0,cobR:0,cprod:0,cxp:0,pagR:0,cheq:0,banco:0,capital:0,alquiler:0,deuda:0,spry:0,comis:0,iva:0,sue:0}; p.totIn=(p.vproy||0)+p.cxc+(p.cobR||0); p.totEg=(p.cprod||0)+p.cxp+(p.pagR||0)+p.cheq+(p.banco||0)+(p.capital||0)+(p.alquiler||0)+(p.deuda||0)+(p.spry||0)+(p.comis||0)+p.sue; p.neto=p.totIn-p.totEg; P[k]=p; });
+  periods.forEach(k=>{ const p=P[k]||{vproy:0,cxc:0,cobR:0,cprod:0,cxp:0,pagR:0,cheq:0,banco:0,capital:0,alquiler:0,deuda:0,spry:0,comis:0,iva:0,sue:0}; p.totIn=(p.vproy||0)+p.cxc+(p.cobR||0); p.totEg=(p.cprod||0)+p.cxp+(p.pagR||0)+p.cheq+(p.banco||0)+(p.capital||0)+(p.alquiler||0)+(p.deuda||0)+(p.spry||0)+(p.comis||0); p.neto=p.totIn-p.totEg; P[k]=p; });
   _finFluDet={det:DET,modo:modo};
   let ac=saldoIni; periods.forEach(k=>{ ac+=P[k].neto; P[k].acum=ac; });
   // toggle
@@ -3596,7 +3599,7 @@ function finRenderFlujo(){ const modo=_finFluModo; const per=ds=>{ if(!ds)return
   const netoRow=`<tr class="neto"><td class="lbl">Neto del período</td>${periods.map(k=>{ const v=P[k].neto; return `<td class="num${k===curK?' now':''}" title="${finGsFmt(v)}" style="color:${v<0?'var(--red)':'var(--green)'}">${v?_fluFmt(v):'<span class=z>·</span>'}</td>`; }).join('')}</tr>`;
   const acumRow=`<tr class="acum"><td class="lbl">Saldo de caja</td>${periods.map(k=>{ const v=P[k].acum; return `<td class="num${k===curK?' now':''}" title="${finGsFmt(v)}" style="${v<0?'color:#ffd0d0':''}">${_fluFmt(v)||'0'}</td>`; }).join('')}</tr>`;
   const body=secRow('INGRESOS')+dataRow('','Ventas proyectadas','vproy','#7ba87b')+dataRow('','Cuentas por cobrar','cxc','var(--amber)')+dataRow('','Cobranzas realizadas','cobR','var(--green)')+dataRow('totin','Total ingresos','totIn','')+
-    secRow('EGRESOS')+dataRow('','Costos de producción','cprod','#d98a8a')+dataRow('','Cuentas por pagar','cxp','var(--amber)')+dataRow('','Pagos realizados','pagR','var(--red)')+dataRow('','Cheques diferidos','cheq','var(--red)')+dataRow('','Cuota banco','banco','var(--red)')+dataRow('','Capital operativo','capital','var(--red)')+dataRow('','Alquiler','alquiler','var(--red)')+dataRow('','Deudas','deuda','var(--red)')+dataRow('','Sueldos proyectados','spry','#d98a8a')+dataRow('','Sueldos a pagar','sue','var(--red)')+dataRow('','Comisiones','comis','var(--red)')+dataRow('toteg','Total egresos','totEg','')+
+    secRow('EGRESOS')+dataRow('','Costos de producción','cprod','#d98a8a')+dataRow('','Cuentas por pagar','cxp','var(--amber)')+dataRow('','Pagos realizados','pagR','var(--red)')+dataRow('','Cheques diferidos','cheq','var(--red)')+dataRow('','Cuota banco','banco','var(--red)')+dataRow('','Capital operativo','capital','var(--red)')+dataRow('','Alquiler','alquiler','var(--red)')+dataRow('','Deudas','deuda','var(--red)')+dataRow('','Sueldos proyectados','spry','#d98a8a')+dataRow('','Comisiones','comis','var(--red)')+dataRow('toteg','Total egresos','totEg','')+
     netoRow+acumRow;
   const css=`<style>.flu{border-collapse:separate;border-spacing:0;font-size:10.5px;white-space:nowrap}.flu th,.flu td{padding:5px 8px;border-bottom:1px solid var(--gray-200)}.flu .lbl{position:sticky;left:0;background:#fff;text-align:left;font-weight:600;min-width:148px;box-shadow:1px 0 0 var(--gray-200);z-index:2}.flu .corner{position:sticky;left:0;z-index:3;background:#1e3f63;color:#fff;text-align:left}.flu .mth{background:#eef2f7;color:#1e3f63;font-weight:700;text-align:center;font-size:10px}.flu .wk{text-align:center;color:var(--gray-600);font-size:9.5px}.flu .wk .d{font-weight:700;color:var(--gray-800);font-size:10.5px}.flu td.num{text-align:right;font-variant-numeric:tabular-nums}.flu td.now,.flu th.now{background:var(--green-lt)}.flu tr.sec .secl{background:#1e3f63;color:#fff;font-weight:800;font-size:10px;letter-spacing:.5px}.flu tr.sec .secbar{background:#1e3f63}.flu tr.totin .lbl,.flu tr.totin td.num{background:#eaf7ee;font-weight:800}.flu tr.toteg .lbl,.flu tr.toteg td.num{background:#fdecec;font-weight:800}.flu tr.neto .lbl,.flu tr.neto td.num{background:#f8fafc;font-weight:800}.flu tr.acum .lbl,.flu tr.acum td.num{background:#1e3f63;color:#fff;font-weight:800}.flu tr.totin td.now,.flu tr.toteg td.now,.flu tr.neto td.now{background:#dff0e6}.flu .z{color:var(--gray-300)}.flu td.clk{cursor:pointer}.flu td.clk:hover{text-decoration:underline;background:#fffbe6}</style>`;
   gs('finFluTabla').innerHTML=bar+css+`<table class="flu"><thead>${head1}${head2}</thead><tbody>${body}</tbody></table>`;
