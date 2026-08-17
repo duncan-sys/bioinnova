@@ -498,7 +498,7 @@ textarea{resize:vertical;min-height:66px}
       <button class="fintab" id="finT_banco" onclick="finSetTab('banco')">🏦 Fijos</button>
       <button class="fintab" id="finT_flujo" onclick="finSetTab('flujo')">📊 Flujo</button>
     </div>
-    <div style="font-size:9px;color:var(--gray-400);text-align:right;margin:-6px 0 8px">BioInnova <span id="finVer">v99</span></div>
+    <div style="font-size:9px;color:var(--gray-400);text-align:right;margin:-6px 0 8px">BioInnova <span id="finVer">v100</span></div>
     <div id="finW_ventas">
       <button class="btn btn-primary btn-block" style="margin-bottom:8px" onclick="finVentaModal()">＋ Nueva venta</button>
       <input type="search" id="finVBuscar" placeholder="🔎 Buscar cliente / factura…" oninput="finRenderVentas()" style="margin-bottom:8px">
@@ -3100,7 +3100,7 @@ function agPrint(){
 }
 
 // ══ FINANZAS (ventas · cuentas por cobrar · gastos · cuentas por pagar · flujo de caja) ══
-const FIN_CONDS=[['contado','Contado',[0]],['30','30 días',[30]],['30-60','30/60 días',[30,60]],['30-60-90','30/60/90 días',[30,60,90]]];
+const FIN_CONDS=[['contado','Contado',[0]],['30','30 días',[30]],['60','60 días',[60]],['90','90 días',[90]],['30-60','30/60 días',[30,60]],['30-60-90','30/60/90 días',[30,60,90]]];
 const FIN_GCAT=['Insumos','Materia prima','Fletes','Servicios','Alquiler','Mantenimiento','Administración','Viáticos','Marketing','Certificación','Sueldos','Impuestos','Comisiones','Otros'];
 let _finTab='ventas';
 function getVentas(){ return getArr('bio:ventas'); }
@@ -3198,9 +3198,13 @@ function finGastoModal(id){ if(!canEdit()){ showToast('Sin permiso'); return; } 
   gs('modal').classList.add('show');
 }
 function finGastoGuardar(id){ if(!canEdit()) return; const prov=(gs('finGProv').value||'').trim(); const monto=num(gs('finGMonto').value); if(!monto||monto<=0){ showToast('Poné el monto'); return; }
+  const factura=(gs('finGFact').value||'').trim();
+  // evitar cargar dos veces la MISMA factura (posible pago doble): avisa y deja cancelar
+  if(factura){ const fn=factura.toLowerCase().replace(/\s+/g,''); const dup=getCompras().find(x=>x.id!==(id||'') && String(x.factura||'').trim().toLowerCase().replace(/\s+/g,'')===fn);
+    if(dup && !confirm('⚠ Ya hay un gasto cargado con la factura "'+factura+'":\n'+(dup.proveedor||'—')+' · '+finFmt(dup.monto,dup.moneda)+' · '+fmtFecha(dup.fecha)+'\n\n¿Cargar igual de todos modos? (posible pago doble)')) return; }
   const mon=gs('finGMon').value, fecha=gs('finGFecha').value||hoy(), cond=gs('finGCond').value; const tc=mon==='USD'?(num(gs('finGTc').value)||0):null; if(mon==='USD'&&!tc){ showToast('Cargá el tipo de cambio'); return; }
   const prev=id?getCompras().find(x=>x.id===id):null; let cuotas; if(prev && prev.monto===monto && prev.cond===cond && prev.fecha===fecha){ cuotas=prev.cuotas; } else { cuotas=finGenCuotas(fecha,monto,finCondTerms(cond)); }
-  const c={ id:id||('CP-'+Date.now()), fecha, factura:(gs('finGFact').value||'').trim(), categoria:gs('finGCat').value, proveedor:prov, concepto:(gs('finGConc').value||'').trim(), monto:Math.round(monto), moneda:mon, tc, cond, cuotas, por:(getSession()&&getSession().nombre)||'', ts:new Date().toISOString(), pending:true };
+  const c={ id:id||('CP-'+Date.now()), fecha, factura, categoria:gs('finGCat').value, proveedor:prov, concepto:(gs('finGConc').value||'').trim(), monto:Math.round(monto), moneda:mon, tc, cond, cuotas, por:(getSession()&&getSession().nombre)||'', ts:new Date().toISOString(), pending:true };
   const a=getCompras().filter(x=>x.id!==c.id); a.unshift(c); saveCompras(a); cloudPush('compra',c); cerrarModal(); showToast('✓ Gasto guardado'); finSetTab(_finTab);
 }
 function finGastoBorrar(id){ if(!canEdit()) return; if(!confirm('¿Borrar este gasto y sus cuotas?')) return; saveCompras(getCompras().filter(x=>x.id!==id)); cloudDelete('compra',id); cerrarModal(); finSetTab(_finTab); }
