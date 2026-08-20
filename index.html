@@ -498,7 +498,7 @@ textarea{resize:vertical;min-height:66px}
       <button class="fintab" id="finT_banco" onclick="finSetTab('banco')">🏦 Fijos</button>
       <button class="fintab" id="finT_flujo" onclick="finSetTab('flujo')">📊 Flujo</button>
     </div>
-    <div style="font-size:9px;color:var(--gray-400);text-align:right;margin:-6px 0 8px">BioInnova <span id="finVer">v102</span></div>
+    <div style="font-size:9px;color:var(--gray-400);text-align:right;margin:-6px 0 8px">BioInnova <span id="finVer">v103</span></div>
     <div id="finW_ventas">
       <button class="btn btn-primary btn-block" style="margin-bottom:8px" onclick="finVentaModal()">＋ Nueva venta</button>
       <input type="search" id="finVBuscar" placeholder="🔎 Buscar cliente / factura…" oninput="finRenderVentas()" style="margin-bottom:8px">
@@ -549,6 +549,7 @@ textarea{resize:vertical;min-height:66px}
     <div id="finW_flujo" style="display:none">
       <div id="finFluCaja" style="margin-bottom:10px"></div>
       <div id="finFluResumen" style="margin-bottom:10px"></div>
+      <div style="display:flex;gap:6px;margin-bottom:8px"><button class="btn btn-sec" style="flex:1;font-size:12px;padding:7px" onclick="finFlujoPDF()">🖨️ PDF para el banco — próximos 12 meses</button></div>
       <div class="card"><div class="card-h">Flujo de caja proyectado</div><div id="finFluTabla" style="padding:6px 10px 12px;overflow-x:auto"></div></div>
     </div>
   </div>
@@ -3292,8 +3293,8 @@ function finReportePDF(tipo){ const data=_finRepData(tipo); if(!data.length){ sh
     *{box-sizing:border-box}html,body{margin:0}body{font-family:Arial,Helvetica,sans-serif;color:#1a202c;font-size:11px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
     .wrap{max-width:840px;margin:0 auto;padding:22px}
     .band{background:#1e3f63;color:#fff;border-radius:12px;padding:16px 20px;display:flex;align-items:center;gap:16px}
-    .band img{height:46px;background:#fff;border-radius:8px;padding:4px}
-    .band .t1{font-size:19px;font-weight:800;letter-spacing:.5px}.band .t2{font-size:11.5px;opacity:.85;margin-top:2px}
+    .band img{height:40px;background:#fff;border-radius:7px;padding:3px}
+    .band .t1{font-size:18px;font-weight:800;letter-spacing:.5px}.band .t2{font-size:11.5px;opacity:.85;margin-top:2px}
     .band .rt{margin-left:auto;text-align:right;font-size:10.5px;opacity:.9;line-height:1.5}
     .cards{display:flex;gap:10px;margin:14px 0}
     .card{flex:1;border:1px solid #e2e8f0;border-radius:10px;padding:10px 13px;background:#f8fafc}
@@ -3494,8 +3495,73 @@ function finProyModal(){ if(!canEdit()){ showToast('Sin permiso'); return; } con
 function finProyGuardar(){ if(!canEdit()) return; const v=num(gs('finProyVtas').value)||0; let pct=num(gs('finProyPct').value); if(pct==null||isNaN(pct)) pct=70; let com=num(gs('finProyComis').value); if(com==null||isNaN(com)) com=0; let crec=num(gs('finProyCrec').value); if(crec==null||isNaN(crec)) crec=0; let carga=num(gs('finProyCarga').value); if(carga==null||isNaN(carga)) carga=0; let iva=num(gs('finProyIva').value); if(iva==null||isNaN(iva)) iva=0; let cob=num(gs('finProyCobro').value); if(cob==null||isNaN(cob)||cob<=0) cob=100; if(cob>100) cob=100;
   setFinProy({ventas_mes:Math.round(v),costo_pct:pct,crecimiento_pct:crec,sue_planta:Math.round(num(gs('finProySuePl').value)||0),sue_comercial:Math.round(num(gs('finProySueCo').value)||0),sue_superior:Math.round(num(gs('finProySueSu').value)||0),carga_social_pct:carga,iva_pct:iva,comision_pct:com,cobro_pct:cob,ts:new Date().toISOString()}); pushFinProy(); cerrarModal(); showToast('✓ Proyección guardada'); finSetTab('flujo'); }
 function finProyBorrar(){ if(!canEdit()) return; if(!confirm('¿Borrar la proyección de ventas?')) return; localStorage.removeItem('bio:finproy'); pushFinProy(); cerrarModal(); finSetTab('flujo'); }
-let _finFluModo='sem', _finFluDet=null;
+let _finFluModo='sem', _finFluDet=null, _finFluData=null;
 function finFluModo(m){ _finFluModo=m; finRenderFlujo(); }
+// ---- PDF del flujo para el banco: SOLO los próximos 12 meses, una hoja apaisada ----
+function finFlujoPDF(){
+  const prev=_finFluModo;
+  if(prev!=='mes'){ _finFluModo='mes'; finRenderFlujo(); }        // el banco lo quiere por mes, no por semana
+  const D=_finFluData;
+  if(prev!=='mes'){ _finFluModo=prev; finRenderFlujo(); }
+  if(!D||!D.periods||!D.periods.length){ showToast('No hay flujo para imprimir'); return; }
+  const M=D.periods.slice(0,12), P=D.P;
+  const nf=v=>v?Math.round(v).toLocaleString('es-PY'):'—';
+  const suma=f=>M.reduce((s,k)=>s+(P[k][f]||0),0);
+  const saldoFin=P[M[M.length-1]].acum;
+  const ING=[['vproy','Ventas proyectadas'],['cxc','Cuentas por cobrar'],['cobR','Cobranzas realizadas']];
+  const EGR=[['cprod','Costos de producción'],['cxp','Cuentas por pagar'],['pagR','Pagos realizados'],['cheq','Cheques diferidos'],['banco','Cuota banco'],['capital','Capital operativo'],['alquiler','Alquiler'],['deuda','Deuda antigua'],['spry','Sueldos proyectados'],['comis','Comisiones']];
+  const fila=(lbl,f,cls)=>{ if(!suma(f) && f!=='vproy') return ''; return `<tr class="${cls||''}"><th>${lbl}</th>${M.map(k=>`<td>${nf(P[k][f])}</td>`).join('')}<td class="tt">${nf(suma(f))}</td></tr>`; };
+  const totIn=k=>P[k].totIn, totEg=k=>P[k].totEg;
+  const cuerpo=
+     `<tr class="sec"><th colspan="${M.length+2}">INGRESOS</th></tr>`
+    +ING.map(x=>fila(x[1],x[0])).join('')
+    +`<tr class="tot"><th>Total ingresos</th>${M.map(k=>`<td>${nf(totIn(k))}</td>`).join('')}<td class="tt">${nf(M.reduce((s,k)=>s+totIn(k),0))}</td></tr>`
+    +`<tr class="sec"><th colspan="${M.length+2}">EGRESOS</th></tr>`
+    +EGR.map(x=>fila(x[1],x[0])).join('')
+    +`<tr class="tot"><th>Total egresos</th>${M.map(k=>`<td>${nf(totEg(k))}</td>`).join('')}<td class="tt">${nf(M.reduce((s,k)=>s+totEg(k),0))}</td></tr>`
+    +`<tr class="neto"><th>Neto del período</th>${M.map(k=>{ const v=P[k].neto; return `<td class="${v<0?'neg':'pos'}">${nf(v)}</td>`; }).join('')}<td class="tt">${nf(M.reduce((s,k)=>s+P[k].neto,0))}</td></tr>`
+    +`<tr class="saldo"><th>Saldo de caja</th>${M.map(k=>{ const v=P[k].acum; return `<td class="${v<0?'neg':''}">${nf(v)}</td>`; }).join('')}<td class="tt">${nf(saldoFin)}</td></tr>`;
+  const base=`${location.origin}${location.pathname.replace(/[^/]*$/,'')}logo.jpg`;
+  const hoyTxt=new Date().toLocaleDateString('es-PY',{day:'2-digit',month:'long',year:'numeric'});
+  const sup='Montos en guaraníes'+(D.ventasMes?' · ventas estimadas ₲ '+Math.round(D.ventasMes).toLocaleString('es-PY')+'/mes':'')+(D.crecPct?' +'+D.crecPct+'%/año':'')+(D.costoPct!=null?' · costo '+D.costoPct+'%':'')+(D.cobroPct<100?' · cobranza '+D.cobroPct+'% del saldo por mes':'');
+  const card=(l,v,c)=>`<div class="card"><div class="cl">${l}</div><div class="cv" style="color:${c}">₲ ${nf(v)}</div></div>`;
+  const w=window.open('','_blank'); if(!w){ showToast('Permití las ventanas emergentes'); return; }
+  w.document.write(`<html><head><meta charset="utf-8"><title>Flujo de Caja Proyectado — BioInnova</title><style>
+    @page{size:A4 landscape;margin:12mm}
+    *{box-sizing:border-box}html,body{margin:0}
+    body{font-family:Arial,Helvetica,sans-serif;color:#1a202c;font-size:11px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    .wrap{padding:6px}
+    .band{background:#1e3f63;color:#fff;border-radius:12px;padding:11px 18px;display:flex;align-items:center;gap:15px}
+    .band img{height:46px;background:#fff;border-radius:8px;padding:4px}
+    .band .t1{font-size:19px;font-weight:800;letter-spacing:.5px}.band .t2{font-size:11px;opacity:.85;margin-top:3px}
+    .band .rt{margin-left:auto;text-align:right;font-size:10.5px;opacity:.9;line-height:1.6}
+    .cards{display:flex;gap:9px;margin:9px 0}
+    .card{flex:1;border:1px solid #e2e8f0;border-radius:9px;padding:7px 11px;background:#f8fafc}
+    .card .cl{font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.5px}
+    .card .cv{font-size:15px;font-weight:800;margin-top:3px}
+    table{border-collapse:collapse;width:100%;font-size:9.5px;table-layout:fixed}
+    thead th{background:#1e3f63;color:#fff;padding:6px 4px;font-weight:700;text-align:right;white-space:nowrap}
+    thead th.corner{text-align:left;width:126px}thead th.tt{background:#16324e}
+    tbody th{text-align:left;font-weight:400;padding:4px 6px;white-space:nowrap;border-bottom:1px solid #e8edf3}
+    tbody td{text-align:right;padding:4px 4px;white-space:nowrap;border-bottom:1px solid #e8edf3;font-variant-numeric:tabular-nums}
+    tbody tr:nth-child(even) th,tbody tr:nth-child(even) td{background:#f8fafc}
+    tr.sec th{background:#eaf1f9!important;color:#1e3f63;font-weight:800;font-size:10px;letter-spacing:.6px;padding:5px 7px;text-align:left}
+    tr.tot th,tr.tot td{font-weight:800;background:#f1f5f9!important;border-top:1px solid #cbd5e1}
+    tr.neto th,tr.neto td{font-weight:800;background:#eaf1f9!important;border-top:2px solid #1e3f63}
+    tr.saldo th,tr.saldo td{font-weight:800;background:#1e3f63!important;color:#fff;font-size:11px}
+    td.tt{font-weight:800;background:#eef4fb!important;border-left:2px solid #cbd5e1}
+    tr.saldo td.tt{background:#16324e!important;color:#fff}
+    .neg{color:#b91c1c}tr.saldo .neg{color:#fecaca}.pos{color:#15803d}
+    .pie{margin-top:7px;font-size:9px;color:#94a3b8;display:flex;justify-content:space-between;border-top:1px solid #e2e8f0;padding-top:6px}
+  </style></head><body><div class="wrap">
+    <div class="band"><img src="${base}" alt="BioInnova"><div><div class="t1">Flujo de Caja Proyectado</div><div class="t2">${sup}</div></div>
+      <div class="rt"><b>BIOINNOVA S.A.</b><br>Próximos 12 meses<br>${finMesLbl(M[0])} a ${finMesLbl(M[M.length-1])}<br>Emitido el ${hoyTxt}</div></div>
+    <div class="cards">${card('Saldo inicial de caja',D.saldoIni,'#1e3f63')}${card('Total ingresos 12 meses',M.reduce((s,k)=>s+totIn(k),0),'#15803d')}${card('Total egresos 12 meses',M.reduce((s,k)=>s+totEg(k),0),'#b91c1c')}${card('Saldo proyectado a 12 meses',saldoFin,saldoFin<0?'#b91c1c':'#15803d')}</div>
+    <table><thead><tr><th class="corner">Concepto</th>${M.map(k=>`<th>${finMesLbl(k)}</th>`).join('')}<th class="tt">12 meses</th></tr></thead><tbody>${cuerpo}</tbody></table>
+    <div class="pie"><span>BioInnova S.A. · Flujo de caja proyectado · Uso exclusivo de la entidad financiera</span><span>Emitido el ${hoyTxt}</span></div>
+  </div></body></html>`);
+  w.document.close(); setTimeout(()=>{ try{ w.focus(); w.print(); }catch(e){} }, 600);
+}
 const _FLU_FLBL={vproy:'Ventas proyectadas',cxc:'Cuentas por cobrar',cobR:'Cobranzas realizadas',cprod:'Costos de producción',cxp:'Cuentas por pagar',pagR:'Pagos realizados',cheq:'Cheques diferidos',banco:'Cuota banco',capital:'Capital operativo',alquiler:'Alquiler',deuda:'Deuda antigua',spry:'Sueldos proyectados',comis:'Comisiones',iva:'IVA (neto)',sue:'Sueldos a pagar'};
 function finFluDetalle(k,f){ const D=_finFluDet; if(!D||!D.det[k]||!D.det[k][f]||!D.det[k][f].length){ showToast('Sin detalle'); return; }
   const items=D.det[k][f].slice().sort((a,b)=>b.monto-a.monto); const total=items.reduce((s,x)=>s+x.monto,0);
@@ -3615,6 +3681,7 @@ function finRenderFlujo(){ const modo=_finFluModo; const per=ds=>{ if(!ds)return
   periods.forEach(k=>{ const p=P[k]||{vproy:0,cxc:0,cobR:0,cprod:0,cxp:0,pagR:0,cheq:0,banco:0,capital:0,alquiler:0,deuda:0,spry:0,comis:0,iva:0,sue:0}; p.totIn=(p.vproy||0)+p.cxc+(p.cobR||0); p.totEg=(p.cprod||0)+p.cxp+(p.pagR||0)+p.cheq+(p.banco||0)+(p.capital||0)+(p.alquiler||0)+(p.deuda||0)+(p.spry||0)+(p.comis||0); p.neto=p.totIn-p.totEg; P[k]=p; });
   _finFluDet={det:DET,modo:modo};
   let ac=saldoIni; periods.forEach(k=>{ ac+=P[k].neto; P[k].acum=ac; });
+  _finFluData={periods,P,saldoIni,modo,ventasMes,costoPct,cobroPct,crecPct,ivaPct,comisionPct};   // lo usa el PDF para el banco
   // toggle
   const chip=(mm,l)=>`<button class="finchip${modo===mm?' on':''}" onclick="finFluModo('${mm}')">${l}</button>`;
   const bar=`<div style="display:flex;gap:6px;margin-bottom:8px;align-items:center"><span style="font-size:11px;color:var(--gray-500)">Ver por:</span>${chip('sem','Semana')}${chip('mes','Mes')}<span style="margin-left:auto;font-size:9px;color:var(--gray-400)">proyección · montos en ₲ · tocá un número para el detalle</span></div>`;
