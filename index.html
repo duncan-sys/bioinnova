@@ -498,7 +498,7 @@ textarea{resize:vertical;min-height:66px}
       <button class="fintab" id="finT_banco" onclick="finSetTab('banco')">🏦 Fijos</button>
       <button class="fintab" id="finT_flujo" onclick="finSetTab('flujo')">📊 Flujo</button>
     </div>
-    <div style="font-size:9px;color:var(--gray-400);text-align:right;margin:-6px 0 8px">BioInnova <span id="finVer">v104</span></div>
+    <div style="font-size:9px;color:var(--gray-400);text-align:right;margin:-6px 0 8px">BioInnova <span id="finVer">v105</span></div>
     <div id="finW_ventas">
       <button class="btn btn-primary btn-block" style="margin-bottom:8px" onclick="finVentaModal()">＋ Nueva venta</button>
       <input type="search" id="finVBuscar" placeholder="🔎 Buscar cliente / factura…" oninput="finRenderVentas()" style="margin-bottom:8px">
@@ -1122,12 +1122,12 @@ const SYNC_DEFS = {
   compra:{ get:getCompras, save:saveCompras, table:'bio_compras', toRow:compraRow, fromRow:rowCompra },
   sueldo:{ get:getSueldos, save:saveSueldos, table:'bio_sueldos', toRow:sueldoRow, fromRow:rowSueldo },
   cheque:{ get:getCheques, save:saveCheques, table:'bio_cheques', toRow:chequeRow, fromRow:rowCheque },
-  prestamo:{ get:getPrestamos, save:savePrestamos, table:'bio_prestamos', toRow:prestamoRow, fromRow:rowPrestamo },
+  prestamo:{ get:getPrestamos, save:savePrestamos, table:'bio_prestamos', toRow:prestamoRow, fromRow:rowPrestamo, toRowSafe:(p)=>{ const r=prestamoRow(p); delete r.proveedor; return r; } },
 };
 function getPrestamos(){ return getArr('bio:prestamos'); }
 function savePrestamos(a){ setArr('bio:prestamos',a); }
-function prestamoRow(p){ return { id:p.id, concepto:p.concepto||'', banco:p.banco||'', grupo:p.grupo||'banco', tipo:p.tipo||'unica', monto:Number(p.monto)||0, moneda:p.moneda||'PYG', tc:p.tc||null, fecha:p.fecha||null, cuotas_n:Number(p.cuotas_n)||1, hasta:p.hasta||null, saldo:Number(p.saldo)||0, rolling:!!p.rolling, estado:p.estado||'activo', nota:p.nota||'', por:p.por||'', ts:p.ts||null }; }
-function rowPrestamo(r){ return { id:r.id, concepto:r.concepto||'', banco:r.banco||'', grupo:r.grupo||'banco', tipo:r.tipo||'unica', monto:Number(r.monto)||0, moneda:r.moneda||'PYG', tc:r.tc?Number(r.tc):null, fecha:r.fecha||'', cuotas_n:Number(r.cuotas_n)||1, hasta:r.hasta||'', saldo:Number(r.saldo)||0, rolling:!!r.rolling, estado:r.estado||'activo', nota:r.nota||'', por:r.por||'', ts:r.ts, pending:false }; }
+function prestamoRow(p){ return { id:p.id, concepto:p.concepto||'', banco:p.banco||'', proveedor:p.proveedor||'', grupo:p.grupo||'banco', tipo:p.tipo||'unica', monto:Number(p.monto)||0, moneda:p.moneda||'PYG', tc:p.tc||null, fecha:p.fecha||null, cuotas_n:Number(p.cuotas_n)||1, hasta:p.hasta||null, saldo:Number(p.saldo)||0, rolling:!!p.rolling, estado:p.estado||'activo', nota:p.nota||'', por:p.por||'', ts:p.ts||null }; }
+function rowPrestamo(r){ return { id:r.id, concepto:r.concepto||'', banco:r.banco||'', proveedor:r.proveedor||'', grupo:r.grupo||'banco', tipo:r.tipo||'unica', monto:Number(r.monto)||0, moneda:r.moneda||'PYG', tc:r.tc?Number(r.tc):null, fecha:r.fecha||'', cuotas_n:Number(r.cuotas_n)||1, hasta:r.hasta||'', saldo:Number(r.saldo)||0, rolling:!!r.rolling, estado:r.estado||'activo', nota:r.nota||'', por:r.por||'', ts:r.ts, pending:false }; }
 function getCheques(){ return getArr('bio:cheques'); }
 function saveCheques(a){ setArr('bio:cheques',a); }
 function chequeRow(c){ return { id:c.id, proveedor:c.proveedor||'', compra_id:c.compra_id||'', factura:c.factura||'', banco:c.banco||'', num:c.num||'', monto:Number(c.monto)||0, moneda:c.moneda||'PYG', tc:c.tc||null, fecha:c.fecha||null, emitido:c.emitido||null, estado:c.estado||'pendiente', nota:c.nota||'', por:c.por||'', ts:c.ts||null }; }
@@ -3450,6 +3450,8 @@ function finPrestamoModal(id){ if(!canEdit()){ showToast('Sin permiso'); return;
     <div class="row2"><div id="finBcoTcWrap" style="display:${p&&p.moneda==='USD'?'':'none'}"><label class="fl">TC ₲/US$</label><input type="number" id="finBcoTc" value="${p&&p.tc?p.tc:cotizDolar()}"></div><div></div></div>
     <div class="row2"><div><label class="fl" id="finBcoFechaLbl">${mens?'Fecha de la 1ª cuota':'Fecha de vencimiento'}</label><input type="date" id="finBcoFecha" value="${p&&p.fecha?p.fecha:hoy()}"></div><div id="finBcoCuotasWrap" style="display:${mens?'':'none'}"><label class="fl">${esCap?'Ciclos (180 días)':'Cuotas restantes'}</label><input type="number" id="finBcoCuotas" value="${p?p.cuotas_n:12}" placeholder="12"></div></div>
     <div id="finBcoHastaWrap" style="display:${(tp==='mensual'||tp==='semanal')?'':'none'}"><label class="fl">Hasta (opcional) — última fecha de la cuota</label><input type="date" id="finBcoHasta" value="${p&&p.hasta?p.hasta:''}"><div style="font-size:10px;color:var(--gray-400);margin-top:2px">Si la cargás, la cuota corta en esa fecha (tiene prioridad sobre "cuotas restantes"). Ej: banco hasta junio 2027.</div></div>
+    <label class="fl">Proveedor que factura (opcional)</label><input id="finBcoProv" list="finBcoProvList" value="${esc(p&&p.proveedor)}" placeholder="ej: LDC Paraguay S.A." autocomplete="off"><datalist id="finBcoProvList">${[...new Set(getCompras().map(c=>c.proveedor).filter(Boolean))].sort().map(x=>`<option value="${esc(x)}">`).join('')}</datalist>
+    <div style="font-size:11px;color:var(--gray-400);margin-top:-4px">Si lo cargás, la cuota <b>no se duplica</b>: en los meses donde ya hay facturas de ese proveedor la cuota se descuenta contra ellas, y solo aparece por el saldo que falte o en los meses que todavía no tienen factura.</div>
     <label class="fl">Nota</label><input id="finBcoNota" value="${esc(p&&p.nota)}" placeholder="opcional" autocomplete="off">
     <div style="font-size:11px;color:var(--gray-400);margin-top:4px">Se suma al flujo en la fila de su categoría. Las cuotas mensuales/semanales proyectan la cantidad que indiques hacia adelante (ej: deuda de 1.800M a 60M/sem = 30 cuotas semanales).</div>
     <div class="row2" style="margin-top:12px">${p?`<button class="btn btn-sec" onclick="finPrestamoBorrar('${p.id}')" style="color:var(--red)">Borrar</button>`:'<button class="btn btn-sec" onclick="cerrarModal()">Cancelar</button>'}<button class="btn btn-primary" onclick="finPrestamoGuardar('${p?p.id:''}')">Guardar</button></div>`;
@@ -3461,7 +3463,7 @@ function finPrestamoGuardar(id){ if(!canEdit()) return; const conc=(gs('finBcoCo
   const cuotas_n=(tipo!=='unica')?Math.max(1,Math.round(num(gs('finBcoCuotas').value)||1)):1;
   const hasta=((tipo==='mensual'||tipo==='semanal')&&gs('finBcoHasta')&&gs('finBcoHasta').value)||'';
   const saldo=(tipo==='capital')?Math.round(num(gs('finBcoSaldo')&&gs('finBcoSaldo').value)||0):0;
-  const p={ id:id||('PB-'+Date.now()), concepto:conc, banco:(gs('finBcoBanco').value||'').trim(), grupo:gs('finBcoGrupo').value||'banco', tipo, monto:Math.round(monto), moneda:mon, tc, fecha, cuotas_n, hasta, saldo, rolling:!!(gs('finBcoRolling')&&gs('finBcoRolling').checked), estado:'activo', nota:(gs('finBcoNota').value||'').trim(), por:(getSession()&&getSession().nombre)||'', ts:new Date().toISOString(), pending:true };
+  const p={ id:id||('PB-'+Date.now()), concepto:conc, banco:(gs('finBcoBanco').value||'').trim(), proveedor:((gs('finBcoProv')&&gs('finBcoProv').value)||'').trim(), grupo:gs('finBcoGrupo').value||'banco', tipo, monto:Math.round(monto), moneda:mon, tc, fecha, cuotas_n, hasta, saldo, rolling:!!(gs('finBcoRolling')&&gs('finBcoRolling').checked), estado:'activo', nota:(gs('finBcoNota').value||'').trim(), por:(getSession()&&getSession().nombre)||'', ts:new Date().toISOString(), pending:true };
   const a=getPrestamos().filter(x=>x.id!==p.id); a.unshift(p); savePrestamos(a); cloudPush('prestamo',p); cerrarModal(); showToast('✓ Guardado'); finSetTab(_finTab);
 }
 function finPrestamoBorrar(id){ if(!canEdit()) return; if(!confirm('¿Borrar este compromiso con banco?')) return; savePrestamos(getPrestamos().filter(x=>x.id!==id)); cloudDelete('prestamo',id); cerrarModal(); finSetTab(_finTab); }
@@ -3644,16 +3646,27 @@ function finRenderFlujo(){ const modo=_finFluModo; const per=ds=>{ if(!ds)return
         gCxc+=g; }
       (cu.abonos||[]).forEach(a=>{ if(String(a.fecha)>=start){ const g=Math.round(finGs(v,a.monto)*ivaFactor); addD(per(a.fecha),'cobR',g, nom+fx+' · cobrado '+fmtFecha(a.fecha)+' (neto IVA)', a.fecha); gCobR+=g; } }); }); });
   // Compras: saldo pendiente -> Cuentas por pagar; abonos desde el arranque -> Pagos realizados
+  // Lo que ya entra al flujo por facturas REALES de cada proveedor, por período. Sirve para que una
+  // cuota fija (ej. el alquiler) no se sume encima de la factura del mismo mes: se netea contra esto.
+  const realProv={}; const _pk=s=>String(s||'').trim().toLowerCase();
+  const addProv=(prov,k,g)=>{ const pk=_pk(prov); if(!pk||!k||!g) return; (realProv[pk]=realProv[pk]||{}); realProv[pk][k]=(realProv[pk][k]||0)+g; };
   getCompras().forEach(c=>{ if(chCov[c.id]) return; const nom=c.proveedor||c.categoria||'—'; const fx=c.factura?' · Fact '+c.factura:'';
-    (c.cuotas||[]).forEach(cu=>{ const s=finCuotaSaldo(cu); if(s>0){ const g=finGs(c,s); addD(perRoll(cu.venc),'cxp',g, nom+fx+' · vence '+fmtFecha(cu.venc), cu.venc); gCxp+=g; }
-      (cu.abonos||[]).forEach(a=>{ if(String(a.fecha)>=start){ const g=finGs(c,a.monto); addD(per(a.fecha),'pagR',g, nom+fx+' · pagado '+fmtFecha(a.fecha), a.fecha); gPagR+=g; } }); }); });
+    (c.cuotas||[]).forEach(cu=>{ const s=finCuotaSaldo(cu); if(s>0){ const g=finGs(c,s); addD(perRoll(cu.venc),'cxp',g, nom+fx+' · vence '+fmtFecha(cu.venc), cu.venc); gCxp+=g; addProv(c.proveedor,perRoll(cu.venc),g); }
+      (cu.abonos||[]).forEach(a=>{ if(String(a.fecha)>=start){ const g=finGs(c,a.monto); addD(per(a.fecha),'pagR',g, nom+fx+' · pagado '+fmtFecha(a.fecha), a.fecha); gPagR+=g; addProv(c.proveedor,per(a.fecha),g); } }); }); });
   getSueldos().forEach(su=>{ const nom=(su.empleado||'—')+(su.periodo?' · '+su.periodo:'');
     (su.cuotas||[]).forEach(cu=>{ const s=finCuotaSaldo(cu); if(s>0){ const g=finGs(su,s); addD(perRoll(cu.venc),'sue',g, nom, cu.venc); gSue+=g; }
       (cu.abonos||[]).forEach(a=>{ if(String(a.fecha)>=start){ const g=finGs(su,a.monto); addD(per(a.fecha),'pagR',g, 'Sueldo '+nom+' · pagado '+fmtFecha(a.fecha), a.fecha); gPagR+=g; } }); }); });
-  chList.forEach(ch=>{ const g=finGs(ch,ch.monto); addD(perRoll(ch.fecha),'cheq',g, (ch.proveedor||'—')+(ch.banco?' · '+ch.banco:'')+(ch.num?' · Nº'+ch.num:'')+' · cae '+fmtFecha(ch.fecha), ch.fecha); gCheq+=g; });
-  // Fijos (préstamos, alquiler, etc.) separados por categoría
+  chList.forEach(ch=>{ const g=finGs(ch,ch.monto); addD(perRoll(ch.fecha),'cheq',g, (ch.proveedor||'—')+(ch.banco?' · '+ch.banco:'')+(ch.num?' · Nº'+ch.num:'')+' · cae '+fmtFecha(ch.fecha), ch.fecha); gCheq+=g; addProv(ch.proveedor,perRoll(ch.fecha),g); });
+  // Fijos (préstamos, alquiler, etc.) separados por categoría.
+  // Si el fijo tiene proveedor cargado, se NETEA contra las facturas reales de ese proveedor en el mismo
+  // período: la cuota es un sustituto de la factura, no un gasto aparte. Así el alquiler no se cuenta dos veces.
+  const netUsado={};
   getPrestamos().forEach(pr=>{ if(pr.estado==='pagado') return; const fld=pr.grupo==='capital'?'capital':pr.grupo==='alquiler'?'alquiler':pr.grupo==='deuda'?'deuda':'banco';
-    _prestamoFechas(pr).forEach(c=>{ const g=finGs(pr,c.monto); addD(perRoll(c.fecha),fld,g, (pr.concepto||'—')+(pr.banco?' · '+pr.banco:'')+' · '+fmtFecha(c.fecha), c.fecha); gBanco+=g; }); });
+    const pool=pr.proveedor?(realProv[_pk(pr.proveedor)]||{}):null;
+    _prestamoFechas(pr).forEach(c=>{ const k=perRoll(c.fecha); let g=finGs(pr,c.monto); let neteado=0;
+      if(pool){ const uk=_pk(pr.proveedor)+'|'+k; const disp=Math.max(0,(pool[k]||0)-(netUsado[uk]||0));
+        neteado=Math.min(g,disp); netUsado[uk]=(netUsado[uk]||0)+neteado; g-=neteado; }
+      if(g>0){ addD(k,fld,g, (pr.concepto||'—')+(pr.banco?' · '+pr.banco:'')+' · '+fmtFecha(c.fecha)+(neteado?' (neto de facturas de '+pr.proveedor+')':''), c.fecha); gBanco+=g; } }); });
   // facturas de insumos de producción reales por mes (para descontar del costo proyectado)
   // gastos reales por mes que reemplazan lo proyectado: insumos->costo, sueldos->sueldos proy, comisiones->comisiones; gravadas->IVA crédito
   const insumoMes={}, comisionRealMes={}, gravadasMes={};
