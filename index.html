@@ -498,7 +498,7 @@ textarea{resize:vertical;min-height:66px}
       <button class="fintab" id="finT_banco" onclick="finSetTab('banco')">🏦 Fijos</button>
       <button class="fintab" id="finT_flujo" onclick="finSetTab('flujo')">📊 Flujo</button>
     </div>
-    <div style="font-size:9px;color:var(--gray-400);text-align:right;margin:-6px 0 8px">BioInnova <span id="finVer">v103</span></div>
+    <div style="font-size:9px;color:var(--gray-400);text-align:right;margin:-6px 0 8px">BioInnova <span id="finVer">v104</span></div>
     <div id="finW_ventas">
       <button class="btn btn-primary btn-block" style="margin-bottom:8px" onclick="finVentaModal()">＋ Nueva venta</button>
       <input type="search" id="finVBuscar" placeholder="🔎 Buscar cliente / factura…" oninput="finRenderVentas()" style="margin-bottom:8px">
@@ -3527,10 +3527,10 @@ function finFlujoPDF(){
   const card=(l,v,c)=>`<div class="card"><div class="cl">${l}</div><div class="cv" style="color:${c}">₲ ${nf(v)}</div></div>`;
   const w=window.open('','_blank'); if(!w){ showToast('Permití las ventanas emergentes'); return; }
   w.document.write(`<html><head><meta charset="utf-8"><title>Flujo de Caja Proyectado — BioInnova</title><style>
-    @page{size:A4 landscape;margin:12mm}
+    @page{size:A4 landscape;margin:10mm 6mm}
     *{box-sizing:border-box}html,body{margin:0}
     body{font-family:Arial,Helvetica,sans-serif;color:#1a202c;font-size:11px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-    .wrap{padding:6px}
+    .wrap{width:285mm;margin:0 auto;padding:0}
     .band{background:#1e3f63;color:#fff;border-radius:12px;padding:11px 18px;display:flex;align-items:center;gap:15px}
     .band img{height:46px;background:#fff;border-radius:8px;padding:4px}
     .band .t1{font-size:19px;font-weight:800;letter-spacing:.5px}.band .t2{font-size:11px;opacity:.85;margin-top:3px}
@@ -3539,11 +3539,12 @@ function finFlujoPDF(){
     .card{flex:1;border:1px solid #e2e8f0;border-radius:9px;padding:7px 11px;background:#f8fafc}
     .card .cl{font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.5px}
     .card .cv{font-size:15px;font-weight:800;margin-top:3px}
-    table{border-collapse:collapse;width:100%;font-size:9.5px;table-layout:fixed}
-    thead th{background:#1e3f63;color:#fff;padding:6px 4px;font-weight:700;text-align:right;white-space:nowrap}
-    thead th.corner{text-align:left;width:126px}thead th.tt{background:#16324e}
+    table{border-collapse:collapse;width:100%;font-size:9.5px}
+    thead th,tbody td{font-family:'Arial Narrow',Arial,Helvetica,sans-serif}
+    thead th{background:#1e3f63;color:#fff;padding:6px 3px;font-weight:700;text-align:right;white-space:nowrap}
+    thead th.corner{text-align:left;width:118px}thead th.tt{background:#16324e}
     tbody th{text-align:left;font-weight:400;padding:4px 6px;white-space:nowrap;border-bottom:1px solid #e8edf3}
-    tbody td{text-align:right;padding:4px 4px;white-space:nowrap;border-bottom:1px solid #e8edf3;font-variant-numeric:tabular-nums}
+    tbody td{text-align:right;padding:4px 3px;white-space:nowrap;border-bottom:1px solid #e8edf3;font-variant-numeric:tabular-nums}
     tbody tr:nth-child(even) th,tbody tr:nth-child(even) td{background:#f8fafc}
     tr.sec th{background:#eaf1f9!important;color:#1e3f63;font-weight:800;font-size:10px;letter-spacing:.6px;padding:5px 7px;text-align:left}
     tr.tot th,tr.tot td{font-weight:800;background:#f1f5f9!important;border-top:1px solid #cbd5e1}
@@ -3559,7 +3560,19 @@ function finFlujoPDF(){
     <div class="cards">${card('Saldo inicial de caja',D.saldoIni,'#1e3f63')}${card('Total ingresos 12 meses',M.reduce((s,k)=>s+totIn(k),0),'#15803d')}${card('Total egresos 12 meses',M.reduce((s,k)=>s+totEg(k),0),'#b91c1c')}${card('Saldo proyectado a 12 meses',saldoFin,saldoFin<0?'#b91c1c':'#15803d')}</div>
     <table><thead><tr><th class="corner">Concepto</th>${M.map(k=>`<th>${finMesLbl(k)}</th>`).join('')}<th class="tt">12 meses</th></tr></thead><tbody>${cuerpo}</tbody></table>
     <div class="pie"><span>BioInnova S.A. · Flujo de caja proyectado · Uso exclusivo de la entidad financiera</span><span>Emitido el ${hoyTxt}</span></div>
-  </div></body></html>`);
+  </div>
+  <script>
+  // Red de seguridad: la hoja mide 285mm de ancho fijo (igual en pantalla que impresa). Si con las
+  // fuentes de esta máquina la tabla no entra, se achica la letra lo justo para que NADA quede cortado.
+  (function(){ try{
+    var t=document.querySelector('table'), wr=document.querySelector('.wrap'); if(!t||!wr) return;
+    var max=wr.clientWidth; t.style.width='auto'; var need=t.getBoundingClientRect().width; t.style.width='';
+    if(need>max){ var f=Math.max(6.5, 9.5*max/need*0.985);
+      var cs=t.querySelectorAll('th,td'); for(var i=0;i<cs.length;i++) cs[i].style.fontSize=f.toFixed(2)+'px';
+    }
+  }catch(e){} })();
+  <\/script>
+  </body></html>`);
   w.document.close(); setTimeout(()=>{ try{ w.focus(); w.print(); }catch(e){} }, 600);
 }
 const _FLU_FLBL={vproy:'Ventas proyectadas',cxc:'Cuentas por cobrar',cobR:'Cobranzas realizadas',cprod:'Costos de producción',cxp:'Cuentas por pagar',pagR:'Pagos realizados',cheq:'Cheques diferidos',banco:'Cuota banco',capital:'Capital operativo',alquiler:'Alquiler',deuda:'Deuda antigua',spry:'Sueldos proyectados',comis:'Comisiones',iva:'IVA (neto)',sue:'Sueldos a pagar'};
