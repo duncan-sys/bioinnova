@@ -498,7 +498,7 @@ textarea{resize:vertical;min-height:66px}
       <button class="fintab" id="finT_banco" onclick="finSetTab('banco')">🏦 Fijos</button>
       <button class="fintab" id="finT_flujo" onclick="finSetTab('flujo')">📊 Flujo</button>
     </div>
-    <div style="font-size:9px;color:var(--gray-400);text-align:right;margin:-6px 0 8px">BioInnova <span id="finVer">v101</span></div>
+    <div style="font-size:9px;color:var(--gray-400);text-align:right;margin:-6px 0 8px">BioInnova <span id="finVer">v102</span></div>
     <div id="finW_ventas">
       <button class="btn btn-primary btn-block" style="margin-bottom:8px" onclick="finVentaModal()">＋ Nueva venta</button>
       <input type="search" id="finVBuscar" placeholder="🔎 Buscar cliente / factura…" oninput="finRenderVentas()" style="margin-bottom:8px">
@@ -3486,11 +3486,13 @@ function finProyModal(){ if(!canEdit()){ showToast('Sin permiso'); return; } con
     <div style="font-size:10px;color:var(--gray-400);margin-top:2px">La carga social se suma a planta y comerciales (no al superior).</div>
     <div class="row2"><div><label class="fl">Carga social (%)</label><input type="number" step="0.1" id="finProyCarga" value="${fp.carga_social_pct!=null?fp.carga_social_pct:16.5}" placeholder="16.5"></div><div><label class="fl">IVA a descontar ventas (%)</label><input type="number" step="0.1" id="finProyIva" value="${fp.iva_pct!=null?fp.iva_pct:10}" placeholder="10"></div></div>
     <label class="fl">Comisiones (% de ventas)</label><input type="number" step="0.1" id="finProyComis" value="${fp.comision_pct!=null?fp.comision_pct:''}" placeholder="3">
+    <label class="fl">Cobranza: % del saldo que entra cada mes</label><input type="number" step="1" id="finProyCobro" value="${fp.cobro_pct!=null?fp.cobro_pct:100}" placeholder="50">
+    <div style="font-size:11px;color:var(--gray-400);margin-top:-4px">Del saldo por cobrar entra ese % en el mes de vencimiento, otro tanto del resto al mes siguiente, y así. Con 100% entra todo junto al vencer (clientes que pagan puntual).</div>
     <div class="row2" style="margin-top:12px">${getFinProy()?`<button class="btn btn-sec" onclick="finProyBorrar()" style="color:var(--red)">Borrar</button>`:'<button class="btn btn-sec" onclick="cerrarModal()">Cancelar</button>'}<button class="btn btn-primary" onclick="finProyGuardar()">Guardar</button></div>`;
   gs('modal').classList.add('show');
 }
-function finProyGuardar(){ if(!canEdit()) return; const v=num(gs('finProyVtas').value)||0; let pct=num(gs('finProyPct').value); if(pct==null||isNaN(pct)) pct=70; let com=num(gs('finProyComis').value); if(com==null||isNaN(com)) com=0; let crec=num(gs('finProyCrec').value); if(crec==null||isNaN(crec)) crec=0; let carga=num(gs('finProyCarga').value); if(carga==null||isNaN(carga)) carga=0; let iva=num(gs('finProyIva').value); if(iva==null||isNaN(iva)) iva=0;
-  setFinProy({ventas_mes:Math.round(v),costo_pct:pct,crecimiento_pct:crec,sue_planta:Math.round(num(gs('finProySuePl').value)||0),sue_comercial:Math.round(num(gs('finProySueCo').value)||0),sue_superior:Math.round(num(gs('finProySueSu').value)||0),carga_social_pct:carga,iva_pct:iva,comision_pct:com,ts:new Date().toISOString()}); pushFinProy(); cerrarModal(); showToast('✓ Proyección guardada'); finSetTab('flujo'); }
+function finProyGuardar(){ if(!canEdit()) return; const v=num(gs('finProyVtas').value)||0; let pct=num(gs('finProyPct').value); if(pct==null||isNaN(pct)) pct=70; let com=num(gs('finProyComis').value); if(com==null||isNaN(com)) com=0; let crec=num(gs('finProyCrec').value); if(crec==null||isNaN(crec)) crec=0; let carga=num(gs('finProyCarga').value); if(carga==null||isNaN(carga)) carga=0; let iva=num(gs('finProyIva').value); if(iva==null||isNaN(iva)) iva=0; let cob=num(gs('finProyCobro').value); if(cob==null||isNaN(cob)||cob<=0) cob=100; if(cob>100) cob=100;
+  setFinProy({ventas_mes:Math.round(v),costo_pct:pct,crecimiento_pct:crec,sue_planta:Math.round(num(gs('finProySuePl').value)||0),sue_comercial:Math.round(num(gs('finProySueCo').value)||0),sue_superior:Math.round(num(gs('finProySueSu').value)||0),carga_social_pct:carga,iva_pct:iva,comision_pct:com,cobro_pct:cob,ts:new Date().toISOString()}); pushFinProy(); cerrarModal(); showToast('✓ Proyección guardada'); finSetTab('flujo'); }
 function finProyBorrar(){ if(!canEdit()) return; if(!confirm('¿Borrar la proyección de ventas?')) return; localStorage.removeItem('bio:finproy'); pushFinProy(); cerrarModal(); finSetTab('flujo'); }
 let _finFluModo='sem', _finFluDet=null;
 function finFluModo(m){ _finFluModo=m; finRenderFlujo(); }
@@ -3506,12 +3508,30 @@ function _fluDate(k){ const p=String(k).split('-'); return new Date(+p[0],(+p[1]
 function _fluWkStart(ds){ const d=_fluDate(ds); const dow=(d.getDay()+6)%7; d.setDate(d.getDate()-dow); return d; }
 function _fluKey(d){ const z=n=>String(n).padStart(2,'0'); return d.getFullYear()+'-'+z(d.getMonth()+1)+'-'+z(d.getDate()); }
 function _fluFmt(v){ if(!v) return ''; return Math.round(v).toLocaleString('es-PY'); }
+// Curva de cobranza: los clientes pagan despacio y estiran el plazo, así que asumir que todo lo vencido
+// entra de golpe este mes infla el flujo. Del saldo entra un `pct` en el mes de vencimiento (o en el
+// primero del cuadro si ya está vencido), otro tanto del resto al mes siguiente, y así. No se pierde
+// nada: la cola se suma en la última. Con pct=100 se comporta como antes (todo junto).
+function _cobroCurva(fechaVenc, monto, pct, pisoS){
+  if(!(monto>0)) return [];
+  const p=Math.min(100,Math.max(1,Number(pct)||100))/100;
+  if(p>=1) return [{fecha:(String(fechaVenc||'')<pisoS?pisoS:String(fechaVenc)), monto}];
+  const base=(String(fechaVenc||'')<pisoS)?pisoS:String(fechaVenc);
+  const d0=_fluDate(base); const N=12; const out=[]; let resto=monto;
+  for(let i=0;i<N && resto>0.5;i++){
+    const d=new Date(d0.getFullYear(), d0.getMonth()+i, d0.getDate());
+    const cuota=(i===N-1)?resto:Math.min(resto, Math.round(resto*p));
+    out.push({fecha:_fluKey(d), monto:cuota}); resto-=cuota;
+  }
+  if(resto>0.5 && out.length) out[out.length-1].monto+=resto;
+  return out;
+}
 const _FLU_MESES=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
 function finRenderFlujo(){ const modo=_finFluModo; const per=ds=>{ if(!ds)return''; return modo==='sem'?_fluKey(_fluWkStart(ds)):String(ds).slice(0,7); };
   const fc=getFinCaja(); const start=(fc&&fc.fecha)||hoy();
   const saldoGs=(fc&&Number(fc.monto))||0, saldoUsd=(fc&&Number(fc.monto_usd))||0, tcIni=(fc&&Number(fc.tc))||cotizDolar()||0;
   const saldoIni=Math.round(saldoGs+saldoUsd*tcIni);
-  const hoyS=hoy(); const startPer=per(start<hoyS?start:hoyS); const curK=per(hoyS);
+  const hoyS=hoy(); const rollBase=(start<hoyS?start:hoyS); const startPer=per(rollBase); const curK=per(hoyS);
   const perRoll=ds=>{ const p=per(ds); return (p<startPer)?startPer:p; };
   const fp=getFinProy(); const ventasMes=(fp&&Number(fp.ventas_mes))||0; const costoPct=(fp&&fp.costo_pct!=null)?Number(fp.costo_pct):70;
   const suePlanta=(fp&&Number(fp.sue_planta))||0, sueComercial=(fp&&Number(fp.sue_comercial))||0, sueSuperior=(fp&&Number(fp.sue_superior))||0;
@@ -3519,12 +3539,13 @@ function finRenderFlujo(){ const modo=_finFluModo; const per=ds=>{ if(!ds)return
   const suePlantaG=Math.round(suePlanta*(1+cargaPct/100)), sueComercialG=Math.round(sueComercial*(1+cargaPct/100)), sueSuperiorG=sueSuperior;
   const sueldosMes=suePlantaG+sueComercialG+sueSuperiorG;
   const comisionPct=(fp&&Number(fp.comision_pct))||0; const crecPct=(fp&&fp.crecimiento_pct!=null)?Number(fp.crecimiento_pct):0; const ivaPct=(fp&&fp.iva_pct!=null)?Number(fp.iva_pct):10;
+  const cobroPct=(fp&&fp.cobro_pct!=null)?Number(fp.cobro_pct):100;   // % del saldo por cobrar que entra cada mes (100 = todo junto al vencer)
   const ivaFactor=ivaPct>0?100/(100+ivaPct):1;   // ventas netas de IVA (se descuenta el IVA incluido)
   // barras de configuración: saldo inicial + ventas proyectadas
   const detBreak = fc?('₲ '+saldoGs.toLocaleString('es-PY')+(saldoUsd?' · US$ '+saldoUsd.toLocaleString('es-PY',{maximumFractionDigits:2})+' · TC '+tcIni.toLocaleString('es-PY'):'')):'';
   if(gs('finFluCaja')){
     const cajaRow=`<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:#eef4fb;border:1px solid #dbe6f2;border-radius:10px;padding:10px 13px"><div style="min-width:0"><div style="font-size:10px;color:var(--gray-500);text-transform:uppercase;letter-spacing:.4px">Saldo inicial de caja</div><div style="font-size:17px;font-weight:800;color:${saldoIni<0?'var(--red)':'#1e3f63'}">${fc?finGsFmt(saldoIni):'— sin cargar —'}</div>${fc?`<div style="font-size:10px;color:var(--gray-500)">${detBreak}</div><div style="font-size:10px;color:var(--gray-500)">se arrastra desde ${fmtFecha(start)}</div>`:'<div style="font-size:10px;color:var(--gray-500)">cargá el saldo y la fecha de arranque</div>'}</div><button class="btn btn-sec" style="margin-left:auto;font-size:12px;padding:8px 13px" onclick="finCajaModal()">${fc?'✎ Editar':'＋ Cargar saldo'}</button></div>`;
-    const _hayProy=(ventasMes||sueldosMes||comisionPct); const proyRow=`<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:#f2f9f4;border:1px solid #d6ecdb;border-radius:10px;padding:9px 13px;margin-top:8px"><div style="min-width:0"><div style="font-size:10px;color:var(--gray-500);text-transform:uppercase;letter-spacing:.4px">Proyección</div><div style="font-size:15px;font-weight:800;color:#1e3f63">${ventasMes?'Ventas '+finGsFmt(ventasMes)+' /mes'+(crecPct?' · +'+crecPct+'%/año':''):'— sin cargar —'}</div><div style="font-size:10px;color:var(--gray-500)">${_hayProy?('costo '+costoPct+'%'+(sueldosMes?' · sueldos '+finGsFmt(sueldosMes)+'/mes':'')+(comisionPct?' · comisiones '+comisionPct+'%':'')):'estimados mensuales para proyectar el flujo'}</div></div><button class="btn btn-sec" style="margin-left:auto;font-size:12px;padding:8px 13px" onclick="finProyModal()">${_hayProy?'✎ Editar':'＋ Cargar'}</button></div>`;
+    const _hayProy=(ventasMes||sueldosMes||comisionPct); const proyRow=`<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:#f2f9f4;border:1px solid #d6ecdb;border-radius:10px;padding:9px 13px;margin-top:8px"><div style="min-width:0"><div style="font-size:10px;color:var(--gray-500);text-transform:uppercase;letter-spacing:.4px">Proyección</div><div style="font-size:15px;font-weight:800;color:#1e3f63">${ventasMes?'Ventas '+finGsFmt(ventasMes)+' /mes'+(crecPct?' · +'+crecPct+'%/año':''):'— sin cargar —'}</div><div style="font-size:10px;color:var(--gray-500)">${_hayProy?('costo '+costoPct+'%'+(sueldosMes?' · sueldos '+finGsFmt(sueldosMes)+'/mes':'')+(comisionPct?' · comisiones '+comisionPct+'%':'')+(cobroPct<100?' · cobranza '+cobroPct+'%/mes del saldo':'')):'estimados mensuales para proyectar el flujo'}</div></div><button class="btn btn-sec" style="margin-left:auto;font-size:12px;padding:8px 13px" onclick="finProyModal()">${_hayProy?'✎ Editar':'＋ Cargar'}</button></div>`;
     gs('finFluCaja').innerHTML=cajaRow+proyRow;
   }
   const P={}; const touch=k=>{ if(k) P[k]=P[k]||{vproy:0,cxc:0,cobR:0,cprod:0,cxp:0,pagR:0,cheq:0,banco:0,capital:0,alquiler:0,deuda:0,spry:0,comis:0,iva:0,sue:0}; return k; };
@@ -3539,7 +3560,9 @@ function finRenderFlujo(){ const modo=_finFluModo; const per=ds=>{ if(!ds)return
   getSueldos().forEach(su=>{ const mk=(su.periodo||String(su.fecha||'').slice(0,7)); if(mk) sueldoRealMes[mk]=(sueldoRealMes[mk]||0)+finGs(su,su.total||0); });
   // Ventas: saldo pendiente -> Cuentas por cobrar (por vencimiento); abonos desde el arranque -> Cobranzas realizadas (por fecha de cobro)
   getVentas().forEach(v=>{ const smk=String(v.fecha||'').slice(0,7); if(smk) salesMes[smk]=(salesMes[smk]||0)+Math.round(finGs(v,v.monto)*ivaFactor); const nom=v.cliente||v.concepto||'—'; const fx=v.factura?' · Fact '+v.factura:'';
-    (v.cuotas||[]).forEach(cu=>{ const s=finCuotaSaldo(cu); if(s>0){ const g=Math.round(finGs(v,s)*ivaFactor); addD(perRoll(cu.venc),'cxc',g, nom+fx+' · vence '+fmtFecha(cu.venc)+' (neto IVA)', cu.venc); gCxc+=g; }
+    (v.cuotas||[]).forEach(cu=>{ const s=finCuotaSaldo(cu); if(s>0){ const g=Math.round(finGs(v,s)*ivaFactor);
+        _cobroCurva(cu.venc, g, cobroPct, rollBase).forEach((x,i)=>{ addD(perRoll(x.fecha),'cxc',x.monto, nom+fx+' · vence '+fmtFecha(cu.venc)+(i?' · cobro estimado mes +'+i:'')+' (neto IVA)', x.fecha); });
+        gCxc+=g; }
       (cu.abonos||[]).forEach(a=>{ if(String(a.fecha)>=start){ const g=Math.round(finGs(v,a.monto)*ivaFactor); addD(per(a.fecha),'cobR',g, nom+fx+' · cobrado '+fmtFecha(a.fecha)+' (neto IVA)', a.fecha); gCobR+=g; } }); }); });
   // Compras: saldo pendiente -> Cuentas por pagar; abonos desde el arranque -> Pagos realizados
   getCompras().forEach(c=>{ if(chCov[c.id]) return; const nom=c.proveedor||c.categoria||'—'; const fx=c.factura?' · Fact '+c.factura:'';
