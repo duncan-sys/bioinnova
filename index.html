@@ -499,7 +499,7 @@ textarea{resize:vertical;min-height:66px}
       <button class="fintab" id="finT_banco" onclick="finSetTab('banco')">🏦 Fijos</button>
       <button class="fintab" id="finT_flujo" onclick="finSetTab('flujo')">📊 Flujo</button>
     </div>
-    <div style="font-size:9px;color:var(--gray-400);text-align:right;margin:-6px 0 8px">BioInnova <span id="finVer">v106</span></div>
+    <div style="font-size:9px;color:var(--gray-400);text-align:right;margin:-6px 0 8px">BioInnova <span id="finVer">v107</span></div>
     <div id="finW_ventas">
       <button class="btn btn-primary btn-block" style="margin-bottom:8px" onclick="finVentaModal()">＋ Nueva venta</button>
       <input type="search" id="finVBuscar" placeholder="🔎 Buscar cliente / factura…" oninput="finRenderVentas()" style="margin-bottom:8px">
@@ -1201,7 +1201,29 @@ function refreshVista(){ const act=document.querySelector('.screen.active'); if(
   else if(act.id==='sProductos'){ if(_prodTab==='inv') renderProductosInv(); else if(_prodTab==='gar') renderProductosGar(); else renderProductosCat(); }
   else if(act.id==='sAgenda') renderAgenda();
   else if(act.id==='sFinanzas') finSetTab(_finTab||'ventas'); }
-function startSync(){ if(!AUTH_ON) return; cloudPullAll(); if(syncTimer) clearInterval(syncTimer); syncTimer=setInterval(cloudPullAll, 30000); }
+// Sincronización periódica. Cada pasada de cloudPullAll baja 20 tablas ENTERAS,
+// así que el costo en tráfico es alto: hay que llamarla lo menos posible.
+//   · Con la app en segundo plano (teléfono bloqueado, otra pestaña) no se
+//     sincroniza: nadie está mirando y antes seguía bajando todo igual.
+//   · 2 minutos en vez de 30 segundos. Estos datos no cambian tan rápido, y al
+//     volver al frente se sincroniza en el acto, así que no se nota.
+// Cuando la bajada sea incremental (solo lo cambiado desde la última pasada)
+// esto se puede volver a acelerar sin costo.
+const SYNC_MS = 120000;
+const SYNC_MIN_MS = 20000;   // piso entre dos bajadas, pase lo que pase
+let _syncLast = 0;
+function _syncVisible(){ return typeof document.hidden!=='boolean' || !document.hidden; }
+// Único punto por el que pasa la sincronización periódica: respeta el piso de
+// tiempo, así alternar entre apps en el celular no dispara una bajada por cada
+// vuelta a la pantalla.
+function syncTick(force){
+  if(!AUTH_ON || !_syncVisible()) return;
+  const t=Date.now(); if(!force && t-_syncLast < SYNC_MIN_MS) return;
+  _syncLast=t; cloudPullAll();
+}
+function startSync(){ if(!AUTH_ON) return; _syncLast=Date.now(); cloudPullAll(); if(syncTimer) clearInterval(syncTimer); syncTimer=setInterval(syncTick, SYNC_MS); }
+// Al volver al frente, ponerse al día en el momento (no esperar hasta 2 minutos).
+document.addEventListener('visibilitychange', ()=>{ syncTick(); });
 
 let curCliente=null, editVisitaId=null, curSub='Visitas técnicas a campo', _lotesEdit=[], _evals=[], _estEdit=[];
 let _nav=[], _navBacking=false;
@@ -4077,7 +4099,7 @@ if('serviceWorker' in navigator){
   window.addEventListener('load',()=>{ navigator.serviceWorker.register('sw.js').catch(()=>{}); });
 }
 function pintarConexion(){ const el=gs('hSub'); if(!el) return; el.textContent = navigator.onLine ? curSub : '📴 Sin conexión — se guarda en el equipo'; }
-window.addEventListener('online',()=>{ pintarConexion(); showToast('✓ Conexión restablecida'); cloudPullAll(); });
+window.addEventListener('online',()=>{ pintarConexion(); showToast('✓ Conexión restablecida'); syncTick(true); });   // al volver la señal, sin esperar el piso de tiempo
 window.addEventListener('offline',()=>{ pintarConexion(); showToast('📴 Sin conexión — podés seguir cargando'); });
 
 // ── Init ──
