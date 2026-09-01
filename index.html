@@ -486,7 +486,8 @@ textarea{resize:vertical;min-height:66px}
   .findet>summary::-webkit-details-marker{display:none}
   .findet[open]>summary{border-bottom:1px solid var(--gray-100);background:var(--gray-100)}
   .finrow{padding:7px 12px;border-top:1px solid var(--gray-100);display:flex;justify-content:space-between;gap:8px;align-items:center}
-  .finchip{flex:0 0 auto;border:none;background:var(--gray-200);color:var(--gray-600);border-radius:12px;padding:5px 11px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit}.finchip.on{background:var(--green);color:#fff}</style>
+  .finchip{flex:0 0 auto;border:none;background:var(--gray-200);color:var(--gray-600);border-radius:12px;padding:5px 11px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit}.finchip.on{background:var(--green);color:#fff}
+  .finmes{flex:0 0 auto;border:1.5px solid var(--green);background:#fff;color:var(--green);border-radius:12px;padding:4px 8px;font-size:11px;font-weight:700;font-family:inherit;cursor:pointer;max-width:170px}</style>
   <div class="screen" id="sFinanzas">
     <div style="display:flex;gap:5px;margin-bottom:10px;overflow-x:auto;padding-bottom:2px">
       <button class="fintab on" id="finT_ventas" onclick="finSetTab('ventas')">💰 Ventas</button>
@@ -498,7 +499,7 @@ textarea{resize:vertical;min-height:66px}
       <button class="fintab" id="finT_banco" onclick="finSetTab('banco')">🏦 Fijos</button>
       <button class="fintab" id="finT_flujo" onclick="finSetTab('flujo')">📊 Flujo</button>
     </div>
-    <div style="font-size:9px;color:var(--gray-400);text-align:right;margin:-6px 0 8px">BioInnova <span id="finVer">v105</span></div>
+    <div style="font-size:9px;color:var(--gray-400);text-align:right;margin:-6px 0 8px">BioInnova <span id="finVer">v106</span></div>
     <div id="finW_ventas">
       <button class="btn btn-primary btn-block" style="margin-bottom:8px" onclick="finVentaModal()">＋ Nueva venta</button>
       <input type="search" id="finVBuscar" placeholder="🔎 Buscar cliente / factura…" oninput="finRenderVentas()" style="margin-bottom:8px">
@@ -3104,6 +3105,25 @@ function agPrint(){
 const FIN_CONDS=[['contado','Contado',[0]],['30','30 días',[30]],['60','60 días',[60]],['90','90 días',[90]],['30-60','30/60 días',[30,60]],['30-60-90','30/60/90 días',[30,60,90]]];
 const FIN_GCAT=['Insumos','Materia prima','Fletes','Servicios','Alquiler','Mantenimiento','Administración','Viáticos','Marketing','Certificación','Sueldos','Impuestos','Comisiones','Otros'];
 let _finTab='ventas';
+// ---- Mes de las pestañas Ventas / Por cobrar / Gastos / Por pagar ----
+// El mes es UNO SOLO y compartido por las cuatro: se elige una vez y todas
+// muestran el mismo período, así se lee el mes completo sin volver a elegirlo
+// en cada pestaña. '' = todos los meses (el comportamiento de siempre).
+// Ventas y Gastos filtran por la fecha del comprobante; Por cobrar y Por pagar,
+// por la fecha de VENCIMIENTO de la cuota, que es lo que se quiere saber del
+// mes: qué vence en él, no cuándo se emitió la factura.
+let _finMes='';
+function finSetMes(m){ _finMes=m||''; finSetTab(_finTab); }
+function _finEnMes(f){ return !_finMes || String(f||'').slice(0,7)===_finMes; }
+function _finMesesDisp(){ const s=new Set([hoy().slice(0,7)]);
+  const add=r=>{ if(r.fecha) s.add(String(r.fecha).slice(0,7)); (r.cuotas||[]).forEach(c=>{ if(c.venc) s.add(String(c.venc).slice(0,7)); }); };
+  getVentas().forEach(add); getCompras().forEach(add);
+  return [...s].filter(m=>/^\d{4}-\d{2}$/.test(m)).sort().reverse(); }
+function finMesSelHtml(){ return '<select class="finmes" onchange="finSetMes(this.value)" aria-label="Mes">'
+  + `<option value=""${_finMes?'':' selected'}>📅 Todos los meses</option>`
+  + _finMesesDisp().map(m=>`<option value="${m}"${_finMes===m?' selected':''}>📅 ${finMesLbl(m)}</option>`).join('')
+  + '</select>'; }
+function _finMesSuf(){ return _finMes?' · <b>'+finMesLbl(_finMes)+'</b>':''; }
 function getVentas(){ return getArr('bio:ventas'); }
 function saveVentas(a){ setArr('bio:ventas',a); }
 function getCompras(){ return getArr('bio:compras'); }
@@ -3128,15 +3148,14 @@ function finSetTab(t){ _finTab=t; ['ventas','cobrar','gastos','pagar','sueldos',
 // ---- Ventas ----
 let _finVFiltro='todas';
 function finVSetFiltro(f){ _finVFiltro=f; finRenderVentas(); }
-function finRenderVentas(){ const q=(gs('finVBuscar').value||'').trim().toLowerCase(); const mesAct=hoy().slice(0,7);
-  let ls=getVentas().slice();
+function finRenderVentas(){ const q=(gs('finVBuscar').value||'').trim().toLowerCase();
+  let ls=getVentas().slice().filter(v=>_finEnMes(v.fecha));
   if(q) ls=ls.filter(v=>((v.cliente||'')+' '+(v.concepto||'')+' '+(v.factura||'')).toLowerCase().includes(q));
-  if(_finVFiltro==='mes') ls=ls.filter(v=>String(v.fecha||'').slice(0,7)===mesAct);
-  else if(_finVFiltro==='pend') ls=ls.filter(v=>finSaldo(v)>0);
+  if(_finVFiltro==='pend') ls=ls.filter(v=>finSaldo(v)>0);
   else if(_finVFiltro==='cobr') ls=ls.filter(v=>finSaldo(v)<=0);
-  const fc=gs('finVFiltros'); if(fc){ const chip=(f,l)=>`<button class="finchip${_finVFiltro===f?' on':''}" onclick="finVSetFiltro('${f}')">${l}</button>`; fc.innerHTML=chip('todas','Todas')+chip('mes','Del mes')+chip('pend','Pendientes')+chip('cobr','Cobradas'); }
+  const fc=gs('finVFiltros'); if(fc){ const chip=(f,l)=>`<button class="finchip${_finVFiltro===f?' on':''}" onclick="finVSetFiltro('${f}')">${l}</button>`; fc.innerHTML=finMesSelHtml()+chip('todas','Todas')+chip('pend','Pendientes')+chip('cobr','Cobradas'); }
   const tot=ls.reduce((a,v)=>a+finGs(v,v.monto),0), pend=ls.reduce((a,v)=>a+finGs(v,finSaldo(v)),0);
-  if(gs('finVResumen')) gs('finVResumen').innerHTML='Total: <b>'+finGsFmt(tot)+'</b> · Por cobrar: <b style="color:var(--amber)">'+finGsFmt(pend)+'</b> · '+ls.length+' facturas';
+  if(gs('finVResumen')) gs('finVResumen').innerHTML='Total: <b>'+finGsFmt(tot)+'</b> · Por cobrar: <b style="color:var(--amber)">'+finGsFmt(pend)+'</b> · '+ls.length+' facturas'+_finMesSuf();
   const byCli={}; ls.forEach(v=>{ (byCli[v.cliente||'—']=byCli[v.cliente||'—']||[]).push(v); });
   const clis=Object.keys(byCli).map(c=>({c,saldo:byCli[c].reduce((a,v)=>a+finGs(v,finSaldo(v)),0),tot:byCli[c].reduce((a,v)=>a+finGs(v,v.monto),0)})).sort((a,b)=>b.saldo-a.saldo||b.tot-a.tot);
   gs('finVList').innerHTML=clis.map(g=>{ const arr=byCli[g.c].slice().sort((a,b)=>String(a.fecha||'').localeCompare(String(b.fecha||'')));
@@ -3173,12 +3192,12 @@ function finVentaBorrar(id){ if(!canEdit()) return; if(!confirm('¿Borrar esta v
 // ---- Gastos / Compras ----
 let _finGFiltro='todas';
 function finGSetFiltro(f){ _finGFiltro=f; finRenderGastos(); }
-function finRenderGastos(){ const hoyS=hoy(); const q=(gs('finGBuscar').value||'').trim().toLowerCase(); let ls=getCompras().slice();
+function finRenderGastos(){ const q=(gs('finGBuscar').value||'').trim().toLowerCase(); let ls=getCompras().slice().filter(c=>_finEnMes(c.fecha));
   if(q) ls=ls.filter(c=>((c.proveedor||'')+' '+(c.concepto||'')+' '+(c.categoria||'')).toLowerCase().includes(q));
-  if(_finGFiltro==='mes') ls=ls.filter(c=>String(c.fecha||'').slice(0,7)===hoyS.slice(0,7)); else if(_finGFiltro==='pend') ls=ls.filter(c=>finSaldo(c)>0); else if(_finGFiltro==='pag') ls=ls.filter(c=>finSaldo(c)<=0);
-  const fc=gs('finGFiltros'); if(fc){ const chip=(f,l)=>`<button class="finchip${_finGFiltro===f?' on':''}" onclick="finGSetFiltro('${f}')">${l}</button>`; fc.innerHTML=chip('todas','Todos')+chip('mes','Del mes')+chip('pend','Pendientes')+chip('pag','Pagados'); }
+  if(_finGFiltro==='pend') ls=ls.filter(c=>finSaldo(c)>0); else if(_finGFiltro==='pag') ls=ls.filter(c=>finSaldo(c)<=0);
+  const fc=gs('finGFiltros'); if(fc){ const chip=(f,l)=>`<button class="finchip${_finGFiltro===f?' on':''}" onclick="finGSetFiltro('${f}')">${l}</button>`; fc.innerHTML=finMesSelHtml()+chip('todas','Todos')+chip('pend','Pendientes')+chip('pag','Pagados'); }
   const tot=ls.reduce((a,c)=>a+finGs(c,c.monto),0), pend=ls.reduce((a,c)=>a+finGs(c,finSaldo(c)),0);
-  if(gs('finGResumen')) gs('finGResumen').innerHTML='Total: <b>'+finGsFmt(tot)+'</b> · Por pagar: <b style="color:var(--red)">'+finGsFmt(pend)+'</b> · '+ls.length+' gasto(s)';
+  if(gs('finGResumen')) gs('finGResumen').innerHTML='Total: <b>'+finGsFmt(tot)+'</b> · Por pagar: <b style="color:var(--red)">'+finGsFmt(pend)+'</b> · '+ls.length+' gasto(s)'+_finMesSuf();
   const byProv={}; ls.forEach(c=>{ (byProv[c.proveedor||'—']=byProv[c.proveedor||'—']||[]).push(c); });
   const provs=Object.keys(byProv).map(p=>{ const arr=byProv[p]; return {p, tot:arr.reduce((a,c)=>a+finGs(c,c.monto),0), saldo:arr.reduce((a,c)=>a+finGs(c,finSaldo(c)),0)}; }).sort((a,b)=>b.saldo-a.saldo||b.tot-a.tot);
   gs('finGList').innerHTML=provs.map(g=>{ const arr=byProv[g.p].slice().sort((a,b)=>String(b.fecha||'').localeCompare(String(a.fecha||'')));
@@ -3213,13 +3232,13 @@ function finGastoBorrar(id){ if(!canEdit()) return; if(!confirm('¿Borrar este g
 function _finPendientes(tipo){ const arr=tipo==='venta'?getVentas():getCompras(); const rows=[]; arr.forEach(rec=>{ (rec.cuotas||[]).forEach((cu,ci)=>{ const s=finCuotaSaldo(cu); if(s>0) rows.push({rec,ci,cu,saldo:s,venc:cu.venc}); }); }); rows.sort((a,b)=>String(a.venc||'').localeCompare(String(b.venc||''))); return rows; }
 let _finCobFiltro='todas';
 function finCobSetFiltro(f){ _finCobFiltro=f; finRenderCobrar(); }
-function finRenderCobrar(){ const hoyS=hoy(); let rows=_finPendientes('venta');
+function finRenderCobrar(){ const hoyS=hoy(); let rows=_finPendientes('venta').filter(r=>_finEnMes(r.venc));
   if(_finCobFiltro==='venc') rows=rows.filter(r=>String(r.venc)<hoyS);
   else if(_finCobFiltro==='porvencer') rows=rows.filter(r=>String(r.venc)>=hoyS);
-  const fc=gs('finCobFiltros'); if(fc){ const chip=(f,l)=>`<button class="finchip${_finCobFiltro===f?' on':''}" onclick="finCobSetFiltro('${f}')">${l}</button>`; fc.innerHTML=chip('todas','Todas')+chip('venc','🔴 Vencidas')+chip('porvencer','A vencer'); }
+  const fc=gs('finCobFiltros'); if(fc){ const chip=(f,l)=>`<button class="finchip${_finCobFiltro===f?' on':''}" onclick="finCobSetFiltro('${f}')">${l}</button>`; fc.innerHTML=finMesSelHtml()+chip('todas','Todas')+chip('venc','🔴 Vencidas')+chip('porvencer','A vencer'); }
   const totGs=rows.reduce((a,r)=>a+finGs(r.rec,r.saldo),0);
-  const vencGs=_finPendientes('venta').filter(r=>String(r.venc)<hoyS).reduce((a,r)=>a+finGs(r.rec,r.saldo),0);
-  if(gs('finCobResumen')) gs('finCobResumen').innerHTML='Por cobrar: <b style="color:var(--amber)">'+finGsFmt(totGs)+'</b> · Vencido: <b style="color:var(--red)">'+finGsFmt(vencGs)+'</b>';
+  const vencGs=_finPendientes('venta').filter(r=>_finEnMes(r.venc)&&String(r.venc)<hoyS).reduce((a,r)=>a+finGs(r.rec,r.saldo),0);
+  if(gs('finCobResumen')) gs('finCobResumen').innerHTML='Por cobrar: <b style="color:var(--amber)">'+finGsFmt(totGs)+'</b> · Vencido: <b style="color:var(--red)">'+finGsFmt(vencGs)+'</b>'+_finMesSuf();
   const byCli={}; rows.forEach(r=>{ (byCli[r.rec.cliente||'—']=byCli[r.rec.cliente||'—']||[]).push(r); });
   const clis=Object.keys(byCli).map(c=>{ const arr=byCli[c]; return {c, saldo:arr.reduce((a,r)=>a+finGs(r.rec,r.saldo),0), venc:arr.filter(r=>String(r.venc)<hoyS).reduce((a,r)=>a+finGs(r.rec,r.saldo),0)}; }).sort((a,b)=>b.venc-a.venc||b.saldo-a.saldo);
   gs('finCobList').innerHTML=clis.map(g=>{ const arr=byCli[g.c].slice().sort((a,b)=>String(a.venc||'').localeCompare(String(b.venc||'')));
@@ -3228,26 +3247,27 @@ function finRenderCobrar(){ const hoyS=hoy(); let rows=_finPendientes('venta');
 }
 // ---- Exportar reportes (PDF / Excel) ----
 function _finRepData(tipo){ const hoyS=hoy(); const out=[]; // {cliente,factura,fecha,venc,monto,saldo,moneda,estado} (cliente = proveedor en gastos/pagar)
-  if(tipo==='cobrar'){ let rows=_finPendientes('venta'); if(_finCobFiltro==='venc') rows=rows.filter(r=>String(r.venc)<hoyS); else if(_finCobFiltro==='porvencer') rows=rows.filter(r=>String(r.venc)>=hoyS);
+  if(tipo==='cobrar'){ let rows=_finPendientes('venta').filter(r=>_finEnMes(r.venc)); if(_finCobFiltro==='venc') rows=rows.filter(r=>String(r.venc)<hoyS); else if(_finCobFiltro==='porvencer') rows=rows.filter(r=>String(r.venc)>=hoyS);
     rows.sort((a,b)=>String(a.rec.cliente).localeCompare(String(b.rec.cliente))||String(a.venc).localeCompare(String(b.venc)));
     rows.forEach(r=>out.push({cliente:r.rec.cliente||'',factura:r.rec.factura||'',fecha:r.rec.fecha||'',venc:r.venc||'',monto:r.cu.monto,saldo:r.saldo,moneda:r.rec.moneda,estado:(String(r.venc)<hoyS?'Vencida':'A vencer')}));
-  } else if(tipo==='pagar'){ let rows=_finPendientes('compra'); if(_finPagFiltro==='venc') rows=rows.filter(r=>String(r.venc)<hoyS); else if(_finPagFiltro==='porvencer') rows=rows.filter(r=>String(r.venc)>=hoyS);
+  } else if(tipo==='pagar'){ let rows=_finPendientes('compra').filter(r=>_finEnMes(r.venc)); if(_finPagFiltro==='venc') rows=rows.filter(r=>String(r.venc)<hoyS); else if(_finPagFiltro==='porvencer') rows=rows.filter(r=>String(r.venc)>=hoyS);
     rows.sort((a,b)=>String(a.rec.proveedor).localeCompare(String(b.rec.proveedor))||String(a.venc).localeCompare(String(b.venc)));
     rows.forEach(r=>out.push({cliente:r.rec.proveedor||'',factura:r.rec.factura||'',fecha:r.rec.fecha||'',venc:r.venc||'',monto:r.cu.monto,saldo:r.saldo,moneda:r.rec.moneda,estado:(String(r.venc)<hoyS?'Vencida':'A vencer')}));
-  } else if(tipo==='gastos'){ let ls=getCompras().slice(); if(_finGFiltro==='mes') ls=ls.filter(c=>String(c.fecha||'').slice(0,7)===hoyS.slice(0,7)); else if(_finGFiltro==='pend') ls=ls.filter(c=>finSaldo(c)>0); else if(_finGFiltro==='pag') ls=ls.filter(c=>finSaldo(c)<=0);
+  } else if(tipo==='gastos'){ let ls=getCompras().slice().filter(c=>_finEnMes(c.fecha)); if(_finGFiltro==='pend') ls=ls.filter(c=>finSaldo(c)>0); else if(_finGFiltro==='pag') ls=ls.filter(c=>finSaldo(c)<=0);
     ls.sort((a,b)=>String(a.proveedor).localeCompare(String(b.proveedor))||String(a.fecha).localeCompare(String(b.fecha)));
     ls.forEach(c=>{ const s=finSaldo(c); const cu0=(c.cuotas&&c.cuotas[0])||{}; const venc=cu0.venc||''; const est= s<=0?'Pagada':((c.cuotas||[]).some(x=>finCuotaSaldo(x)>0&&String(x.venc)<hoyS)?'Vencida':'Pendiente'); out.push({cliente:c.proveedor||'',factura:c.factura||'',fecha:c.fecha||'',venc,monto:c.monto,saldo:s,moneda:c.moneda,estado:est}); });
-  } else { let ls=getVentas().slice(); if(_finVFiltro==='mes') ls=ls.filter(v=>String(v.fecha||'').slice(0,7)===hoyS.slice(0,7)); else if(_finVFiltro==='pend') ls=ls.filter(v=>finSaldo(v)>0); else if(_finVFiltro==='cobr') ls=ls.filter(v=>finSaldo(v)<=0);
+  } else { let ls=getVentas().slice().filter(v=>_finEnMes(v.fecha)); if(_finVFiltro==='pend') ls=ls.filter(v=>finSaldo(v)>0); else if(_finVFiltro==='cobr') ls=ls.filter(v=>finSaldo(v)<=0);
     ls.sort((a,b)=>String(a.cliente).localeCompare(String(b.cliente))||String(a.fecha).localeCompare(String(b.fecha)));
     ls.forEach(v=>{ const s=finSaldo(v); const cu0=(v.cuotas&&v.cuotas[0])||{}; const venc=cu0.venc||''; const est= s<=0?'Cobrada':((v.cuotas||[]).some(c=>finCuotaSaldo(c)>0&&String(c.venc)<hoyS)?'Vencida':'Pendiente'); out.push({cliente:v.cliente||'',factura:v.factura||'',fecha:v.fecha||'',venc,monto:v.monto,saldo:s,moneda:v.moneda,estado:est}); });
   }
   return out;
 }
 function _finRepMeta(tipo){ const M={cobrar:['Cuentas por Cobrar','Cliente'],pagar:['Cuentas por Pagar','Proveedor'],gastos:['Gastos','Proveedor']}[tipo]||['Ventas','Cliente'];
-  const FL={ ventas:({todas:'Todas',mes:'Del mes',pend:'Pendientes',cobr:'Cobradas'})[_finVFiltro],
+  const FL0={ ventas:({todas:'Todas',pend:'Pendientes',cobr:'Cobradas'})[_finVFiltro],
              cobrar:({todas:'Todas',venc:'Vencidas',porvencer:'A vencer'})[_finCobFiltro],
-             gastos:({todas:'Todos',mes:'Del mes',pend:'Pendientes',pag:'Pagados'})[_finGFiltro],
+             gastos:({todas:'Todos',pend:'Pendientes',pag:'Pagados'})[_finGFiltro],
              pagar:({todas:'Todas',venc:'Vencidas',porvencer:'A vencer'})[_finPagFiltro] }[tipo]||'Todas';
+  const FL=(FL0||'Todas')+(_finMes?' · '+finMesLbl(_finMes):'');   // el mes elegido también va en el encabezado del reporte
   const CL={ ventas:['Total facturado','Saldo pendiente','Vencido'], cobrar:['Total','Por cobrar','Vencido'], gastos:['Total gastos','Saldo pendiente','Vencido'], pagar:['Total','Por pagar','Vencido'] }[tipo]||['Total','Saldo','Vencido'];
   return {titulo:M[0], colName:M[1], filtLbl:FL, cardLbl:CL};
 }
@@ -3323,12 +3343,12 @@ function finReportePDF(tipo){ const data=_finRepData(tipo); if(!data.length){ sh
 }
 let _finPagFiltro='todas';
 function finPagSetFiltro(f){ _finPagFiltro=f; finRenderPagar(); }
-function finRenderPagar(){ const hoyS=hoy(); let rows=_finPendientes('compra');
+function finRenderPagar(){ const hoyS=hoy(); let rows=_finPendientes('compra').filter(r=>_finEnMes(r.venc));
   if(_finPagFiltro==='venc') rows=rows.filter(r=>String(r.venc)<hoyS); else if(_finPagFiltro==='porvencer') rows=rows.filter(r=>String(r.venc)>=hoyS);
-  const fc=gs('finPagFiltros'); if(fc){ const chip=(f,l)=>`<button class="finchip${_finPagFiltro===f?' on':''}" onclick="finPagSetFiltro('${f}')">${l}</button>`; fc.innerHTML=chip('todas','Todas')+chip('venc','🔴 Vencidas')+chip('porvencer','A vencer'); }
+  const fc=gs('finPagFiltros'); if(fc){ const chip=(f,l)=>`<button class="finchip${_finPagFiltro===f?' on':''}" onclick="finPagSetFiltro('${f}')">${l}</button>`; fc.innerHTML=finMesSelHtml()+chip('todas','Todas')+chip('venc','🔴 Vencidas')+chip('porvencer','A vencer'); }
   const totGs=rows.reduce((a,r)=>a+finGs(r.rec,r.saldo),0);
-  const vencGs=_finPendientes('compra').filter(r=>String(r.venc)<hoyS).reduce((a,r)=>a+finGs(r.rec,r.saldo),0);
-  if(gs('finPagResumen')) gs('finPagResumen').innerHTML='Por pagar: <b style="color:var(--red)">'+finGsFmt(totGs)+'</b> · Vencido: <b style="color:var(--red)">'+finGsFmt(vencGs)+'</b>';
+  const vencGs=_finPendientes('compra').filter(r=>_finEnMes(r.venc)&&String(r.venc)<hoyS).reduce((a,r)=>a+finGs(r.rec,r.saldo),0);
+  if(gs('finPagResumen')) gs('finPagResumen').innerHTML='Por pagar: <b style="color:var(--red)">'+finGsFmt(totGs)+'</b> · Vencido: <b style="color:var(--red)">'+finGsFmt(vencGs)+'</b>'+_finMesSuf();
   const byProv={}; rows.forEach(r=>{ (byProv[r.rec.proveedor||'—']=byProv[r.rec.proveedor||'—']||[]).push(r); });
   const provs=Object.keys(byProv).map(p=>{ const arr=byProv[p]; return {p, saldo:arr.reduce((a,r)=>a+finGs(r.rec,r.saldo),0), venc:arr.filter(r=>String(r.venc)<hoyS).reduce((a,r)=>a+finGs(r.rec,r.saldo),0)}; }).sort((a,b)=>b.venc-a.venc||b.saldo-a.saldo);
   gs('finPagList').innerHTML=provs.map(g=>{ const arr=byProv[g.p].slice().sort((a,b)=>String(a.venc||'').localeCompare(String(b.venc||'')));
