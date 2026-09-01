@@ -504,7 +504,7 @@ textarea{resize:vertical;min-height:66px}
       <button class="fintab" id="finT_banco" onclick="finSetTab('banco')">🏦 Fijos</button>
       <button class="fintab" id="finT_flujo" onclick="finSetTab('flujo')">📊 Flujo</button>
     </div>
-    <div style="font-size:9px;color:var(--gray-400);text-align:right;margin:-6px 0 8px">BioInnova <span id="finVer">v110</span></div>
+    <div style="font-size:9px;color:var(--gray-400);text-align:right;margin:-6px 0 8px">BioInnova <span id="finVer">v111</span></div>
     <div id="finW_ventas">
       <button class="btn btn-primary btn-block" style="margin-bottom:8px" onclick="finVentaModal()">＋ Nueva venta</button>
       <input type="search" id="finVBuscar" placeholder="🔎 Buscar cliente / factura / comercial…" oninput="finRenderVentas()" style="margin-bottom:8px">
@@ -1124,7 +1124,7 @@ const SYNC_DEFS = {
   ptmov:{ get:getPtMovs, save:savePtMovs, table:'bio_ptmov', toRow:ptmovRow, fromRow:rowPtmov },
   garantia:{ get:getGarantias, save:saveGarantias, table:'bio_garantias', toRow:garRow, fromRow:rowGar },
   agenda:{ get:getAgenda, save:saveAgenda, table:'bio_agenda', toRow:agRow, fromRow:rowAg, toRowSafe:(a)=>{ const r=agRow(a); delete r.estancia_id; return r; } },
-  venta:{ get:getVentas, save:saveVentas, table:'bio_ventas', toRow:ventaRow, fromRow:rowVenta, toRowSafe:(v)=>{ const r=ventaRow(v); delete r.comercial; return r; } },
+  venta:{ get:getVentas, save:saveVentas, table:'bio_ventas', toRow:ventaRow, fromRow:rowVenta, toRowSafe:(v)=>{ const r=ventaRow(v); ['comercial','cotiz_id','cotiz_num','items','costo','sin_costeo'].forEach(k=>delete r[k]); return r; } },
   compra:{ get:getCompras, save:saveCompras, table:'bio_compras', toRow:compraRow, fromRow:rowCompra },
   sueldo:{ get:getSueldos, save:saveSueldos, table:'bio_sueldos', toRow:sueldoRow, fromRow:rowSueldo },
   cheque:{ get:getCheques, save:saveCheques, table:'bio_cheques', toRow:chequeRow, fromRow:rowCheque },
@@ -3199,8 +3199,37 @@ function finGs(rec,val){ return rec&&rec.moneda==='USD' ? Math.round((val||0)*(N
 function finFmt(v,mon){ return (mon==='USD'?'US$ ':'₲ ')+Number(v||0).toLocaleString('es-PY',{maximumFractionDigits:mon==='USD'?2:0}); }
 function finMesLbl(ym){ const p=String(ym||'').split('-'); const M=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']; return p.length===2?(M[(+p[1])-1]+' '+p[0]):ym; }
 function finGsFmt(v){ return '₲ '+Math.round(v||0).toLocaleString('es-PY'); }
-function ventaRow(v){ return { id:v.id, fecha:v.fecha||null, factura:v.factura||'', cliente:v.cliente||'', cliente_id:v.cliente_id||'', comercial:v.comercial||'', concepto:v.concepto||'', monto:v.monto||0, moneda:v.moneda||'PYG', tc:v.tc||null, cond:v.cond||'contado', cuotas:v.cuotas||[], por:v.por||'', ts:v.ts||null }; }
-function rowVenta(r){ let cu=r.cuotas; if(typeof cu==='string'){try{cu=JSON.parse(cu)}catch{cu=[]}} return { id:r.id, fecha:r.fecha||'', factura:r.factura||'', cliente:r.cliente||'', cliente_id:r.cliente_id||'', comercial:r.comercial||'', concepto:r.concepto||'', monto:Number(r.monto)||0, moneda:r.moneda||'PYG', tc:(r.tc!=null?Number(r.tc):null), cond:r.cond||'contado', cuotas:Array.isArray(cu)?cu:[], por:r.por||'', ts:r.ts, pending:false }; }
+function ventaRow(v){ return { id:v.id, fecha:v.fecha||null, factura:v.factura||'', cliente:v.cliente||'', cliente_id:v.cliente_id||'', comercial:v.comercial||'', concepto:v.concepto||'', monto:v.monto||0, moneda:v.moneda||'PYG', tc:v.tc||null, cond:v.cond||'contado', cuotas:v.cuotas||[], cotiz_id:v.cotiz_id||'', cotiz_num:(v.cotiz_num!=null?v.cotiz_num:null), items:(v.items||null), costo:(v.costo!=null?v.costo:null), sin_costeo:!!v.sin_costeo, por:v.por||'', ts:v.ts||null }; }
+function rowVenta(r){ let cu=r.cuotas; if(typeof cu==='string'){try{cu=JSON.parse(cu)}catch{cu=[]}} let it=r.items; if(typeof it==='string'){try{it=JSON.parse(it)}catch{it=null}} return { id:r.id, fecha:r.fecha||'', factura:r.factura||'', cliente:r.cliente||'', cliente_id:r.cliente_id||'', comercial:r.comercial||'', concepto:r.concepto||'', monto:Number(r.monto)||0, moneda:r.moneda||'PYG', tc:(r.tc!=null?Number(r.tc):null), cond:r.cond||'contado', cuotas:Array.isArray(cu)?cu:[], cotiz_id:r.cotiz_id||'', cotiz_num:(r.cotiz_num!=null?Number(r.cotiz_num):null), items:(Array.isArray(it)?it:null), costo:(r.costo!=null?Number(r.costo):null), sin_costeo:!!r.sin_costeo, por:r.por||'', ts:r.ts, pending:false }; }
+// ---- Costo real de una venta ----------------------------------------------
+// Costo de producción por kg: la misma cadena que arma el precio pero SIN
+// margen, plazo ni IVA — insumos + merma + mano de obra + bolsa + etiqueta,
+// más gastos administrativos.
+function costoProdKg(f){ const cfg=getCostCfg(); const kgB=plKgBolsa(f);
+  const bruto = costoBaseFormula(f)*(1+(cfg.merma||0)) + cfg.mano_obra + cfg.bolsa + (kgB?cfg.etiqueta_bolsa/kgB:0);
+  return bruto*(1+(cfg.gastos_adm||0)); }
+function formulaDeKey(key){ return PL_FORMULAS.find(f=>precioKey(f)===key)||null; }
+// Costea las líneas de una cotización. COSTO COMPLETO = producción + flete +
+// comisión. Se calcula UNA vez, al vincular la factura, y queda congelado: si
+// después cambian los precios de insumos, el margen de esta venta no se mueve.
+// Los productos sin fórmula no tienen costo calculable → quedan "sin costeo",
+// que no es lo mismo que costo cero.
+function costearItems(items, fleteKg){ const cfg=getCostCfg(); const com=Number(cfg.comision)||0; let total=0, sin=0;
+  const lineas=(items||[]).map(it=>{
+    const f=formulaDeKey(it.key), kg=Number(it.kg)||0, sub=Number(it.subtotal)||0;
+    if(!f){ sin++; return Object.assign({},it,{sin_costeo:true}); }
+    const prod=Math.round(costoProdKg(f)*kg), fl=Math.round((Number(fleteKg)||0)*kg), cm=Math.round(sub*com);
+    total+=prod+fl+cm;
+    return Object.assign({},it,{costo_prod:prod, costo_flete:fl, costo_comision:cm, costo:prod+fl+cm});
+  });
+  return { lineas, costo_total:total, sin_costeo:sin>0, sin_costeo_n:sin }; }
+// ¿Esta cotización ya se facturó? Se deduce de las ventas, no se guarda: así
+// nunca queda un estado colgado si después se borra la factura.
+function cotizFacturada(id,exceptoVenta){ return getVentas().some(v=>v.cotiz_id===id && v.id!==exceptoVenta); }
+function ventaMargen(v){ if(!v || v.costo==null) return null;
+  const neto=Number(v.monto)||0, costo=Number(v.costo)||0;
+  return { costo, margen:neto-costo, pct: neto?(neto-costo)/neto*100:0 }; }
+
 // Lista de comerciales SIN pegarle a la red: sale de lo que ya está en el
 // teléfono -clientes, ventas anteriores y rendiciones de viáticos-. La cuota de
 // egress de Supabase está justa; cada consulta de más cuesta.
@@ -3232,11 +3261,18 @@ function finRenderVentas(){ const q=(gs('finVBuscar').value||'').trim().toLowerC
   else if(_finVFiltro==='cobr') ls=ls.filter(v=>finSaldo(v)<=0);
   const fc=gs('finVFiltros'); if(fc){ const chip=(f,l)=>`<button class="finchip${_finVFiltro===f?' on':''}" onclick="finVSetFiltro('${f}')">${l}</button>`; fc.innerHTML=finMesSelHtml()+finComSelHtml(base)+chip('todas','Todas')+chip('pend','Pendientes')+chip('cobr','Cobradas'); }
   const tot=ls.reduce((a,v)=>a+finGs(v,v.monto),0), pend=ls.reduce((a,v)=>a+finGs(v,finSaldo(v)),0);
-  if(gs('finVResumen')) gs('finVResumen').innerHTML='Total: <b>'+finGsFmt(tot)+'</b> · Por cobrar: <b style="color:var(--amber)">'+finGsFmt(pend)+'</b> · '+ls.length+' facturas'+_finMesSuf()+(_finCom?' · <b>'+esc(_finComLbl(_finCom))+'</b>':'');
+  // Margen: solo sobre las que tienen costo congelado. Las sin cotización se
+  // cuentan aparte para que el incumplimiento se vea, en vez de diluirse.
+  const conCosto=ls.filter(v=>v.costo!=null);
+  const vNeto=conCosto.reduce((a,v)=>a+finGs(v,v.monto),0), vCosto=conCosto.reduce((a,v)=>a+finGs(v,v.costo),0);
+  const sinCot=ls.filter(v=>!v.cotiz_id).length;
+  if(gs('finVResumen')) gs('finVResumen').innerHTML='Total: <b>'+finGsFmt(tot)+'</b> · Por cobrar: <b style="color:var(--amber)">'+finGsFmt(pend)+'</b> · '+ls.length+' facturas'+_finMesSuf()+(_finCom?' · <b>'+esc(_finComLbl(_finCom))+'</b>':'')
+    + (conCosto.length?'<br>Margen: <b style="color:var(--green)">'+finGsFmt(vNeto-vCosto)+'</b>'+(vNeto?' ('+((vNeto-vCosto)/vNeto*100).toFixed(1)+'%)':'')+' <span style="color:var(--gray-400)">sobre '+conCosto.length+' con costo</span>':'')
+    + (sinCot?' <span style="color:var(--amber)">· '+sinCot+' sin cotización</span>':'');
   const byCli={}; ls.forEach(v=>{ (byCli[v.cliente||'—']=byCli[v.cliente||'—']||[]).push(v); });
   const clis=Object.keys(byCli).map(c=>({c,saldo:byCli[c].reduce((a,v)=>a+finGs(v,finSaldo(v)),0),tot:byCli[c].reduce((a,v)=>a+finGs(v,v.monto),0)})).sort((a,b)=>b.saldo-a.saldo||b.tot-a.tot);
   gs('finVList').innerHTML=clis.map(g=>{ const arr=byCli[g.c].slice().sort((a,b)=>String(a.fecha||'').localeCompare(String(b.fecha||'')));
-    const rows=arr.map(v=>{ const s=finSaldo(v); const cu0=(v.cuotas&&v.cuotas[0])||{}; const nc=(v.cuotas||[]).length; return `<div class="finrow" onclick="finVentaModal('${v.id}')"><div style="min-width:0"><div style="font-size:12px;color:var(--gray-800)">${v.factura?'Fact '+esc(v.factura):esc(v.concepto||'venta')}${nc>1?' <span style="font-size:9px;color:var(--gray-400)">'+nc+' cuotas</span>':''}</div><div style="font-size:10px;color:var(--gray-400)">${fmtFecha(v.fecha)}${cu0.venc?' · vence '+fmtFecha(cu0.venc):''}${v.comercial?' · 👤 '+esc(v.comercial):''}</div></div><div style="text-align:right;flex-shrink:0"><div style="font-weight:700;font-size:12px">${finFmt(v.monto,v.moneda)}</div>${s>0?`<div style="font-size:10px;color:var(--amber)">saldo ${finFmt(s,v.moneda)}</div>`:'<div style="font-size:10px;color:var(--green)">✓</div>'}</div></div>`; }).join('');
+    const rows=arr.map(v=>{ const s=finSaldo(v); const cu0=(v.cuotas&&v.cuotas[0])||{}; const nc=(v.cuotas||[]).length; return `<div class="finrow" onclick="finVentaModal('${v.id}')"><div style="min-width:0"><div style="font-size:12px;color:var(--gray-800)">${v.factura?'Fact '+esc(v.factura):esc(v.concepto||'venta')}${nc>1?' <span style="font-size:9px;color:var(--gray-400)">'+nc+' cuotas</span>':''}</div><div style="font-size:10px;color:var(--gray-400)">${fmtFecha(v.fecha)}${cu0.venc?' · vence '+fmtFecha(cu0.venc):''}${v.comercial?' · 👤 '+esc(v.comercial):''}${v.cotiz_num?' · 🧮 Cot '+v.cotiz_num:' · <span style="color:var(--amber)">sin cotización</span>'}${(()=>{const m=ventaMargen(v);return m?' · <span style="color:'+(m.margen>=0?'var(--green)':'var(--red)')+'">'+m.pct.toFixed(0)+'% mg</span>':'';})()}</div></div><div style="text-align:right;flex-shrink:0"><div style="font-weight:700;font-size:12px">${finFmt(v.monto,v.moneda)}</div>${s>0?`<div style="font-size:10px;color:var(--amber)">saldo ${finFmt(s,v.moneda)}</div>`:'<div style="font-size:10px;color:var(--green)">✓</div>'}</div></div>`; }).join('');
     return `<details class="findet"><summary><div style="min-width:0"><div style="font-weight:700;font-size:13px">${esc(g.c)}</div><div style="font-size:10px;color:var(--gray-400)">${byCli[g.c].length} factura(s)</div></div><div style="text-align:right;flex-shrink:0"><div style="font-weight:800;color:${g.saldo>0?'var(--amber)':'var(--green)'}">${finGsFmt(g.saldo)}</div><div style="font-size:9px;color:var(--gray-400)">pendiente</div></div></summary>${rows}</details>`; }).join('')||'<div class="empty">Sin ventas.</div>';
   gs('finVList').innerHTML = finComDesglose(base) + gs('finVList').innerHTML;
 }
@@ -3275,7 +3311,9 @@ function finComDesglose(base){
 function finClientesDL(){ return '<datalist id="finCliDL">'+getClientes().slice().sort((a,b)=>a.nombre.localeCompare(b.nombre)).map(c=>`<option value="${esc(c.nombre)}">`).join('')+'</datalist>'; }
 function finVentaModal(id){ if(!canEdit()){ showToast('Sin permiso'); return; } const v=id?getVentas().find(x=>x.id===id):null;
   gs('modalBox').innerHTML=`<h3>${v?'Editar':'Nueva'} venta</h3>${finClientesDL()}${finComercialDL()}
-    <label class="fl">Cliente</label><input id="finVCli" list="finCliDL" value="${esc(v&&v.cliente)}" placeholder="Nombre del cliente" autocomplete="off" onchange="finVClienteCambio()">
+    <label class="fl">Cliente</label><input id="finVCli" list="finCliDL" value="${esc(v&&v.cliente)}" placeholder="Nombre del cliente" autocomplete="off" onchange="finVClienteCambio();finVCotizOpts()">
+    <label class="fl">Cotización</label><select id="finVCotiz" onchange="finVCotizElegida()"></select>
+    <div id="finVCotizInfo" style="font-size:11px;color:var(--gray-500);margin-top:4px"></div>
     <label class="fl">Comercial</label><input id="finVCom" list="finComDL" value="${esc(v&&v.comercial)}" placeholder="Quién hizo la venta" autocomplete="off">
     <label class="fl">Nº de factura</label><input id="finVFact" value="${esc(v&&v.factura)}" placeholder="ej: 001-001-0001234" autocomplete="off">
     <label class="fl">Concepto / detalle</label><input id="finVConc" value="${esc(v&&v.concepto)}" placeholder="ej: 50 bolsas Confi 40" autocomplete="off">
@@ -3286,7 +3324,48 @@ function finVentaModal(id){ if(!canEdit()){ showToast('Sin permiso'); return; } 
     <div style="display:flex;gap:5px;margin-top:5px">${[['0','Contado'],['30','+30'],['60','+60'],['90','+90']].map(x=>`<button type="button" onclick="finVSetPlazo(${x[0]})" style="flex:1;font-size:11px;padding:6px 4px;border:1px solid var(--gray-200);background:#fff;border-radius:6px;cursor:pointer">${x[1]}</button>`).join('')}</div>
     <div style="font-size:11px;color:var(--gray-400);margin-top:4px">Un solo vencimiento. Los cobros parciales se registran en "Por cobrar".</div>
     <div class="row2" style="margin-top:12px">${v?`<button class="btn btn-sec" onclick="finVentaBorrar('${v.id}')" style="color:var(--red)">Borrar</button>`:'<button class="btn btn-sec" onclick="cerrarModal()">Cancelar</button>'}<button class="btn btn-primary" onclick="finVentaGuardar('${v?v.id:''}')">Guardar</button></div>`;
+  _finVCotizEdit = v ? v.id : '';
+  _finVSnap = (v && v.items) ? { lineas:v.items, costo_total:(v.costo!=null?v.costo:null), sin_costeo:!!v.sin_costeo } : null;
+  finVCotizOpts(v?(v.cotiz_id||''):'');
   gs('modal').classList.add('show');
+}
+// ---- Vínculo venta ↔ cotización ----
+// Cada factura sale de una cotización del mismo cliente: de ahí se toma el
+// detalle real y se congela el costo. Una cotización se factura UNA vez, así
+// que las ya facturadas no vuelven a aparecer en la lista.
+let _finVCotizEdit='', _finVSnap=null;
+function finVCotizOpts(sel){ const el=gs('finVCotiz'); if(!el) return;
+  const cli=(gs('finVCli').value||'').trim().toLowerCase();
+  const cs=getCotiz().filter(c=>String(c.cliente||'').trim().toLowerCase()===cli && !cotizFacturada(c.id,_finVCotizEdit))
+                     .sort((a,b)=>String(b.fecha||'').localeCompare(String(a.fecha||'')));
+  el.innerHTML='<option value="">— sin cotización —</option>'
+    + cs.map(c=>`<option value="${esc(c.id)}"${(sel&&sel===c.id)?' selected':''}>N° ${c.num} · ${fmtFecha(c.fecha)} · ${finGsFmt(c.total)}</option>`).join('');
+  if(sel && el.value!==sel){ // la vinculada ya no está en la lista (p. ej. cliente cambiado): se agrega igual para no perderla
+    const c=getCotiz().find(x=>x.id===sel);
+    if(c){ el.insertAdjacentHTML('beforeend',`<option value="${esc(c.id)}" selected>N° ${c.num} · ${fmtFecha(c.fecha)} · ${finGsFmt(c.total)}</option>`); el.value=sel; }
+  }
+  finVCotizInfo();
+}
+function finVCotizElegida(){ const id=gs('finVCotiz').value; _finVSnap=null;
+  const c=id?getCotiz().find(x=>x.id===id):null;
+  if(c){   // la cotización manda: monto, moneda, detalle y vencimiento
+    const cost=costearItems(c.items, c.flete_kg);
+    _finVSnap={ lineas:cost.lineas, costo_total:cost.costo_total, sin_costeo:cost.sin_costeo };
+    gs('finVMonto').value=c.total||0;
+    gs('finVMon').value=c.moneda||'PYG'; finTcToggle('V');
+    if(c.moneda==='USD' && c.dolar && gs('finVTc')) gs('finVTc').value=c.dolar;
+    if(!gs('finVConc').value.trim()) gs('finVConc').value=(c.items||[]).map(i=>i.nombre).join(', ').slice(0,120);
+    if(!gs('finVCom').value.trim() && c.vendedor) gs('finVCom').value=c.vendedor;
+    const dias={p0:0,p30:30,p60:60,p90:90}[c.condicion]||0;
+    gs('finVVenc').value=_finAddDays(gs('finVFecha').value||hoy(), dias);
+  }
+  finVCotizInfo();
+}
+function finVCotizInfo(){ const el=gs('finVCotizInfo'); if(!el) return;
+  if(!_finVSnap){ el.innerHTML='<span style="color:var(--amber)">⚠ Sin cotización: la venta se guarda, pero queda sin detalle ni costo.</span>'; return; }
+  const neto=num(gs('finVMonto').value)||0, costo=_finVSnap.costo_total||0, mg=neto-costo;
+  el.innerHTML='<b>'+(_finVSnap.lineas||[]).length+'</b> ítem(s) · costo <b>'+finGsFmt(costo)+'</b> · margen <b style="color:'+(mg>=0?'var(--green)':'var(--red)')+'">'+finGsFmt(mg)+(neto?' ('+(mg/neto*100).toFixed(1)+'%)':'')+'</b>'
+    + (_finVSnap.sin_costeo?'<br><span style="color:var(--amber)">⚠ Hay ítems sin fórmula: su costo no se puede calcular, el margen queda incompleto.</span>':'');
 }
 function finTcToggle(pfx){ const usd=gs('fin'+pfx+'Mon')&&gs('fin'+pfx+'Mon').value==='USD'; const w=gs('fin'+pfx+'TcWrap'); if(w) w.style.display=usd?'':'none'; }
 function finVSetPlazo(d){ const f=gs('finVFecha')?gs('finVFecha').value:hoy(); if(gs('finVVenc')) gs('finVVenc').value=_finAddDays(f,d); }
@@ -3296,7 +3375,13 @@ function finVentaGuardar(id){ if(!canEdit()) return; const cli=(gs('finVCli').va
   const abonosPrev=(prev&&prev.cuotas&&prev.cuotas[0]&&prev.cuotas[0].abonos)||[];
   const cuotas=[{ n:1, venc, monto:Math.round(monto), abonos:abonosPrev }];
   const cond = (venc && venc!==fecha) ? 'plazo' : 'contado';
-  const v={ id:id||('VN-'+Date.now()), fecha, factura:(gs('finVFact').value||'').trim(), cliente:cli, cliente_id:cliObj?cliObj.id:'', comercial:(gs('finVCom')?gs('finVCom').value:'').trim(), concepto:(gs('finVConc').value||'').trim(), monto:Math.round(monto), moneda:mon, tc, cond, cuotas, por:(getSession()&&getSession().nombre)||'', ts:new Date().toISOString(), pending:true };
+  const cotizId=gs('finVCotiz')?gs('finVCotiz').value:''; const cotizObj=cotizId?getCotiz().find(x=>x.id===cotizId):null;
+  const v={ id:id||('VN-'+Date.now()), fecha, factura:(gs('finVFact').value||'').trim(), cliente:cli, cliente_id:cliObj?cliObj.id:'', comercial:(gs('finVCom')?gs('finVCom').value:'').trim(), concepto:(gs('finVConc').value||'').trim(), monto:Math.round(monto), moneda:mon, tc, cond, cuotas,
+    cotiz_id:cotizId, cotiz_num:cotizObj?cotizObj.num:null,
+    items:(cotizId&&_finVSnap)?_finVSnap.lineas:null,                       // detalle real de la factura
+    costo:(cotizId&&_finVSnap)?_finVSnap.costo_total:null,                  // costo CONGELADO al facturar
+    sin_costeo:(cotizId&&_finVSnap)?!!_finVSnap.sin_costeo:false,
+    por:(getSession()&&getSession().nombre)||'', ts:new Date().toISOString(), pending:true };
   const a=getVentas().filter(x=>x.id!==v.id); a.unshift(v); saveVentas(a); cloudPush('venta',v); cerrarModal(); showToast('✓ Venta guardada'); finSetTab(_finTab);
 }
 function finVentaBorrar(id){ if(!canEdit()) return; if(!confirm('¿Borrar esta venta y sus cuotas?')) return; saveVentas(getVentas().filter(x=>x.id!==id)); cloudDelete('venta',id); cerrarModal(); finSetTab(_finTab); }
