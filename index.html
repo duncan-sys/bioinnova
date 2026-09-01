@@ -232,6 +232,11 @@ textarea{resize:vertical;min-height:66px}
           <div><label class="fl">Comercial (opcional)</label><input type="text" id="otComercial" placeholder="Nombre"></div>
         </div>
         <label class="fl">Fecha</label><input type="date" id="otFecha">
+        <div class="row2" style="margin-top:12px">
+          <div><label class="fl">Bolsa que se usa</label><select id="otBolsaSel" onchange="otEnvaseTocado();otRecalc()"></select></div>
+          <div><label class="fl">Etiqueta que se usa</label><select id="otEtiqSel" onchange="otEnvaseTocado();otRecalc()"></select></div>
+        </div>
+        <div style="font-size:10px;color:var(--gray-400);margin-top:4px">La fórmula propone una y la podés cambiar: se descuenta la que elijas. La mano de obra (INS019) se carga sola, 1 por kg producido.</div>
         <label class="fl" style="display:flex;gap:8px;align-items:center;margin-top:12px;font-weight:600;cursor:pointer"><input type="checkbox" id="otSecu" onchange="otSecuToggle()" style="width:17px;height:17px"> ➕ Agregar secuestrante (Zeolítica)</label>
         <div id="otSecuRow" style="display:none"><label class="fl">Nivel (% sobre la producción)</label><input type="number" id="otSecuPct" value="0.3" step="0.1" inputmode="decimal" oninput="otRecalc()" style="max-width:150px"></div>
       </div>
@@ -499,7 +504,7 @@ textarea{resize:vertical;min-height:66px}
       <button class="fintab" id="finT_banco" onclick="finSetTab('banco')">🏦 Fijos</button>
       <button class="fintab" id="finT_flujo" onclick="finSetTab('flujo')">📊 Flujo</button>
     </div>
-    <div style="font-size:9px;color:var(--gray-400);text-align:right;margin:-6px 0 8px">BioInnova <span id="finVer">v109</span></div>
+    <div style="font-size:9px;color:var(--gray-400);text-align:right;margin:-6px 0 8px">BioInnova <span id="finVer">v110</span></div>
     <div id="finW_ventas">
       <button class="btn btn-primary btn-block" style="margin-bottom:8px" onclick="finVentaModal()">＋ Nueva venta</button>
       <input type="search" id="finVBuscar" placeholder="🔎 Buscar cliente / factura / comercial…" oninput="finRenderVentas()" style="margin-bottom:8px">
@@ -2049,18 +2054,39 @@ function nuevaOT(){ if(!esPlanta()){ showToast('Sin permiso'); return; }
   gs('otComercial').value=(getSession()&&getSession().nombre)||'';
   gs('otFecha').value=hoy(); gs('otNum').value=otNextNum(); gs('otInsumos').innerHTML=''; gs('otTotalKg').textContent='';
   gs('otSecu').checked=false; gs('otSecuRow').style.display='none'; gs('otSecuPct').value=String(SECU.pct); _otSecuTocado=false;
+  _otEnvaseTocado=false; _otSelHtml('otBolsaSel','Envase',''); _otSelHtml('otEtiqSel','Etiqueta','');
   editOTId=null;
 }
 function nuevaOTde(gi){ nuevaOT(); gs('otProducto').value=gi; otRecalc(); }
 function formulaTieneMaiz(f){ return (f.ins||[]).some(i=>i.c==='INS001' || /ma[ií]z/i.test(i.n)); }
 // Cálculo de OT + secuestrante opcional (Zeolítica) por encima de la fórmula
-function otCalcularFull(f, kgProd, secuPct){
+// ---- Bolsa, etiqueta y mano de obra de la OT ----
+// La fórmula trae una bolsa y una etiqueta fijas, pero los mismos códigos
+// aparecen con nombres distintos según la fórmula (INS059 figura como Blanca,
+// Gris y Celeste), así que la jefa de producción elige cuál se usa de verdad.
+// La mano de obra no depende de la fórmula: es siempre INS019, 1 por kg.
+const OT_MANOBRA={ c:'INS019', n:'Mano de obra' };
+function otEnvases(cat){ return invCatalogo().filter(i=>i.cat===cat); }
+function _otSelHtml(id,cat,sel){ const el=gs(id); if(!el) return;
+  el.innerHTML='<option value="">— sin '+(cat==='Envase'?'bolsa':'etiqueta')+' —</option>'
+    + otEnvases(cat).map(i=>`<option value="${esc(i.c)}"${i.c===sel?' selected':''}>${esc(i.n)}</option>`).join('');
+  if(sel && el.value!==sel) el.value=sel; }
+// Lo que la fórmula propone, para precargar los selectores.
+function otSugerido(f,cat){ const rx=/etiq/i;
+  const l=(f&&f.ins||[]).find(i=>i.t==='b' && (cat==='Etiqueta' ? rx.test(i.n) : !rx.test(i.n)));
+  return l?l.c:''; }
+let _otEnvaseTocado=false;
+function otEnvaseTocado(){ _otEnvaseTocado=true; }
+function otCalcularFull(f, kgProd, secuPct, bolsaC, etiqC){
   const base=otCalcular(f, kgProd);
-  if(!(secuPct>0)) return base;
-  const secu={ c:SECU.c, n:SECU.n, p:secuPct, t:'p', cant:Math.round(kgProd*(secuPct/100)*100)/100, secu:true };
-  const lineas=[]; let ins=false;
-  base.lineas.forEach(l=>{ if(!ins && l.t!=='p'){ lineas.push(secu); ins=true; } lineas.push(l); });
-  if(!ins) lineas.push(secu);
+  // se rehacen las líneas: la mezcla de la fórmula + lo que se eligió + mano de obra
+  let lineas=base.lineas.filter(l=>l.t==='p');
+  if(secuPct>0) lineas.push({ c:SECU.c, n:SECU.n, p:secuPct, t:'p', cant:Math.round(kgProd*(secuPct/100)*100)/100, secu:true });
+  const cat=invCatalogo();
+  const nom=c=>{ const i=cat.find(x=>x.c===c); return i?i.n:c; };
+  if(bolsaC) lineas.push({ c:bolsaC, n:nom(bolsaC), p:0, t:'b', cant:base.bolsas });
+  if(etiqC)  lineas.push({ c:etiqC,  n:nom(etiqC),  p:0, t:'b', cant:base.bolsas });
+  lineas.push({ c:OT_MANOBRA.c, n:OT_MANOBRA.n, p:0, t:'m', cant:kgProd });
   return { bolsas:base.bolsas, lineas };
 }
 function otSecuToggle(){ _otSecuTocado=true; gs('otSecuRow').style.display=gs('otSecu').checked?'':'none'; otRecalc(); }
@@ -2070,7 +2096,11 @@ function otRecalc(){
   if(!_otSecuTocado) gs('otSecu').checked=formulaTieneMaiz(f);   // auto: fórmulas con maíz
   gs('otSecuRow').style.display=gs('otSecu').checked?'':'none';
   const secuPct=gs('otSecu').checked?(num(gs('otSecuPct').value)||0):0;
-  const r=otCalcularFull(f, kg, secuPct);
+  // Los selectores se precargan con lo que propone la fórmula, salvo que la
+  // jefa ya haya elegido otra cosa: ahí manda lo que eligió.
+  if(!_otEnvaseTocado){ _otSelHtml('otBolsaSel','Envase',otSugerido(f,'Envase')); _otSelHtml('otEtiqSel','Etiqueta',otSugerido(f,'Etiqueta')); }
+  else { _otSelHtml('otBolsaSel','Envase',gs('otBolsaSel').value); _otSelHtml('otEtiqSel','Etiqueta',gs('otEtiqSel').value); }
+  const r=otCalcularFull(f, kg, secuPct, gs('otBolsaSel').value, gs('otEtiqSel').value);
   gs('otBolsas').value=r.bolsas;
   if(!gs('otLote').value.trim()){ const pref=(f.c||f.n.slice(0,2)).toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,3); const d=new Date(); gs('otLote').value=pref+String(d.getMonth()+1).padStart(2,'0')+d.getFullYear()+String(gs('otNum').value).padStart(4,'0'); }
   const nf=n=>Number(n).toLocaleString('es-PY',{maximumFractionDigits:2});
@@ -2084,11 +2114,13 @@ function guardarOT(imprimir){
   if(!esPlanta()){ showToast('Sin permiso'); return; }
   const idx=gs('otProducto').value; if(idx===''){ showToast('Elegí el producto'); return; }
   const kg=num(gs('otKg').value); if(!kg){ showToast('Ingresá los kg a producir'); return; }
-  const f=PL_FORMULAS[Number(idx)]; const secuPct=gs('otSecu').checked?(num(gs('otSecuPct').value)||0):0; const r=otCalcularFull(f, kg, secuPct);
+  const f=PL_FORMULAS[Number(idx)]; const secuPct=gs('otSecu').checked?(num(gs('otSecuPct').value)||0):0;
+  const bolsaC=gs('otBolsaSel')?gs('otBolsaSel').value:'', etiqC=gs('otEtiqSel')?gs('otEtiqSel').value:'';
+  const r=otCalcularFull(f, kg, secuPct, bolsaC, etiqC);
   const o={ id: editOTId||('OT-'+Date.now()), num: Number(gs('otNum').value)||otNextNum(),
     fecha:gs('otFecha').value||hoy(), producto_cod:f.c||'', producto_nom:f.n, kg_bolsa:plKgBolsa(f),
     kg, bolsas:r.bolsas, lote:gs('otLote').value.trim(), cliente:gs('otCliente').value.trim(), comercial:gs('otComercial').value.trim(),
-    insumos:r.lineas, estado:'abierta', ts:new Date().toISOString(), pending:true };
+    insumos:r.lineas, estado:'abierta', ts:new Date().toISOString(), pending:true };   // la bolsa y la etiqueta elegidas viajan dentro de insumos: no hacen falta columnas nuevas
   let ots=getOTs(); if(editOTId){ ots=ots.map(x=>x.id===editOTId?o:x); } else { ots.unshift(o); }
   saveOTs(ots); cloudPush('ot', o); editOTId=null;
   showToast('✓ OT guardada');
@@ -2113,6 +2145,13 @@ function editarOT(id){ const o=getOTs().find(x=>x.id===id); if(!o)return; cerrar
   const idx=PL_FORMULAS.findIndex(f=>(o.producto_cod&&f.c===o.producto_cod)||f.n===o.producto_nom); gs('otProducto').value=idx>=0?idx:'';
   gs('otKg').value=o.kg; gs('otNum').value=o.num; gs('otLote').value=o.lote||''; gs('otCliente').value=o.cliente||''; gs('otComercial').value=o.comercial||''; gs('otFecha').value=o.fecha;
   const sl=(o.insumos||[]).find(l=>l.secu || l.c===SECU.c); _otSecuTocado=true; gs('otSecu').checked=!!sl; gs('otSecuRow').style.display=sl?'':'none'; gs('otSecuPct').value=sl?String(sl.p):String(SECU.pct);
+  // La bolsa y la etiqueta se recuperan de las líneas guardadas, no de la fórmula:
+  // la OT pudo haberse hecho con otras y hay que respetarlas al editar.
+  const cat=invCatalogo(); const bs=(o.insumos||[]).filter(l=>l.t==='b');
+  const esEtiq=c=>{ const i=cat.find(x=>x.c===c); return i?i.cat==='Etiqueta':/etiq/i.test(c); };
+  _otEnvaseTocado=true;
+  _otSelHtml('otBolsaSel','Envase',(bs.find(l=>!esEtiq(l.c))||{}).c||'');
+  _otSelHtml('otEtiqSel','Etiqueta',(bs.find(l=>esEtiq(l.c))||{}).c||'');
   otRecalc(); showScreen('sOTNueva','Editar OT','',true);
 }
 function borrarOT(id){ if(!esPlanta())return; if(!confirm('¿Borrar esta OT?'))return;
