@@ -499,7 +499,7 @@ textarea{resize:vertical;min-height:66px}
       <button class="fintab" id="finT_banco" onclick="finSetTab('banco')">🏦 Fijos</button>
       <button class="fintab" id="finT_flujo" onclick="finSetTab('flujo')">📊 Flujo</button>
     </div>
-    <div style="font-size:9px;color:var(--gray-400);text-align:right;margin:-6px 0 8px">BioInnova <span id="finVer">v108</span></div>
+    <div style="font-size:9px;color:var(--gray-400);text-align:right;margin:-6px 0 8px">BioInnova <span id="finVer">v109</span></div>
     <div id="finW_ventas">
       <button class="btn btn-primary btn-block" style="margin-bottom:8px" onclick="finVentaModal()">＋ Nueva venta</button>
       <input type="search" id="finVBuscar" placeholder="🔎 Buscar cliente / factura / comercial…" oninput="finRenderVentas()" style="margin-bottom:8px">
@@ -3185,18 +3185,53 @@ function finSetTab(t){ _finTab=t; ['ventas','cobrar','gastos','pagar','sueldos',
 let _finVFiltro='todas';
 function finVSetFiltro(f){ _finVFiltro=f; finRenderVentas(); }
 function finRenderVentas(){ const q=(gs('finVBuscar').value||'').trim().toLowerCase();
-  let ls=getVentas().slice().filter(v=>_finEnMes(v.fecha));
+  const base=getVentas().slice().filter(v=>_finEnMes(v.fecha));   // el mes ya aplicado: manda el desglose y la lista de comerciales
+  let ls=base.slice();
   if(q) ls=ls.filter(v=>((v.cliente||'')+' '+(v.concepto||'')+' '+(v.factura||'')+' '+(v.comercial||'')).toLowerCase().includes(q));
+  if(_finCom) ls=ls.filter(v=>_finComDe(v)===_finCom);
   if(_finVFiltro==='pend') ls=ls.filter(v=>finSaldo(v)>0);
   else if(_finVFiltro==='cobr') ls=ls.filter(v=>finSaldo(v)<=0);
-  const fc=gs('finVFiltros'); if(fc){ const chip=(f,l)=>`<button class="finchip${_finVFiltro===f?' on':''}" onclick="finVSetFiltro('${f}')">${l}</button>`; fc.innerHTML=finMesSelHtml()+chip('todas','Todas')+chip('pend','Pendientes')+chip('cobr','Cobradas'); }
+  const fc=gs('finVFiltros'); if(fc){ const chip=(f,l)=>`<button class="finchip${_finVFiltro===f?' on':''}" onclick="finVSetFiltro('${f}')">${l}</button>`; fc.innerHTML=finMesSelHtml()+finComSelHtml(base)+chip('todas','Todas')+chip('pend','Pendientes')+chip('cobr','Cobradas'); }
   const tot=ls.reduce((a,v)=>a+finGs(v,v.monto),0), pend=ls.reduce((a,v)=>a+finGs(v,finSaldo(v)),0);
-  if(gs('finVResumen')) gs('finVResumen').innerHTML='Total: <b>'+finGsFmt(tot)+'</b> · Por cobrar: <b style="color:var(--amber)">'+finGsFmt(pend)+'</b> · '+ls.length+' facturas'+_finMesSuf();
+  if(gs('finVResumen')) gs('finVResumen').innerHTML='Total: <b>'+finGsFmt(tot)+'</b> · Por cobrar: <b style="color:var(--amber)">'+finGsFmt(pend)+'</b> · '+ls.length+' facturas'+_finMesSuf()+(_finCom?' · <b>'+esc(_finComLbl(_finCom))+'</b>':'');
   const byCli={}; ls.forEach(v=>{ (byCli[v.cliente||'—']=byCli[v.cliente||'—']||[]).push(v); });
   const clis=Object.keys(byCli).map(c=>({c,saldo:byCli[c].reduce((a,v)=>a+finGs(v,finSaldo(v)),0),tot:byCli[c].reduce((a,v)=>a+finGs(v,v.monto),0)})).sort((a,b)=>b.saldo-a.saldo||b.tot-a.tot);
   gs('finVList').innerHTML=clis.map(g=>{ const arr=byCli[g.c].slice().sort((a,b)=>String(a.fecha||'').localeCompare(String(b.fecha||'')));
     const rows=arr.map(v=>{ const s=finSaldo(v); const cu0=(v.cuotas&&v.cuotas[0])||{}; const nc=(v.cuotas||[]).length; return `<div class="finrow" onclick="finVentaModal('${v.id}')"><div style="min-width:0"><div style="font-size:12px;color:var(--gray-800)">${v.factura?'Fact '+esc(v.factura):esc(v.concepto||'venta')}${nc>1?' <span style="font-size:9px;color:var(--gray-400)">'+nc+' cuotas</span>':''}</div><div style="font-size:10px;color:var(--gray-400)">${fmtFecha(v.fecha)}${cu0.venc?' · vence '+fmtFecha(cu0.venc):''}${v.comercial?' · 👤 '+esc(v.comercial):''}</div></div><div style="text-align:right;flex-shrink:0"><div style="font-weight:700;font-size:12px">${finFmt(v.monto,v.moneda)}</div>${s>0?`<div style="font-size:10px;color:var(--amber)">saldo ${finFmt(s,v.moneda)}</div>`:'<div style="font-size:10px;color:var(--green)">✓</div>'}</div></div>`; }).join('');
     return `<details class="findet"><summary><div style="min-width:0"><div style="font-weight:700;font-size:13px">${esc(g.c)}</div><div style="font-size:10px;color:var(--gray-400)">${byCli[g.c].length} factura(s)</div></div><div style="text-align:right;flex-shrink:0"><div style="font-weight:800;color:${g.saldo>0?'var(--amber)':'var(--green)'}">${finGsFmt(g.saldo)}</div><div style="font-size:9px;color:var(--gray-400)">pendiente</div></div></summary>${rows}</details>`; }).join('')||'<div class="empty">Sin ventas.</div>';
+  gs('finVList').innerHTML = finComDesglose(base) + gs('finVList').innerHTML;
+}
+// ---- Comercial: filtro y cuánto vendió cada uno ----
+// El sentinel __SIN__ agrupa las ventas viejas, cargadas antes de que el campo
+// existiera. Se listan aparte para que no parezcan de nadie y se puedan completar.
+const FIN_SINCOM='__SIN__';
+let _finCom='';
+function finSetCom(c){ _finCom=c||''; finRenderVentas(); }
+function _finComDe(v){ return String(v.comercial||'').trim() || FIN_SINCOM; }
+function _finComLbl(c){ return c===FIN_SINCOM?'Sin comercial':c; }
+function _finComsDisp(base){ const s=new Set(base.map(_finComDe)); return [...s].sort((a,b)=> a===FIN_SINCOM?1 : b===FIN_SINCOM?-1 : a.localeCompare(b)); }
+function finComSelHtml(base){ const cs=_finComsDisp(base); if(!cs.length) return '';
+  return '<select class="finmes" onchange="finSetCom(this.value)" aria-label="Comercial">'
+    + `<option value=""${_finCom?'':' selected'}>👤 Todos los comerciales</option>`
+    + cs.map(c=>`<option value="${esc(c)}"${_finCom===c?' selected':''}>👤 ${esc(_finComLbl(c))}</option>`).join('')
+    + '</select>'; }
+// Cuánto vendió cada uno en el período. Solo cuando no hay uno elegido y hay
+// más de uno: con un solo comercial el desglose repetiría el resumen de arriba.
+function finComDesglose(base){
+  if(_finCom) return '';
+  const cs=_finComsDisp(base); if(cs.length<2) return '';
+  const filas=cs.map(c=>{ const arr=base.filter(v=>_finComDe(v)===c);
+      return { c, n:arr.length, tot:arr.reduce((a,v)=>a+finGs(v,v.monto),0), pend:arr.reduce((a,v)=>a+finGs(v,finSaldo(v)),0) }; })
+    .sort((a,b)=>b.tot-a.tot);
+  const total=filas.reduce((a,f)=>a+f.tot,0)||1;
+  return '<div class="findet" style="padding:9px 12px;margin-bottom:8px">'
+    + '<div style="font-size:10px;font-weight:700;color:var(--gray-500);margin-bottom:6px">VENTAS POR COMERCIAL</div>'
+    + filas.map(f=>`<div style="display:flex;align-items:center;gap:8px;padding:3px 0;cursor:pointer" onclick="finSetCom('${esc(f.c)}')">
+        <div style="flex:1;min-width:0"><div style="font-size:12px;color:var(--gray-800)">${esc(_finComLbl(f.c))}</div>
+        <div style="height:3px;background:var(--gray-200);border-radius:2px;margin-top:3px"><div style="height:3px;width:${Math.round(f.tot/total*100)}%;background:var(--green);border-radius:2px"></div></div></div>
+        <div style="text-align:right;flex-shrink:0"><div style="font-weight:700;font-size:12px">${finGsFmt(f.tot)}</div>
+        <div style="font-size:9px;color:var(--gray-400)">${f.n} fact.${f.pend>0?' · pend '+finGsFmt(f.pend):''}</div></div></div>`).join('')
+    + '</div>';
 }
 function finClientesDL(){ return '<datalist id="finCliDL">'+getClientes().slice().sort((a,b)=>a.nombre.localeCompare(b.nombre)).map(c=>`<option value="${esc(c.nombre)}">`).join('')+'</datalist>'; }
 function finVentaModal(id){ if(!canEdit()){ showToast('Sin permiso'); return; } const v=id?getVentas().find(x=>x.id===id):null;
@@ -3293,7 +3328,7 @@ function _finRepData(tipo){ const hoyS=hoy(); const out=[]; // {cliente,factura,
   } else if(tipo==='gastos'){ let ls=getCompras().slice().filter(c=>_finEnMes(c.fecha)); if(_finGFiltro==='pend') ls=ls.filter(c=>finSaldo(c)>0); else if(_finGFiltro==='pag') ls=ls.filter(c=>finSaldo(c)<=0);
     ls.sort((a,b)=>String(a.proveedor).localeCompare(String(b.proveedor))||String(a.fecha).localeCompare(String(b.fecha)));
     ls.forEach(c=>{ const s=finSaldo(c); const cu0=(c.cuotas&&c.cuotas[0])||{}; const venc=cu0.venc||''; const est= s<=0?'Pagada':((c.cuotas||[]).some(x=>finCuotaSaldo(x)>0&&String(x.venc)<hoyS)?'Vencida':'Pendiente'); out.push({cliente:c.proveedor||'',factura:c.factura||'',fecha:c.fecha||'',venc,monto:c.monto,saldo:s,moneda:c.moneda,estado:est}); });
-  } else { let ls=getVentas().slice().filter(v=>_finEnMes(v.fecha)); if(_finVFiltro==='pend') ls=ls.filter(v=>finSaldo(v)>0); else if(_finVFiltro==='cobr') ls=ls.filter(v=>finSaldo(v)<=0);
+  } else { let ls=getVentas().slice().filter(v=>_finEnMes(v.fecha)); if(_finCom) ls=ls.filter(v=>_finComDe(v)===_finCom); if(_finVFiltro==='pend') ls=ls.filter(v=>finSaldo(v)>0); else if(_finVFiltro==='cobr') ls=ls.filter(v=>finSaldo(v)<=0);
     ls.sort((a,b)=>String(a.cliente).localeCompare(String(b.cliente))||String(a.fecha).localeCompare(String(b.fecha)));
     ls.forEach(v=>{ const s=finSaldo(v); const cu0=(v.cuotas&&v.cuotas[0])||{}; const venc=cu0.venc||''; const est= s<=0?'Cobrada':((v.cuotas||[]).some(c=>finCuotaSaldo(c)>0&&String(c.venc)<hoyS)?'Vencida':'Pendiente'); out.push({cliente:v.cliente||'',factura:v.factura||'',fecha:v.fecha||'',venc,monto:v.monto,saldo:s,moneda:v.moneda,estado:est}); });
   }
@@ -3304,7 +3339,7 @@ function _finRepMeta(tipo){ const M={cobrar:['Cuentas por Cobrar','Cliente'],pag
              cobrar:({todas:'Todas',venc:'Vencidas',porvencer:'A vencer'})[_finCobFiltro],
              gastos:({todas:'Todos',pend:'Pendientes',pag:'Pagados'})[_finGFiltro],
              pagar:({todas:'Todas',venc:'Vencidas',porvencer:'A vencer'})[_finPagFiltro] }[tipo]||'Todas';
-  const FL=(FL0||'Todas')+(_finMes?' · '+finMesLbl(_finMes):'');   // el mes elegido también va en el encabezado del reporte
+  const FL=(FL0||'Todas')+(_finMes?' · '+finMesLbl(_finMes):'')+((tipo!=='cobrar'&&tipo!=='pagar'&&tipo!=='gastos'&&_finCom)?' · '+_finComLbl(_finCom):'');   // mes y comercial elegidos van en el encabezado del reporte
   const CL={ ventas:['Total facturado','Saldo pendiente','Vencido'], cobrar:['Total','Por cobrar','Vencido'], gastos:['Total gastos','Saldo pendiente','Vencido'], pagar:['Total','Por pagar','Vencido'] }[tipo]||['Total','Saldo','Vencido'];
   return {titulo:M[0], colName:M[1], filtLbl:FL, cardLbl:CL};
 }
