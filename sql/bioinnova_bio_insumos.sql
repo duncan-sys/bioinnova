@@ -14,4 +14,4 @@ create table if not exists public.bio_insumos (
 alter table public.bio_insumos enable row level security;
 
 drop policy if exists bio_insumos_all on public.bio_insumos;
-create policy bio_insumos_all on public.bio_insumos for all to anon, authenticated using (true) with check (true);
+create policy bio_insumos_all on public.bio_insumos for all to authenticated using (true) with check (true);

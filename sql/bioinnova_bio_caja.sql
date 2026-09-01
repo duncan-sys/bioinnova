@@ -20,4 +20,4 @@ alter table public.bio_caja enable row level security;
 
 -- Mismo criterio que las demás tablas.
 drop policy if exists bio_caja_all on public.bio_caja;
-create policy bio_caja_all on public.bio_caja for all to anon, authenticated using (true) with check (true);
+create policy bio_caja_all on public.bio_caja for all to authenticated using (true) with check (true);

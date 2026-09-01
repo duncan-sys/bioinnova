@@ -22,4 +22,4 @@ alter table public.bio_ot enable row level security;
 
 -- Mismo criterio que clientes/estancias/visitas.
 drop policy if exists bio_ot_all on public.bio_ot;
-create policy bio_ot_all on public.bio_ot for all to anon, authenticated using (true) with check (true);
+create policy bio_ot_all on public.bio_ot for all to authenticated using (true) with check (true);

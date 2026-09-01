@@ -21,4 +21,4 @@ alter table public.bio_viat enable row level security;
 
 -- Mismo criterio que las demás tablas.
 drop policy if exists bio_viat_all on public.bio_viat;
-create policy bio_viat_all on public.bio_viat for all to anon, authenticated using (true) with check (true);
+create policy bio_viat_all on public.bio_viat for all to authenticated using (true) with check (true);

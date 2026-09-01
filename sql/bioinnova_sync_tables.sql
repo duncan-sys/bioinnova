@@ -33,9 +33,9 @@ drop policy if exists clientes_all  on public.clientes;
 drop policy if exists estancias_all on public.estancias;
 drop policy if exists visitas_all   on public.visitas;
 
-create policy clientes_all  on public.clientes  for all to anon, authenticated using (true) with check (true);
-create policy estancias_all on public.estancias for all to anon, authenticated using (true) with check (true);
-create policy visitas_all   on public.visitas   for all to anon, authenticated using (true) with check (true);
+create policy clientes_all  on public.clientes  for all to authenticated using (true) with check (true);
+create policy estancias_all on public.estancias for all to authenticated using (true) with check (true);
+create policy visitas_all   on public.visitas   for all to authenticated using (true) with check (true);
 
 -- Por si la tabla visitas se creó antes con el esquema plano (categoria/lote/kpis):
 alter table public.visitas add column if not exists evaluaciones jsonb;

@@ -21,4 +21,4 @@ alter table public.bio_mov enable row level security;
 
 -- Mismo criterio que las demás tablas.
 drop policy if exists bio_mov_all on public.bio_mov;
-create policy bio_mov_all on public.bio_mov for all to anon, authenticated using (true) with check (true);
+create policy bio_mov_all on public.bio_mov for all to authenticated using (true) with check (true);

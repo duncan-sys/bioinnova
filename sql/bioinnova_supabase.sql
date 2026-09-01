@@ -17,7 +17,7 @@ alter table public.perfiles enable row level security;
 
 drop policy if exists perfiles_all on public.perfiles;
 create policy perfiles_all on public.perfiles
-  for all to anon, authenticated using (true) with check (true);
+  for all to authenticated using (true) with check (true);
 
 -- Bootstrap: convierte tu cuenta en GERENTE (toma el uuid de auth.users por email)
 insert into public.perfiles (id, email, nombre, rol)

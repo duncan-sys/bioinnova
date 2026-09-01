@@ -16,7 +16,7 @@ create table if not exists public.bio_precios (
 );
 alter table public.bio_precios enable row level security;
 drop policy if exists bio_precios_all on public.bio_precios;
-create policy bio_precios_all on public.bio_precios for all to anon, authenticated using (true) with check (true);
+create policy bio_precios_all on public.bio_precios for all to authenticated using (true) with check (true);
 
 -- Cotizaciones emitidas
 create table if not exists public.bio_cotiz (
@@ -42,4 +42,4 @@ create table if not exists public.bio_cotiz (
 );
 alter table public.bio_cotiz enable row level security;
 drop policy if exists bio_cotiz_all on public.bio_cotiz;
-create policy bio_cotiz_all on public.bio_cotiz for all to anon, authenticated using (true) with check (true);
+create policy bio_cotiz_all on public.bio_cotiz for all to authenticated using (true) with check (true);
