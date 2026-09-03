@@ -504,7 +504,7 @@ textarea{resize:vertical;min-height:66px}
       <button class="fintab" id="finT_banco" onclick="finSetTab('banco')">🏦 Fijos</button>
       <button class="fintab" id="finT_flujo" onclick="finSetTab('flujo')">📊 Flujo</button>
     </div>
-    <div style="font-size:9px;color:var(--gray-400);text-align:right;margin:-6px 0 8px">BioInnova <span id="finVer">v111</span></div>
+    <div style="font-size:9px;color:var(--gray-400);text-align:right;margin:-6px 0 8px">BioInnova <span id="finVer">v112</span></div>
     <div id="finW_ventas">
       <button class="btn btn-primary btn-block" style="margin-bottom:8px" onclick="finVentaModal()">＋ Nueva venta</button>
       <input type="search" id="finVBuscar" placeholder="🔎 Buscar cliente / factura / comercial…" oninput="finRenderVentas()" style="margin-bottom:8px">
@@ -901,10 +901,24 @@ function esSalMineral(cod,nombre){ return /^BIOSAL/i.test(cod||'') || /biosal|sa
 // Margen de un producto: override individual → default por línea (sal mineral vs general)
 function margenDe(cod, nombre){ const ov=getMargenOv(); if(cod&&ov[cod]!=null) return Number(ov[cod]);
   const cfg=getCostCfg(); return esSalMineral(cod,nombre) ? (cfg.margen_sal!=null?cfg.margen_sal:0.15) : cfg.margen; }
-function costoBaseFormula(f){ return (f.ins||[]).filter(i=>i.t==='p').reduce((a,i)=>a+(Number(i.p)/100)*insPrecio(i.c),0); }
+// Costo ₲/kg de la mezcla. Incluye el secuestrante en las fórmulas que llevan
+// maíz: la Zeolítica se agrega al 0,3% POR ENCIMA del 100% y se consume de
+// verdad en la producción, así que su costo tiene que estar en el precio.
+function costoBaseFormula(f){
+  let base=(f.ins||[]).filter(i=>i.t==='p').reduce((a,i)=>a+(Number(i.p)/100)*insPrecio(i.c),0);
+  if(typeof formulaTieneMaiz==='function' && formulaTieneMaiz(f)) base += (SECU.pct/100)*insPrecio(SECU.c);
+  return base; }
+// Envase ₲/kg: el precio real de LA bolsa de esta fórmula, repartido en sus kg.
+// Una sola constante no sirve porque el precio depende del tamaño (57x80 a
+// 2.045 para 30 kg, 60x100 a 2.455 para 40 kg, Confi 4 a 3.409 para 20 kg).
+// Si la fórmula no declara bolsa, o esa bolsa no tiene precio, cae en cfg.bolsa.
+function bolsaKgDe(f){ const cfg=getCostCfg(); const kgB=plKgBolsa(f)||0;
+  const l=(f&&f.ins||[]).find(i=>i.t==='b' && !/etiq/i.test(i.n||''));
+  const p=l?insPrecio(l.c):0;
+  return (p>0 && kgB) ? p/kgB : (cfg.bolsa||0); }
 // Precio ₲/kg (SIN flete) para una condición y un margen dado
 function precioBaseKg(f, cond, margen){ const cfg=getCostCfg(); const base=costoBaseFormula(f); const kg=plKgBolsa(f);
-  const bruto = base*(1+(cfg.merma||0)) + cfg.mano_obra + cfg.bolsa + (kg?cfg.etiqueta_bolsa/kg:0);     // TOTAL BRUTO
+  const bruto = base*(1+(cfg.merma||0)) + cfg.mano_obra + bolsaKgDe(f) + (kg?cfg.etiqueta_bolsa/kg:0);  // TOTAL BRUTO
   const conCom = bruto*(1+cfg.gastos_adm)*(1+margen)*(1+cfg.comision);                                 // × gastos adm × margen × comisión
   const t={p0:0,p30:1,p60:2,p90:3}[cond]||0;
   return Math.round( conCom*(1+t*(cfg.plazo_mes||0))*(1+(cfg.iva||0)) ); }                             // × plazo × IVA
@@ -3206,7 +3220,7 @@ function rowVenta(r){ let cu=r.cuotas; if(typeof cu==='string'){try{cu=JSON.pars
 // margen, plazo ni IVA — insumos + merma + mano de obra + bolsa + etiqueta,
 // más gastos administrativos.
 function costoProdKg(f){ const cfg=getCostCfg(); const kgB=plKgBolsa(f);
-  const bruto = costoBaseFormula(f)*(1+(cfg.merma||0)) + cfg.mano_obra + cfg.bolsa + (kgB?cfg.etiqueta_bolsa/kgB:0);
+  const bruto = costoBaseFormula(f)*(1+(cfg.merma||0)) + cfg.mano_obra + bolsaKgDe(f) + (kgB?cfg.etiqueta_bolsa/kgB:0);
   return bruto*(1+(cfg.gastos_adm||0)); }
 function formulaDeKey(key){ return PL_FORMULAS.find(f=>precioKey(f)===key)||null; }
 // Costea las líneas de una cotización. COSTO COMPLETO = producción + flete +
