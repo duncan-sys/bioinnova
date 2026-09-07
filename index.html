@@ -504,7 +504,7 @@ textarea{resize:vertical;min-height:66px}
       <button class="fintab" id="finT_banco" onclick="finSetTab('banco')">🏦 Fijos</button>
       <button class="fintab" id="finT_flujo" onclick="finSetTab('flujo')">📊 Flujo</button>
     </div>
-    <div style="font-size:9px;color:var(--gray-400);text-align:right;margin:-6px 0 8px">BioInnova <span id="finVer">v112</span></div>
+    <div style="font-size:9px;color:var(--gray-400);text-align:right;margin:-6px 0 8px">BioInnova <span id="finVer">v113</span></div>
     <div id="finW_ventas">
       <button class="btn btn-primary btn-block" style="margin-bottom:8px" onclick="finVentaModal()">＋ Nueva venta</button>
       <input type="search" id="finVBuscar" placeholder="🔎 Buscar cliente / factura / comercial…" oninput="finRenderVentas()" style="margin-bottom:8px">
@@ -515,7 +515,8 @@ textarea{resize:vertical;min-height:66px}
     </div>
     <div id="finW_cobrar" style="display:none">
       <div id="finCobFiltros" style="display:flex;gap:5px;margin-bottom:8px;flex-wrap:wrap"></div>
-      <div style="display:flex;gap:6px;margin-bottom:8px"><button class="btn btn-sec" style="flex:1;font-size:12px;padding:7px" onclick="finReportePDF('cobrar')">🖨️ PDF</button><button class="btn btn-sec" style="flex:1;font-size:12px;padding:7px" onclick="finReporteCSV('cobrar')">📥 Excel</button></div>
+      <div style="display:flex;gap:6px;margin-bottom:6px"><button class="btn btn-sec" style="flex:1;font-size:12px;padding:7px" onclick="finReportePDF('cobrar')">🖨️ PDF</button><button class="btn btn-sec" style="flex:1;font-size:12px;padding:7px" onclick="finReporteCSV('cobrar')">📥 Excel</button></div>
+      <button class="btn btn-sec btn-block" style="font-size:12px;padding:7px;margin-bottom:8px" onclick="estadoCuentaModal()">📄 Estado de cuenta por cliente</button>
       <div id="finCobResumen" style="font-size:12px;margin-bottom:8px;padding:0 2px"></div>
       <div id="finCobList"></div>
     </div>
@@ -3453,7 +3454,7 @@ function finRenderCobrar(){ const hoyS=hoy(); let rows=_finPendientes('venta').f
   const clis=Object.keys(byCli).map(c=>{ const arr=byCli[c]; return {c, saldo:arr.reduce((a,r)=>a+finGs(r.rec,r.saldo),0), venc:arr.filter(r=>String(r.venc)<hoyS).reduce((a,r)=>a+finGs(r.rec,r.saldo),0)}; }).sort((a,b)=>b.venc-a.venc||b.saldo-a.saldo);
   gs('finCobList').innerHTML=clis.map(g=>{ const arr=byCli[g.c].slice().sort((a,b)=>String(a.venc||'').localeCompare(String(b.venc||'')));
     const rws=arr.map(r=>{ const vd=String(r.venc)<hoyS; const nc=(r.rec.cuotas||[]).length; return `<div class="finrow"><div style="min-width:0"><div style="font-size:12px;color:var(--gray-800)">${r.rec.factura?'Fact '+esc(r.rec.factura):esc(r.rec.concepto||'')}${nc>1?' <span style="font-size:9px;color:var(--gray-400)">c'+r.cu.n+'/'+nc+'</span>':''}</div><div style="font-size:10px;color:${vd?'var(--red)':'var(--gray-400)'}">Vence ${fmtFecha(r.venc)}${vd?' · vencida':''}</div></div><div style="text-align:right;flex-shrink:0"><div style="font-weight:700;color:var(--amber)">${finFmt(r.saldo,r.rec.moneda)}</div><button onclick="finAbonoModal('venta','${r.rec.id}',${r.ci})" style="font-size:11px;border:none;background:var(--green-lt);color:var(--green);border-radius:6px;padding:3px 9px;cursor:pointer;margin-top:2px">＋ Cobrar</button></div></div>`; }).join('');
-    return `<details class="findet"><summary><div style="min-width:0"><div style="font-weight:700;font-size:13px">${esc(g.c)}</div>${g.venc>0?`<div style="font-size:10px;color:var(--red)">vencido ${finGsFmt(g.venc)}</div>`:'<div style="font-size:10px;color:var(--gray-400)">al día</div>'}</div><div style="text-align:right;flex-shrink:0"><div style="font-weight:800;color:var(--amber)">${finGsFmt(g.saldo)}</div><div style="font-size:9px;color:var(--gray-400)">por cobrar</div></div></summary>${rws}</details>`; }).join('')||'<div class="empty">Nada por cobrar 🎉</div>';
+    return `<details class="findet"><summary><div style="min-width:0"><div style="font-weight:700;font-size:13px">${esc(g.c)}</div>${g.venc>0?`<div style="font-size:10px;color:var(--red)">vencido ${finGsFmt(g.venc)}</div>`:'<div style="font-size:10px;color:var(--gray-400)">al día</div>'}</div><div style="text-align:right;flex-shrink:0"><div style="font-weight:800;color:var(--amber)">${finGsFmt(g.saldo)}</div><div style="font-size:9px;color:var(--gray-400)">por cobrar</div></div></summary>${rws}<div style="text-align:right;padding:4px 4px 6px"><button data-cli="${esc(g.c)}" onclick="estadoCuentaCliente(this.dataset.cli)" style="font-size:11px;border:1px solid var(--gray-200);background:#fff;border-radius:6px;padding:4px 10px;cursor:pointer;color:var(--gray-700)">📄 Estado de cuenta</button></div></details>`; }).join('')||'<div class="empty">Nada por cobrar 🎉</div>';
 }
 // ---- Exportar reportes (PDF / Excel) ----
 function _finRepData(tipo){ const hoyS=hoy(); const out=[]; // {cliente,factura,fecha,venc,monto,saldo,moneda,estado} (cliente = proveedor en gastos/pagar)
@@ -3549,6 +3550,79 @@ function finReportePDF(tipo){ const data=_finRepData(tipo); if(!data.length){ sh
    <div class="foot">BioInnova S.A. · Documento generado automáticamente el ${fmtFecha(hoyS)} · Sistema de gestión BioInnova</div>
    <div class="noprint" style="display:flex;gap:8px;justify-content:center;margin-top:16px"><button onclick="window.print()" style="background:#1e3f63;color:#fff;border:none;padding:11px 22px;border-radius:8px;font-weight:700;cursor:pointer">🖨️ Imprimir / Guardar PDF</button><button onclick="window.close()" style="background:#e2e8f0;color:#334155;border:none;padding:11px 22px;border-radius:8px;font-weight:700;cursor:pointer">← Volver</button></div>
    </div></body></html>`);
+  w.document.close();
+}
+// ---- Estado de cuenta por cliente (cuentas por cobrar) ----
+function estadoCuentaModal(cliPre){
+  const clis=[...new Set(_finPendientes('venta').map(r=>r.rec.cliente||'—'))].sort((a,b)=>String(a).localeCompare(String(b)));
+  if(!clis.length){ showToast('No hay saldos por cobrar'); return; }
+  gs('modalBox').innerHTML=`<h3>📄 Estado de cuenta</h3>
+    <label class="fl">Cliente</label>
+    <select id="ecCli" style="width:100%">${clis.map(c=>`<option${c===cliPre?' selected':''}>${esc(c)}</option>`).join('')}</select>
+    <label style="display:flex;align-items:center;gap:7px;margin-top:10px;font-size:13px;color:var(--gray-700)"><input type="checkbox" id="ecSoloVenc"> Incluir solo facturas vencidas</label>
+    <div class="row2" style="margin-top:14px"><button class="btn btn-sec" onclick="cerrarModal()">Cancelar</button><button class="btn btn-primary" onclick="estadoCuentaGo()">📄 Generar</button></div>`;
+  gs('modal').classList.add('show');
+}
+function estadoCuentaGo(){ const cli=gs('ecCli').value; const sv=gs('ecSoloVenc').checked; cerrarModal(); estadoCuentaCliente(cli,sv); }
+function estadoCuentaCliente(cli,soloVenc){
+  const hoyS=hoy();
+  let rows=_finPendientes('venta').filter(r=>(r.rec.cliente||'—')===cli);
+  if(soloVenc) rows=rows.filter(r=>String(r.venc)<hoyS);
+  if(!rows.length){ showToast('Sin saldos por cobrar'+(soloVenc?' vencidos':'')+' para este cliente'); return; }
+  rows.sort((a,b)=>String(a.venc||'').localeCompare(String(b.venc||'')));
+  const cliRec=(typeof getClientes==='function'?getClientes():[]).find(c=>(c.nombre||'')===cli)||{};
+  let tot=0,venc=0,aVenc=0,nV=0;
+  const filas=rows.map((r,i)=>{
+    const g=finGs(r.rec,r.saldo); tot+=g;
+    const vd=String(r.venc)<hoyS; if(vd){venc+=g;nV++;}else{aVenc+=g;}
+    const nc=(r.rec.cuotas||[]).length;
+    const dias=(vd&&r.venc)?Math.max(0,Math.round((Date.parse(hoyS)-Date.parse(r.venc))/86400000)):0;
+    const fact=(r.rec.factura||'—')+(nc>1?` · cuota ${(r.cu&&r.cu.n)||r.ci+1}/${nc}`:'');
+    const est=vd?('VENCIDO'+(dias?` · ${dias} d`:'')):'A VENCER';
+    return `<tr class="${i%2?'alt':''}"><td>${esc(fact)}</td><td class="c">${fmtFecha(r.rec.fecha)}</td><td class="r b">${finGsFmt(g)}</td><td class="c" style="${vd?'color:#b91c1c;font-weight:700':''}">${r.venc?fmtFecha(r.venc):'—'}</td><td class="c"><span class="bg ${vd?'vc':'pd'}">${esc(est)}</span></td></tr>`;
+  }).join('');
+  const base=`${location.origin}${location.pathname.replace(/[^/]*$/,'')}logo.jpg`;
+  const subCli=esc(cli)+(cliRec.ruc?` <span style="font-weight:400;color:#64748b">· RUC ${esc(cliRec.ruc)}</span>`:'')+(cliRec.codigo?` <span style="font-weight:400;color:#64748b">· Cód. ${esc(cliRec.codigo)}</span>`:'');
+  const card=(l,v,c)=>`<div class="card"><div class="cl">${l}</div><div class="cv" style="color:${c}">${v}</div></div>`;
+  const w=window.open('','_blank'); if(!w){ showToast('Permití las ventanas emergentes'); return; }
+  w.document.write(`<html><head><meta charset="utf-8"><title>Estado de cuenta — ${esc(cli)}</title><style>
+   *{box-sizing:border-box}html,body{margin:0}body{font-family:Arial,Helvetica,sans-serif;color:#1a202c;font-size:11px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+   .wrap{max-width:820px;margin:0 auto;padding:26px}
+   .lh{display:flex;align-items:center;gap:16px}
+   .lh img{height:52px}
+   .lh .co{flex:1;text-align:center}
+   .lh .co-n{font-size:17px;font-weight:800;color:#1e3f63}
+   .lh .co-a{font-size:10.5px;color:#334155}
+   .lh .fx{font-size:11px;text-align:right;min-width:120px}
+   .rule{border:none;border-top:2px solid #1e3f63;margin:10px 0 14px}
+   .sub{font-size:14px;font-weight:800;color:#1a202c;margin-bottom:6px}
+   .greet{font-size:11.5px;margin:2px 0}
+   .intro{font-size:11.5px;color:#334155;margin:2px 0 14px;line-height:1.5}
+   .cards{display:flex;gap:10px;margin:0 0 14px}
+   .card{flex:1;border:1px solid #e2e8f0;border-radius:10px;padding:10px 13px;background:#f8fafc}
+   .card .cl{font-size:9.5px;color:#64748b;text-transform:uppercase;letter-spacing:.5px}.card .cv{font-size:15px;font-weight:800;margin-top:3px}
+   table{width:100%;border-collapse:collapse;margin-top:4px}
+   th{background:#1e3f63;color:#fff;font-size:9.5px;text-transform:uppercase;letter-spacing:.3px;padding:8px;text-align:left}
+   td{padding:7px 8px;border-bottom:1px solid #eef2f7}
+   tr.alt td{background:#f8fafc}
+   .c{text-align:center}.r{text-align:right;white-space:nowrap}.b{font-weight:700}
+   .bg{border-radius:10px;padding:2px 8px;font-size:9px;font-weight:700}
+   .bg.vc{background:#fee2e2;color:#b91c1c}.bg.pd{background:#fef3c7;color:#92400e}
+   tfoot td{background:#1e3f63;color:#fff;font-weight:800;font-size:12px;padding:9px 8px;border:none}
+   .foot{margin-top:16px;border-top:1px solid #e2e8f0;padding-top:9px;color:#94a3b8;font-size:9px;text-align:center}
+   @media print{.wrap{padding:8mm}.noprint{display:none}}
+  </style></head><body><div class="wrap">
+   <div class="lh"><img src="${base}" onerror="this.style.display='none'"><div class="co"><div class="co-n">BIOINNOVA S.A.</div><div class="co-a">Calle Uno Esq. Ruta Luque y Mariano Roque Alonso</div><div class="co-a">Tel. (021) 688-5112</div></div><div class="fx">Fecha:<br><b>${fmtFecha(hoyS)}</b></div></div>
+   <hr class="rule">
+   <div class="sub">Estado de Cuenta: ${subCli}</div>
+   <div class="greet">Estimado Cliente,</div>
+   <div class="intro">Adjuntamos el estado de cuenta actualizado a la fecha para su revisión, control y confirmación de estado, agradeciendo desde ya su colaboración y confianza.</div>
+   <div class="cards">${card('Saldo total',finGsFmt(tot),'#1a202c')}${card('Vencido'+(nV?' ('+nV+')':''),finGsFmt(venc),venc?'#b91c1c':'#166534')}${card('A vencer',finGsFmt(aVenc),'#b45309')}</div>
+   <table><thead><tr><th>Número de factura</th><th class="c">Fecha de factura</th><th class="r">Saldo Gs</th><th class="c">Vto. de factura</th><th class="c">Estado</th></tr></thead><tbody>${filas}</tbody>
+   <tfoot><tr><td>TOTALES</td><td></td><td class="r">${finGsFmt(tot)}</td><td></td><td></td></tr></tfoot></table>
+   <div class="foot">BioInnova S.A. · Documento generado el ${fmtFecha(hoyS)} · Sistema de gestión BioInnova</div>
+   <div class="noprint" style="display:flex;gap:8px;justify-content:center;margin-top:16px"><button onclick="window.print()" style="background:#1e3f63;color:#fff;border:none;padding:11px 22px;border-radius:8px;font-weight:700;cursor:pointer">🖨️ Imprimir / Guardar PDF</button><button onclick="window.close()" style="background:#e2e8f0;color:#334155;border:none;padding:11px 22px;border-radius:8px;font-weight:700;cursor:pointer">← Volver</button></div>
+  </div></body></html>`);
   w.document.close();
 }
 let _finPagFiltro='todas';
