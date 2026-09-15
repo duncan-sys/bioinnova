@@ -507,7 +507,7 @@ textarea{resize:vertical;min-height:66px}
       <button class="fintab" id="finT_banco" onclick="finSetTab('banco')">🏦 Fijos</button>
       <button class="fintab" id="finT_flujo" onclick="finSetTab('flujo')">📊 Flujo</button>
     </div>
-    <div style="font-size:9px;color:var(--gray-400);text-align:right;margin:-6px 0 8px">BioInnova <span id="finVer">v115</span></div>
+    <div style="font-size:9px;color:var(--gray-400);text-align:right;margin:-6px 0 8px">BioInnova <span id="finVer">v116</span></div>
     <div id="finW_ventas">
       <button class="btn btn-primary btn-block" style="margin-bottom:8px" onclick="finVentaModal()">＋ Nueva venta</button>
       <input type="search" id="finVBuscar" placeholder="🔎 Buscar cliente / factura / comercial…" oninput="finRenderVentas()" style="margin-bottom:8px">
@@ -3794,7 +3794,7 @@ function estadoCuentaCliente(cli,soloVenc){
    <table><thead><tr><th>Número de factura</th><th class="c">Fecha de factura</th><th class="r">Saldo Gs</th><th class="c">Vto. de factura</th><th class="c">Estado</th></tr></thead><tbody>${filas}</tbody>
    <tfoot><tr><td>TOTALES</td><td></td><td class="r">${finGsFmt(tot)}</td><td></td><td></td></tr></tfoot></table>
    <div class="foot">BioInnova S.A. · Documento generado el ${fmtFecha(hoyS)} · Sistema de gestión BioInnova</div>
-   <div class="noprint" style="display:flex;gap:8px;justify-content:center;margin-top:16px"><button onclick="window.print()" style="background:#1e3f63;color:#fff;border:none;padding:11px 22px;border-radius:8px;font-weight:700;cursor:pointer">🖨️ Imprimir / Guardar PDF</button><button onclick="window.close()" style="background:#e2e8f0;color:#334155;border:none;padding:11px 22px;border-radius:8px;font-weight:700;cursor:pointer">← Volver</button></div>
+   <div id="ecbar" class="noprint" style="display:flex;gap:8px;justify-content:center;margin-top:16px"><button onclick="var b=document.getElementById('ecbar');b.style.display='none';window.onafterprint=function(){b.style.display='';};window.print();" style="background:#1e3f63;color:#fff;border:none;padding:11px 22px;border-radius:8px;font-weight:700;cursor:pointer">🖨️ Imprimir / Guardar PDF</button><button onclick="window.close()" style="background:#e2e8f0;color:#334155;border:none;padding:11px 22px;border-radius:8px;font-weight:700;cursor:pointer">← Volver</button></div>
   </div></body></html>`);
   w.document.close();
 }
