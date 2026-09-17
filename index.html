@@ -233,11 +233,15 @@ textarea{resize:vertical;min-height:66px}
           <div><label class="fl">Comercial (opcional)</label><input type="text" id="otComercial" placeholder="Nombre"></div>
         </div>
         <label class="fl">Fecha</label><input type="date" id="otFecha">
-        <div class="row2" style="margin-top:12px">
-          <div><label class="fl">Bolsa que se usa</label><select id="otBolsaSel" onchange="otEnvaseTocado();otRecalc()"></select></div>
-          <div><label class="fl">Etiqueta que se usa</label><select id="otEtiqSel" onchange="otEnvaseTocado();otRecalc()"></select></div>
+        <div id="otEnvaseAuto" style="margin-top:12px;font-size:12px;background:var(--gray-100);border-radius:8px;padding:8px 10px;color:var(--gray-700);line-height:1.7"></div>
+        <label class="fl" style="display:flex;gap:8px;align-items:center;margin-top:8px;font-size:12px;color:var(--gray-500);cursor:pointer;font-weight:400"><input type="checkbox" id="otEnvaseCorregir" onchange="otEnvaseCorregirToggle()" style="width:15px;height:15px"> Corregir bolsa/etiqueta a mano (caso especial)</label>
+        <div id="otEnvaseEdit" style="display:none">
+          <div class="row2" style="margin-top:8px">
+            <div><label class="fl">Bolsa que se usa</label><select id="otBolsaSel" onchange="otRecalc()"></select></div>
+            <div><label class="fl">Etiqueta que se usa</label><select id="otEtiqSel" onchange="otRecalc()"></select></div>
+          </div>
         </div>
-        <div style="font-size:10px;color:var(--gray-400);margin-top:4px">La fórmula propone una y la podés cambiar: se descuenta la que elijas. La mano de obra (INS019) se carga sola, 1 por kg producido.</div>
+        <div style="font-size:10px;color:var(--gray-400);margin-top:4px">Bolsa y etiqueta se toman <b>automáticamente de la fórmula</b> del producto. La mano de obra (INS019) se carga sola, 1 por kg producido.</div>
         <label class="fl" style="display:flex;gap:8px;align-items:center;margin-top:12px;font-weight:600;cursor:pointer"><input type="checkbox" id="otSecu" onchange="otSecuToggle()" style="width:17px;height:17px"> ➕ Agregar secuestrante (Zeolítica)</label>
         <div id="otSecuRow" style="display:none"><label class="fl">Nivel (% sobre la producción)</label><input type="number" id="otSecuPct" value="0.3" step="0.1" inputmode="decimal" oninput="otRecalc()" style="max-width:150px"></div>
       </div>
@@ -507,7 +511,7 @@ textarea{resize:vertical;min-height:66px}
       <button class="fintab" id="finT_banco" onclick="finSetTab('banco')">🏦 Fijos</button>
       <button class="fintab" id="finT_flujo" onclick="finSetTab('flujo')">📊 Flujo</button>
     </div>
-    <div style="font-size:9px;color:var(--gray-400);text-align:right;margin:-6px 0 8px">BioInnova <span id="finVer">v116</span></div>
+    <div style="font-size:9px;color:var(--gray-400);text-align:right;margin:-6px 0 8px">BioInnova <span id="finVer">v117</span></div>
     <div id="finW_ventas">
       <button class="btn btn-primary btn-block" style="margin-bottom:8px" onclick="finVentaModal()">＋ Nueva venta</button>
       <input type="search" id="finVBuscar" placeholder="🔎 Buscar cliente / factura / comercial…" oninput="finRenderVentas()" style="margin-bottom:8px">
@@ -746,6 +750,8 @@ const PL_INSUMOS=[
 {c:'BIO25-014',n:'CONFIPESO 4 O',prov:'Bioinnova S.A.',ck:0},
 {c:'INS071',n:'Premix confipeso 4 O',prov:'GILGAL',ck:1.84},
 {c:'INS070',n:'Zeolítica',prov:'',ck:0},
+{c:'INS073',n:'Powerome RP',prov:'',ck:156000},
+{c:'INS072',n:'Prymyx Bioinnova SM',prov:'',ck:0},
 ];
 // Secuestrante temporal que se agrega POR ENCIMA de la fórmula (a las que llevan maíz)
 const SECU={c:'INS070',n:'Zeolítica',pct:0.3};
@@ -883,7 +889,7 @@ function precioKey(x){ return (x.c&&String(x.c).trim())?String(x.c).trim().toUpp
 // ── MOTOR DE COSTEO ──────────────────────────────────────────
 // Precio base ₲/kg de cada insumo (lo actualiza Guillermo). Base sembrada del Excel.
 const PL_INSPREC={
-'INS038':13987,'INS056':7420,'INS040':155,'INS007':1619,'INS050':4367,'INS075':331,'INS019':90,'INS039':20687,'INS048':12602,'INS014':3649,'INS074':565282,'INS049':26305,'INS037':7420,'INS071':11181,'INS058':1175,'INS047':15264,'INS041':1755,'INS046':3407,'INS045':5813,'INS042':1329,'INS002':1303,'INS008':1847,'INS031':2455,'INS001':1078,'INS015':5476,'INS070':4229,'INS030':1936,'INS003':876,'INS027':11327,'INS022':436,'INS076':54900,'INS077':67100
+'INS038':13987,'INS056':7420,'INS040':155,'INS007':1619,'INS050':4367,'INS075':331,'INS019':90,'INS039':20687,'INS048':12602,'INS014':3649,'INS074':565282,'INS049':26305,'INS037':7420,'INS071':11181,'INS058':1175,'INS047':15264,'INS041':1755,'INS046':3407,'INS045':5813,'INS042':1329,'INS002':1303,'INS008':1847,'INS031':2455,'INS001':1078,'INS015':5476,'INS070':4229,'INS030':1936,'INS003':876,'INS027':11327,'INS022':436,'INS076':54900,'INS077':67100,'INS073':156000
 };
 // Parámetros de costeo (globales, editables por el gerente)
 const PL_COSTCFG={ merma:0.03, mano_obra:90, bolsa:90, etiqueta_bolsa:331, gastos_adm:0.04, comision:0.04, margen:0.25, margen_sal:0.15, plazo_mes:0.01, iva:0.10, flete_kg:0, dolar:6100 };
@@ -2085,7 +2091,8 @@ function nuevaOT(){ if(!esPlanta()){ showToast('Sin permiso'); return; }
   gs('otComercial').value=(getSession()&&getSession().nombre)||'';
   gs('otFecha').value=hoy(); gs('otNum').value=otNextNum(); gs('otInsumos').innerHTML=''; gs('otTotalKg').textContent='';
   gs('otSecu').checked=false; gs('otSecuRow').style.display='none'; gs('otSecuPct').value=String(SECU.pct); _otSecuTocado=false;
-  _otEnvaseTocado=false; _otSelHtml('otBolsaSel','Envase',''); _otSelHtml('otEtiqSel','Etiqueta','');
+  if(gs('otEnvaseCorregir')) gs('otEnvaseCorregir').checked=false; if(gs('otEnvaseEdit')) gs('otEnvaseEdit').style.display='none';
+  _otSelHtml('otBolsaSel','Envase',''); _otSelHtml('otEtiqSel','Etiqueta',''); if(gs('otEnvaseAuto')) gs('otEnvaseAuto').innerHTML='';
   editOTId=null;
 }
 function nuevaOTde(gi){ nuevaOT(); gs('otProducto').value=gi; otRecalc(); }
@@ -2102,12 +2109,14 @@ function _otSelHtml(id,cat,sel){ const el=gs(id); if(!el) return;
   el.innerHTML='<option value="">— sin '+(cat==='Envase'?'bolsa':'etiqueta')+' —</option>'
     + otEnvases(cat).map(i=>`<option value="${esc(i.c)}"${i.c===sel?' selected':''}>${esc(i.n)}</option>`).join('');
   if(sel && el.value!==sel) el.value=sel; }
-// Lo que la fórmula propone, para precargar los selectores.
-function otSugerido(f,cat){ const rx=/etiq/i;
+// Bolsa/etiqueta que trae la fórmula (código y nombre): la OT las toma de acá.
+function otSugerido(f,cat){ return otEnvaseInfo(f,cat).c; }
+function otEnvaseInfo(f,cat){ const rx=/etiq/i;
   const l=(f&&f.ins||[]).find(i=>i.t==='b' && (cat==='Etiqueta' ? rx.test(i.n) : !rx.test(i.n)));
-  return l?l.c:''; }
-let _otEnvaseTocado=false;
-function otEnvaseTocado(){ _otEnvaseTocado=true; }
+  return l?{c:l.c,n:l.n}:{c:'',n:''}; }
+function otEnvaseCorregirToggle(){ const corr=gs('otEnvaseCorregir').checked; gs('otEnvaseEdit').style.display=corr?'':'none';
+  if(corr){ const idx=gs('otProducto').value; if(idx!==''){ const f=PL_FORMULAS[Number(idx)]; _otSelHtml('otBolsaSel','Envase',otSugerido(f,'Envase')); _otSelHtml('otEtiqSel','Etiqueta',otSugerido(f,'Etiqueta')); } }
+  otRecalc(); }
 function otCalcularFull(f, kgProd, secuPct, bolsaC, etiqC){
   const base=otCalcular(f, kgProd);
   // se rehacen las líneas: la mezcla de la fórmula + lo que se eligió + mano de obra
@@ -2135,12 +2144,19 @@ function otRecalc(){
   if(!_otSecuTocado) gs('otSecu').checked=false;   // ya no se auto-agrega: la Zeolita viene en la fórmula del Excel
   gs('otSecuRow').style.display=gs('otSecu').checked?'':'none';
   const secuPct=gs('otSecu').checked?(num(gs('otSecuPct').value)||0):0;
-  // Los selectores se precargan con lo que propone la fórmula, salvo que la
-  // jefa ya haya elegido otra cosa: ahí manda lo que eligió.
-  if(!_otEnvaseTocado){ _otSelHtml('otBolsaSel','Envase',otSugerido(f,'Envase')); _otSelHtml('otEtiqSel','Etiqueta',otSugerido(f,'Etiqueta')); }
-  else { _otSelHtml('otBolsaSel','Envase',gs('otBolsaSel').value); _otSelHtml('otEtiqSel','Etiqueta',gs('otEtiqSel').value); }
-  const r=otCalcularFull(f, kg, secuPct, gs('otBolsaSel').value, gs('otEtiqSel').value);
+  // Bolsa y etiqueta: automáticas desde la fórmula, salvo que se active "Corregir a mano".
+  const corr = gs('otEnvaseCorregir') && gs('otEnvaseCorregir').checked;
+  let bolsaC, etiqC;
+  if(corr){ bolsaC=gs('otBolsaSel').value; etiqC=gs('otEtiqSel').value; }
+  else { bolsaC=otSugerido(f,'Envase'); etiqC=otSugerido(f,'Etiqueta'); _otSelHtml('otBolsaSel','Envase',bolsaC); _otSelHtml('otEtiqSel','Etiqueta',etiqC); }
+  const r=otCalcularFull(f, kg, secuPct, bolsaC, etiqC);
   gs('otBolsas').value=r.bolsas;
+  // Display automático de bolsa/etiqueta (código · nombre · cantidad)
+  const _nm=c=>{ const l=(f.ins||[]).find(x=>x.c===c); if(l&&l.n) return l.n; const it=(typeof invItem==='function')?invItem(c):null; return it?it.n:c; };
+  if(gs('otEnvaseAuto')) gs('otEnvaseAuto').innerHTML =
+    '🛍️ <b>Bolsa:</b> '+(bolsaC?esc(bolsaC)+' · '+esc(_nm(bolsaC))+' — '+r.bolsas+' u':'<span style="color:var(--gray-400)">la fórmula no define bolsa</span>')
+    + '<br>🏷️ <b>Etiqueta:</b> '+(etiqC?esc(etiqC)+' · '+esc(_nm(etiqC))+' — '+r.bolsas+' u':'<span style="color:var(--gray-400)">la fórmula no define etiqueta</span>')
+    + (corr?' <span style="color:var(--amber)">· corregido a mano</span>':' <span style="color:var(--gray-400)">· automático de la fórmula</span>');
   if(!gs('otLote').value.trim()){ const pref=(f.c||f.n.slice(0,2)).toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,3); const d=new Date(); gs('otLote').value=pref+String(d.getMonth()+1).padStart(2,'0')+d.getFullYear()+String(gs('otNum').value).padStart(4,'0'); }
   const nf=n=>Number(n).toLocaleString('es-PY',{maximumFractionDigits:2});
   const totKg=r.lineas.filter(l=>l.t==='p').reduce((a,l)=>a+l.cant,0);
@@ -2163,7 +2179,9 @@ function guardarOT(imprimir){
   const f=PL_FORMULAS[Number(idx)]; const secuPct=gs('otSecu').checked?(num(gs('otSecuPct').value)||0):0;
   const kgB=plKgBolsa(f)||0;
   if(kgB>0 && Math.abs(kg-Math.round(kg/kgB)*kgB)>0.001){ showToast('La cantidad ingresada no corresponde a una cantidad exacta de bolsas para este producto.'); return; }
-  const bolsaC=gs('otBolsaSel')?gs('otBolsaSel').value:'', etiqC=gs('otEtiqSel')?gs('otEtiqSel').value:'';
+  const corr = gs('otEnvaseCorregir') && gs('otEnvaseCorregir').checked;   // por defecto: bolsa/etiqueta de la fórmula
+  const bolsaC = corr ? (gs('otBolsaSel')?gs('otBolsaSel').value:'') : otSugerido(f,'Envase');
+  const etiqC  = corr ? (gs('otEtiqSel')?gs('otEtiqSel').value:'') : otSugerido(f,'Etiqueta');
   const r=otCalcularFull(f, kg, secuPct, bolsaC, etiqC);
   const o={ id: editOTId||('OT-'+Date.now()), num: Number(gs('otNum').value)||otNextNum(),
     fecha:gs('otFecha').value||hoy(), producto_cod:f.c||'', producto_nom:f.n, kg_bolsa:plKgBolsa(f),
@@ -2193,13 +2211,16 @@ function editarOT(id){ const o=getOTs().find(x=>x.id===id); if(!o)return; cerrar
   const idx=PL_FORMULAS.findIndex(f=>(o.producto_cod&&f.c===o.producto_cod)||f.n===o.producto_nom); gs('otProducto').value=idx>=0?idx:'';
   gs('otKg').value=o.kg; gs('otNum').value=o.num; gs('otLote').value=o.lote||''; gs('otCliente').value=o.cliente||''; gs('otComercial').value=o.comercial||''; gs('otFecha').value=o.fecha;
   const sl=(o.insumos||[]).find(l=>l.secu || l.c===SECU.c); _otSecuTocado=true; gs('otSecu').checked=!!sl; gs('otSecuRow').style.display=sl?'':'none'; gs('otSecuPct').value=sl?String(sl.p):String(SECU.pct);
-  // La bolsa y la etiqueta se recuperan de las líneas guardadas, no de la fórmula:
-  // la OT pudo haberse hecho con otras y hay que respetarlas al editar.
+  // Bolsa/etiqueta guardadas: si coinciden con lo que propone la fórmula, se queda en automático;
+  // si difieren (se corrigieron a mano en su momento), se reabre con "Corregir" activado.
   const cat=invCatalogo(); const bs=(o.insumos||[]).filter(l=>l.t==='b');
   const esEtiq=c=>{ const i=cat.find(x=>x.c===c); return i?i.cat==='Etiqueta':/etiq/i.test(c); };
-  _otEnvaseTocado=true;
-  _otSelHtml('otBolsaSel','Envase',(bs.find(l=>!esEtiq(l.c))||{}).c||'');
-  _otSelHtml('otEtiqSel','Etiqueta',(bs.find(l=>esEtiq(l.c))||{}).c||'');
+  const savedBolsa=(bs.find(l=>!esEtiq(l.c))||{}).c||'', savedEtiq=(bs.find(l=>esEtiq(l.c))||{}).c||'';
+  const f2=(idx>=0)?PL_FORMULAS[idx]:null; const sugB=f2?otSugerido(f2,'Envase'):'', sugE=f2?otSugerido(f2,'Etiqueta'):'';
+  const difiere=(savedBolsa&&savedBolsa!==sugB)||(savedEtiq&&savedEtiq!==sugE);
+  if(gs('otEnvaseCorregir')) gs('otEnvaseCorregir').checked=difiere; if(gs('otEnvaseEdit')) gs('otEnvaseEdit').style.display=difiere?'':'none';
+  _otSelHtml('otBolsaSel','Envase',savedBolsa||sugB);
+  _otSelHtml('otEtiqSel','Etiqueta',savedEtiq||sugE);
   otRecalc(); showScreen('sOTNueva','Editar OT','',true);
 }
 function borrarOT(id){ if(!esPlanta())return; if(!confirm('¿Borrar esta OT?'))return;
@@ -2416,7 +2437,7 @@ function cotizPrint(id, incluirGar){ const c=getCotiz().find(x=>x.id===id); if(!
    <div class="firma"><b>${esc(c.vendedor||'')}</b><br>Asesor técnico<br><b>Bioinnova S.A.</b></div>
    <div class="vh">Válido Hasta ${validoHasta}</div>
    ${incluirGar?('<style>'+garDocCss()+'</style>'+garForCotizItems(items).map(x=>`<div style="page-break-before:always;padding-top:10px">${garDocInner(x.g,x.p)}</div>`).join('')):''}
-   <div class="noprint" style="text-align:center;margin-top:20px"><button onclick="window.print()" style="background:#2e5b8a;color:#fff;border:none;padding:10px 22px;border-radius:8px;cursor:pointer">🖨️ Imprimir / Guardar PDF</button> <button onclick="window.close()" style="background:#e2e8f0;color:#334155;border:none;padding:10px 22px;border-radius:8px;cursor:pointer;margin-left:8px">← Volver</button></div>
+   <div id="czbar" class="noprint" style="text-align:center;margin-top:20px"><button onclick="var b=document.getElementById('czbar');b.style.display='none';window.onafterprint=function(){b.style.display='';};window.print();" style="background:#2e5b8a;color:#fff;border:none;padding:10px 22px;border-radius:8px;cursor:pointer">🖨️ Imprimir / Guardar PDF</button> <button onclick="window.close()" style="background:#e2e8f0;color:#334155;border:none;padding:10px 22px;border-radius:8px;cursor:pointer;margin-left:8px">← Volver</button></div>
    </div></body></html>`);
   w.document.close();
 }
