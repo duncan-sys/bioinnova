@@ -575,6 +575,7 @@ textarea{resize:vertical;min-height:66px}
 <!-- Modal genérico -->
 <div class="modal" id="modal"><div class="modal-box" id="modalBox"></div></div>
 
+<script src="js/costeo.js"></script>
 <script>
 // ══════════════════════════════════════════════════════════
 //  BioInnova — Visitas técnicas (v1)
@@ -867,92 +868,6 @@ function desglosarNucleosOk(){ if(!puedeEditarFormula()) return; const cambios=_
 }
 let PL_FORMULAS = PL_FORMULAS_BASE.slice();
 function rebuildFormulas(){ const byKey={}; PL_FORMULAS_BASE.forEach(f=>byKey[precioKey(f)]=f); getFormulasExtra().forEach(f=>{ if(f&&(f.c||f.n)) byKey[precioKey(f)]=f; }); PL_FORMULAS = Object.values(byKey); }
-// Bolsas de un producto por kg de producción
-function plKgBolsa(f){ return (f&&f.kg)||30; }
-function plInsumo(cod){ return PL_INSUMOS.find(x=>x.c===cod); }
-function plFormula(cod){ return PL_FORMULAS.find(x=>x.c===cod); }
-// ── Lista de precios: respaldo manual para productos SIN fórmula (los que tienen fórmula se calculan) ──
-const PL_PRECIOS_MANUAL=[];   // vaciado: el Excel es el maestro; los productos salen de sus fórmulas
-const COND_LBL={p0:'Contado',p30:'Crédito 30 días',p60:'Crédito 60 días',p90:'Crédito 90 días',c2:'2 pagos (30 y 60)',c3:'3 pagos (30, 60 y 90)',c4:'4 pagos (30, 60, 90 y 120)'};
-const COND_ORDER=['p0','p30','p60','p90','c2','c3','c4'];
-// Vencimientos (días desde la fecha base) de cada forma de pago. Un solo pago = una sola fecha.
-const FORMA_TERMS={p0:[0],p30:[30],p60:[60],p90:[90],c2:[30,60],c3:[30,60,90],c4:[30,60,90,120]};
-// Meses de financiación para el COSTO FINANCIERO del precio = promedio ponderado de los vencimientos.
-// Para las 4 condiciones simples da 0/1/2/3 (idéntico al cálculo anterior); las multi-pago suman el promedio.
-function plazoMeses(cond){ const t=FORMA_TERMS[cond]; if(!t||!t.length) return 0; return t.reduce((a,d)=>a+d/30,0)/t.length; }
-// Para productos SIN fórmula (lista manual) sólo hay precios p0/p30/p60/p90: a las multi-pago las
-// aproximamos a la condición simple más cercana (conservador: cobra el plazo mayor de la cuota final).
-function condManual(cond){ return {p0:'p0',p30:'p30',p60:'p60',p90:'p90',c2:'p60',c3:'p90',c4:'p90'}[cond]||'p0'; }
-function getPreciosOv(){ return getArr('bio:precios'); }        // ediciones/altas del gerente (sync)
-function savePreciosOv(a){ setArr('bio:precios',a); }
-function precioKey(x){ return (x.c&&String(x.c).trim())?String(x.c).trim().toUpperCase():('N:'+String(x.n||'').trim().toUpperCase()); }
-// ── MOTOR DE COSTEO ──────────────────────────────────────────
-// Precio base ₲/kg de cada insumo (lo actualiza Guillermo). Base sembrada del Excel.
-const PL_INSPREC={
-'INS038':13987,'INS056':7420,'INS040':155,'INS007':1619,'INS050':4367,'INS075':331,'INS019':90,'INS039':20687,'INS048':12602,'INS014':3649,'INS074':565282,'INS049':26305,'INS037':7420,'INS071':11181,'INS058':1175,'INS047':15264,'INS041':1755,'INS046':3407,'INS045':5813,'INS042':1329,'INS002':1303,'INS008':1847,'INS031':2455,'INS001':1078,'INS015':5476,'INS070':4229,'INS030':1936,'INS003':876,'INS027':11327,'INS022':436,'INS076':54900,'INS077':67100,'INS073':156000
-};
-// Parámetros de costeo (globales, editables por el gerente)
-const PL_COSTCFG={ merma:0.03, mano_obra:90, bolsa:90, etiqueta_bolsa:331, gastos_adm:0.04, comision:0.04, margen:0.25, margen_sal:0.15, plazo_mes:0.01, iva:0.10, flete_kg:0, dolar:6100 };
-const PL_MARGEN={};   // margen por producto (override); default = cfg.margen
-function getInsPrecOv(){ return getArr('bio:insprec'); }
-function saveInsPrecOv(a){ setArr('bio:insprec',a); }
-// Promedio ponderado del costo del stock EN MANO (promedio móvil perpetuo), por insumo, desde los movimientos.
-// Una compra barata se mezcla con el stock viejo más caro según las cantidades → no tira el precio de golpe.
-let _wavgCache=null;
-function _computeWavg(){ const map={}, byIns={};
-  (typeof getMovs==='function'?getMovs():[]).forEach(m=>{ if(!m.insumo_c) return; (byIns[m.insumo_c]=byIns[m.insumo_c]||[]).push(m); });
-  Object.keys(byIns).forEach(c=>{ const movs=byIns[c].slice().sort((a,b)=>String(a.fecha||'').localeCompare(String(b.fecha||''))||String(a.ts||'').localeCompare(String(b.ts||'')));
-    let stock=0, avg=0, hubo=false;
-    movs.forEach(m=>{ const q=Math.abs(Number(m.cant)||0);
-      if(m.tipo==='ingreso'){ const cu=(m.costo!=null&&m.costo!=='')?Number(m.costo):avg; const ns=stock+q; avg = ns>0 ? (stock*avg + q*cu)/ns : cu; stock=ns; if(m.costo!=null&&Number(m.costo)>0) hubo=true; }
-      else if(m.tipo==='egreso'){ stock=Math.max(0,stock-q); }
-      else { stock=Math.max(0, stock+(Number(m.cant)||0)); } });   // ajuste: al costo promedio vigente
-    if(hubo && avg>0) map[c]=Math.round(avg);
-  });
-  return map;
-}
-function insWavg(c){ if(!_wavgCache) _wavgCache=_computeWavg(); return _wavgCache[c]!=null?_wavgCache[c]:null; }
-// Precio ₲/kg de un insumo para cotizar: override manual (🧪) → promedio ponderado de compras → default de fábrica
-function insPrecio(c){ const o=getInsPrecOv().find(x=>x.c===c); if(o) return Number(o.gskg)||0; const w=insWavg(c); if(w!=null&&w>0) return w; return PL_INSPREC[c]||0; }
-function getCostCfg(){ let o={}; try{ o=JSON.parse(localStorage.getItem('bio:costcfg'))||{}; }catch{} return Object.assign({},PL_COSTCFG,o); }
-function saveCostCfg(o){ try{ localStorage.setItem('bio:costcfg',JSON.stringify(o)); }catch{} if(typeof pushPricingCfg==='function') pushPricingCfg(); }
-function getMargenOv(){ let o={}; try{ o=JSON.parse(localStorage.getItem('bio:margen'))||{}; }catch{} return o; }
-function setMargenOv(cod,pct){ const o=getMargenOv(); if(pct==null||pct==='') delete o[cod]; else o[cod]=Number(pct); try{ localStorage.setItem('bio:margen',JSON.stringify(o)); }catch{} if(typeof pushPricingCfg==='function') pushPricingCfg(); }
-// ¿Es sal mineral? (código BIOSAL o nombre lo indica) → usa el margen de sal por defecto
-function esSalMineral(cod,nombre){ return /^BIOSAL/i.test(cod||'') || /biosal|sal\s*mineral/i.test(nombre||''); }
-// Margen de un producto: override individual → default por línea (sal mineral vs general)
-function margenDe(cod, nombre){ const ov=getMargenOv(); if(cod&&ov[cod]!=null) return Number(ov[cod]);
-  const cfg=getCostCfg(); return esSalMineral(cod,nombre) ? (cfg.margen_sal!=null?cfg.margen_sal:0.15) : cfg.margen; }
-// Costo ₲/kg de la mezcla. Incluye el secuestrante en las fórmulas que llevan
-// maíz: la Zeolítica se agrega al 0,3% POR ENCIMA del 100% y se consume de
-// verdad en la producción, así que su costo tiene que estar en el precio.
-function costoBaseFormula(f){
-  let base=(f.ins||[]).filter(i=>i.t==='p').reduce((a,i)=>a+(Number(i.p)/100)*insPrecio(i.c),0);
-  // Secuestrante: ya NO se agrega automáticamente. Las fórmulas del Excel que llevan Zeolita (INS070) la traen como componente.
-  return base; }
-// Envase ₲/kg: el precio real de LA bolsa de esta fórmula, repartido en sus kg.
-// Una sola constante no sirve porque el precio depende del tamaño (57x80 a
-// 2.045 para 30 kg, 60x100 a 2.455 para 40 kg, Confi 4 a 3.409 para 20 kg).
-// Si la fórmula no declara bolsa, o esa bolsa no tiene precio, cae en cfg.bolsa.
-function bolsaKgDe(f){ const cfg=getCostCfg(); const kgB=plKgBolsa(f)||0;
-  const l=(f&&f.ins||[]).find(i=>i.t==='b' && !/etiq/i.test(i.n||''));
-  const p=l?insPrecio(l.c):0;
-  return (p>0 && kgB) ? p/kgB : (cfg.bolsa||0); }
-// Precio ₲/kg (SIN flete) para una condición y un margen dado
-function precioBaseKg(f, cond, margen, comPct){ const cfg=getCostCfg(); const base=costoBaseFormula(f); const kg=plKgBolsa(f);
-  const com=(comPct!=null?comPct:cfg.comision);                                                        // comisión de la cotización (o la general)
-  const bruto = base*(1+(cfg.merma||0)) + cfg.mano_obra + bolsaKgDe(f) + (kg?cfg.etiqueta_bolsa/kg:0);  // TOTAL BRUTO
-  const conCom = bruto*(1+cfg.gastos_adm)*(1+margen)*(1+com);                                           // × gastos adm × margen × comisión
-  const t=plazoMeses(cond);
-  return Math.round( conCom*(1+t*(cfg.plazo_mes||0))*(1+(cfg.iva||0)) ); }                             // × plazo × IVA
-function precioProducto(f){ const kg=plKgBolsa(f); const m=margenDe(f.c, f.n); const fk=(getCostCfg().flete_kg||0);
-  return { c:f.c||'', n:f.n, kg, base:Math.round(costoBaseFormula(f)), p0:precioBaseKg(f,'p0',m)+fk, p30:precioBaseKg(f,'p30',m)+fk, p60:precioBaseKg(f,'p60',m)+fk, p90:precioBaseKg(f,'p90',m)+fk, calc:true }; }
-// Lista efectiva: productos con fórmula = calculados; sin fórmula = manual (respaldo) + altas/ediciones del gerente
-function precioList(){ const m={};
-  PL_FORMULAS.forEach(f=>{ const p=precioProducto(f); m[precioKey(p)]=p; });
-  PL_PRECIOS_MANUAL.forEach(p=>{ const k=precioKey(p); if(!m[k]) m[k]=Object.assign({calc:false},p); });
-  getPreciosOv().forEach(o=>{ if(o&&o.borrado){ delete m[precioKey(o)]; return; } const k=precioKey(o); m[k]=Object.assign({},m[k]||{},o,{calc:false}); });
-  return Object.values(m).filter(p=>!p.borrado).sort((a,b)=>String(a.n||'').localeCompare(String(b.n||''))); }
 function getCotiz(){ return getArr('bio:cotiz'); }
 function saveCotiz(a){ setArr('bio:cotiz',a); }
 function cotizDolar(){ return Number(localStorage.getItem('bio:dolar'))||6450; }
@@ -1028,7 +943,25 @@ async function sbRun(url, opts){
   return r;
 }
 const sb = {
-  async query(table, filters={}){ let url=`${SUPABASE_URL}/rest/v1/${table}?select=*`; for(const [k,v] of Object.entries(filters)) url+=`&${k}=eq.${v}`; const r=await sbRun(url,{}); return r.json(); },
+  // Baja TODAS las filas, no las primeras 1.000. PostgREST corta la respuesta en 1.000 filas y
+  // cloudPull interpreta lo que no llega como "borrado en otro equipo" → borraba registros del
+  // equipo en silencio. Se pagina con Range hasta que una página venga incompleta.
+  // El `order` NO es opcional: sin ORDER BY, Postgres no garantiza un orden estable entre
+  // consultas (una fila actualizada se reescribe al final del heap), y paginar sin orden saltea
+  // y duplica filas. Misma firma de siempre: devuelve el array, o el objeto de error tal cual.
+  async query(table, filters={}){
+    const PAGE=1000; let from=0, out=[];
+    for(;;){
+      let url=`${SUPABASE_URL}/rest/v1/${table}?select=*&order=id.asc`;
+      for(const [k,v] of Object.entries(filters)) url+=`&${k}=eq.${v}`;
+      const r=await sbRun(url,{headers:{Range:`${from}-${from+PAGE-1}`}});
+      const part=await r.json();
+      if(!Array.isArray(part)) return part;          // error de PostgREST → lo maneja quien llama
+      out=out.concat(part);
+      if(part.length<PAGE) return out;               // última página
+      from+=PAGE;
+    }
+  },
   async insert(table,data){ const r=await sbRun(`${SUPABASE_URL}/rest/v1/${table}`,{method:'POST',headers:{'Content-Type':'application/json',Prefer:'return=representation'},body:JSON.stringify(data)}); return r.json(); },
   async update(table,match,data){ let url=`${SUPABASE_URL}/rest/v1/${table}?`; for(const [k,v] of Object.entries(match)) url+=`${k}=eq.${v}&`; const r=await sbRun(url,{method:'PATCH',headers:{'Content-Type':'application/json',Prefer:'return=representation'},body:JSON.stringify(data)}); return r.json(); },
   async del(table,match){ let url=`${SUPABASE_URL}/rest/v1/${table}?`; for(const [k,v] of Object.entries(match)) url+=`${k}=eq.${v}&`; return sbRun(url,{method:'DELETE'}); },
@@ -1088,6 +1021,7 @@ function applyAuth(){
   const pb=gs('passBtn'); if(pb) pb.style.display='';
   goHome();
   startSync();   // baja datos de la nube y arranca la sync periódica
+  setTimeout(()=>{ try{ verificarEsquema(); }catch(e){} }, 4000);   // chequeo de columnas: una sola vez, sin frenar el arranque
 }
 function doLogout(){ if(syncTimer) clearInterval(syncTimer); clearSession(); location.reload(); }
 function cambiarPassModal(){
@@ -1146,7 +1080,7 @@ function rowEst(r){ const p=x=>typeof x==='string'?(()=>{try{return JSON.parse(x
 function visRow(v){ return { id:v.id, tipo:v.tipo||'tecnica', cliente_id:v.cliente_id||'', estancia_id:v.estancia_id||'', fecha:v.fecha||null, tecnico:v.tecnico||'', evaluaciones:(v.evaluaciones||visitaEvals(v)), comercial:(v.comercial||null), diagnostico:v.diagnostico||'', recomendacion:v.recomendacion||'', proxima:v.proxima||null, ts:v.ts }; }
 function rowVis(r){ const pj=x=>typeof x==='string'?(()=>{try{return JSON.parse(x)}catch{return null}})():x; const p=x=>{ const v=pj(x); return Array.isArray(v)?v:[]; }; return { id:r.id, tipo:r.tipo||'tecnica', cliente_id:r.cliente_id||'', estancia_id:r.estancia_id||'', fecha:r.fecha||'', tecnico:r.tecnico||'', evaluaciones:p(r.evaluaciones), comercial:(pj(r.comercial)||null), diagnostico:r.diagnostico||'', recomendacion:r.recomendacion||'', proxima:r.proxima||'', ts:r.ts }; }
 const SYNC_DEFS = {
-  clientes:{ get:getClientes, save:saveClientes, table:'clientes', toRow:cliRow, fromRow:rowCli, toRowSafe:(c)=>{ const r=cliRow(c); ['codigo','estado','prioridad','comercial','prox_fecha','prox_nota','seguimientos'].forEach(k=>delete r[k]); return r; } },
+  clientes:{ get:getClientes, save:saveClientes, table:'clientes', toRow:cliRow, fromRow:rowCli, criticos:['seguimientos'], toRowSafe:(c)=>{ const r=cliRow(c); ['codigo','estado','prioridad','comercial','prox_fecha','prox_nota','seguimientos'].forEach(k=>delete r[k]); return r; } },
   estancias:{ get:getEstancias, save:saveEstancias, table:'estancias', toRow:estRow, fromRow:rowEst, toRowSafe:(e)=>{ const r=estRow(e); delete r.ubicacion; return r; } },
   visitas:{ get:getVisitas, save:saveVisitas, table:'visitas', toRow:visRow, fromRow:rowVis, toRowSafe:(v)=>{ const r=visRow(v); delete r.tipo; delete r.comercial; return r; } },
   ot:{ get:getOTs, save:saveOTs, table:'bio_ot', toRow:otRow, fromRow:rowOT },
@@ -1155,17 +1089,17 @@ const SYNC_DEFS = {
   viat:{ get:getRend, save:saveRend, table:'bio_viat', toRow:viatRow, fromRow:rowViat },
   insumo:{ get:getInsumosExtra, save:saveInsumosExtra, table:'bio_insumos', toRow:insuRow, fromRow:rowInsu },
   precio:{ get:getPreciosOv, save:savePreciosOv, table:'bio_precios', toRow:precRow, fromRow:rowPrec },
-  cotiz:{ get:getCotiz, save:saveCotiz, table:'bio_cotiz', toRow:cotizRow, fromRow:rowCotiz, toRowSafe:(c)=>{ const r=cotizRow(c); delete r.subtotal; delete r.flete; delete r.flete_kg; delete r.margen; return r; } },
+  cotiz:{ get:getCotiz, save:saveCotiz, table:'bio_cotiz', toRow:cotizRow, fromRow:rowCotiz, criticos:['margen','flete_kg','subtotal'], toRowSafe:(c)=>{ const r=cotizRow(c); delete r.subtotal; delete r.flete; delete r.flete_kg; delete r.margen; return r; } },
   insprec:{ get:getInsPrecOv, save:saveInsPrecOv, table:'bio_insprec', toRow:insprecRow, fromRow:rowInsprec },
   formula:{ get:getFormulasExtra, save:saveFormulasExtra, table:'bio_formulas', toRow:formulaRow, fromRow:rowFormula },
   ptmov:{ get:getPtMovs, save:savePtMovs, table:'bio_ptmov', toRow:ptmovRow, fromRow:rowPtmov },
   garantia:{ get:getGarantias, save:saveGarantias, table:'bio_garantias', toRow:garRow, fromRow:rowGar },
   agenda:{ get:getAgenda, save:saveAgenda, table:'bio_agenda', toRow:agRow, fromRow:rowAg, toRowSafe:(a)=>{ const r=agRow(a); delete r.estancia_id; return r; } },
-  venta:{ get:getVentas, save:saveVentas, table:'bio_ventas', toRow:ventaRow, fromRow:rowVenta, toRowSafe:(v)=>{ const r=ventaRow(v); ['comercial','cotiz_id','cotiz_num','items','costo','sin_costeo'].forEach(k=>delete r[k]); return r; } },
+  venta:{ get:getVentas, save:saveVentas, table:'bio_ventas', toRow:ventaRow, fromRow:rowVenta, criticos:['items','costo','cotiz_id'], toRowSafe:(v)=>{ const r=ventaRow(v); ['comercial','cotiz_id','cotiz_num','items','costo','sin_costeo'].forEach(k=>delete r[k]); return r; } },
   compra:{ get:getCompras, save:saveCompras, table:'bio_compras', toRow:compraRow, fromRow:rowCompra },
   sueldo:{ get:getSueldos, save:saveSueldos, table:'bio_sueldos', toRow:sueldoRow, fromRow:rowSueldo },
   cheque:{ get:getCheques, save:saveCheques, table:'bio_cheques', toRow:chequeRow, fromRow:rowCheque },
-  prestamo:{ get:getPrestamos, save:savePrestamos, table:'bio_prestamos', toRow:prestamoRow, fromRow:rowPrestamo, toRowSafe:(p)=>{ const r=prestamoRow(p); delete r.proveedor; return r; } },
+  prestamo:{ get:getPrestamos, save:savePrestamos, table:'bio_prestamos', toRow:prestamoRow, fromRow:rowPrestamo, criticos:['proveedor'], toRowSafe:(p)=>{ const r=prestamoRow(p); delete r.proveedor; return r; } },
 };
 function getPrestamos(){ return getArr('bio:prestamos'); }
 function savePrestamos(a){ setArr('bio:prestamos',a); }
@@ -1207,16 +1141,46 @@ function rowOT(r){ return { id:r.id, num:r.num, fecha:r.fecha, producto_cod:r.pr
 function movRow(m){ return { id:m.id, insumo_c:m.insumo_c||'', insumo_n:m.insumo_n||'', u:m.u||'kg', tipo:m.tipo||'ingreso', cant:m.cant||0, motivo:m.motivo||'', proveedor:m.proveedor||'', costo:m.costo==null?null:m.costo, moneda:m.moneda||'PYG', costo_orig:m.costo_orig==null?null:m.costo_orig, tc:m.tc==null?null:m.tc, ot_id:m.ot_id||'', fecha:m.fecha||null, usuario:m.usuario||'', ts:m.ts||null }; }
 function rowMov(r){ return { id:r.id, insumo_c:r.insumo_c||'', insumo_n:r.insumo_n||'', u:r.u||'kg', tipo:r.tipo, cant:Number(r.cant)||0, motivo:r.motivo||'', proveedor:r.proveedor||'', costo:r.costo, moneda:r.moneda||'PYG', costo_orig:(r.costo_orig!=null?Number(r.costo_orig):null), tc:(r.tc!=null?Number(r.tc):null), ot_id:r.ot_id||'', fecha:r.fecha||'', usuario:r.usuario||'', ts:r.ts, pending:false }; }
 let syncTimer=null;
+// ── Estado de la sincronización ────────────────────────────────────────────
+// Antes todo esto se tragaba con catch(e){} vacío: si la nube rechazaba algo, el
+// usuario veía "guardado" igual y no había forma de enterarse. Ahora se cuenta y se
+// muestra en el encabezado.
+let _syncErrN=0, _syncErrUlt='', _syncCamposPerdidos={};
+function syncFalla(donde, detalle){ _syncErrN++; _syncErrUlt=donde+': '+detalle; try{ pintarConexion(); }catch(e){} }
+function syncOlvidoCampos(tabla, campos){ if(!campos.length) return; _syncCamposPerdidos[tabla]=campos; try{ pintarConexion(); }catch(e){} }
+function syncEstadoTxt(){
+  const tablas=Object.keys(_syncCamposPerdidos);
+  if(tablas.length) return '⚠ Faltan columnas en la nube ('+tablas.join(', ')+') — avisá al administrador';
+  if(_syncErrN) return '⚠ Sincronización con problemas ('+_syncErrN+') — los datos están guardados en el equipo';
+  return null;
+}
 async function cloudPush(name,obj){
   if(!AUTH_ON||!obj) return;
   const d=SYNC_DEFS[name];
   try{
     let r=await sb.upsert(d.table, d.toRow(obj), 'id');
-    if(!Array.isArray(r) && r && (r.code||r.message) && d.toRowSafe){ r=await sb.upsert(d.table, d.toRowSafe(obj), 'id'); }  // reintento sin columnas nuevas (ej. ruc/direccion antes del ALTER)
-    if(Array.isArray(r)){ d.save(d.get().map(x=>x.id===obj.id?{...x,pending:false}:x)); }
-  }catch(e){}
+    let seguro=false;
+    if(!Array.isArray(r) && r && (r.code||r.message) && d.toRowSafe){   // reintento sin columnas nuevas (ej. ruc/direccion antes del ALTER)
+      seguro=true; r=await sb.upsert(d.table, d.toRowSafe(obj), 'id');
+    }
+    if(Array.isArray(r)){
+      if(seguro){
+        // Se subió, pero SIN los campos que la nube todavía no tiene. Hay que saber cuáles.
+        const completo=d.toRow(obj), reducido=d.toRowSafe(obj);
+        const faltan=Object.keys(completo).filter(k=>!(k in reducido));
+        syncOlvidoCampos(d.table, faltan);
+        const criticos=(d.criticos||[]).filter(k=>faltan.includes(k));
+        // Si se perdió algo crítico (ítems, costos, cuotas), NO se marca como sincronizado:
+        // queda pendiente y se vuelve a subir solo en cuanto se corra el ALTER.
+        if(criticos.length){ syncFalla(d.table, 'no se guardaron '+criticos.join(', ')); return; }
+      }
+      d.save(d.get().map(x=>x.id===obj.id?{...x,pending:false}:x));
+    } else if(r && (r.code||r.message)){
+      syncFalla(d.table, r.message||r.code);
+    }
+  }catch(e){ syncFalla(d.table, e.message||'sin conexión'); }
 }
-async function cloudDelete(name,id){ if(!AUTH_ON) return; try{ await sb.del(SYNC_DEFS[name].table,{id}); }catch(e){} }
+async function cloudDelete(name,id){ if(!AUTH_ON) return; try{ await sb.del(SYNC_DEFS[name].table,{id}); }catch(e){ syncFalla(SYNC_DEFS[name].table,'no se pudo borrar en la nube'); } }
 async function cloudPull(name){
   if(!AUTH_ON) return;
   const d=SYNC_DEFS[name];
@@ -1230,7 +1194,35 @@ async function cloudPull(name){
       // else: estaba sincronizado (pending falso) y ya NO está en la nube → lo borraron en otro equipo → se descarta (no reaparece)
     });
     d.save(Object.values(merged));
-  }catch(e){}
+  }catch(e){ syncFalla(d.table, e.message||'sin conexión'); }
+}
+// ── Chequeo de esquema ─────────────────────────────────────────────────────
+// Pregunta a la nube, UNA vez al entrar, si tiene todas las columnas que la app escribe.
+// Sin esto una migración pendiente se nota recién cuando alguien abre el dato en otro
+// equipo y falta: toRowSafe lo sube igual y nadie se entera. `limit=0` no trae filas.
+let _esquemaFaltante={};
+async function verificarEsquema(){
+  if(!AUTH_ON) return {};
+  const falta={};
+  for(const [name,d] of Object.entries(SYNC_DEFS)){
+    let cols; try{ cols=Object.keys(d.toRow({})); }catch(e){ continue; }
+    if(!cols.length) continue;
+    try{
+      const r=await sbRun(`${SUPABASE_URL}/rest/v1/${d.table}?select=${cols.join(',')}&limit=0`,{});
+      if(r.status>=400){ const j=await r.json().catch(()=>null);
+        const m=(j&&j.message)||''; const col=(m.match(/column \S*?\.?(\w+) does not exist/)||[])[1];
+        if(col) (falta[d.table]=falta[d.table]||[]).push(col);
+      }
+    }catch(e){ /* sin conexión: no es un problema de esquema */ }
+  }
+  _esquemaFaltante=falta;
+  const tablas=Object.keys(falta);
+  if(tablas.length){
+    try{ pintarConexion(); }catch(e){}
+    if(typeof esGerente==='function' && esGerente())
+      showToast('⚠ Faltan columnas en la nube: '+tablas.map(t=>t+' ('+falta[t].join(', ')+')').join(' · ')+'. Hay que correr el SQL pendiente.', 9000);
+  }
+  return falta;
 }
 async function cloudPullAll(){ if(!AUTH_ON) return; await cloudPull('clientes'); await cloudPull('estancias'); await cloudPull('visitas'); await cloudPull('ot'); await cloudPull('mov'); await cloudPull('caja'); await cloudPull('viat'); await cloudPull('insumo'); await cloudPull('precio'); await cloudPull('cotiz'); await cloudPull('insprec'); await cloudPull('formula'); await cloudPull('ptmov'); await cloudPull('garantia'); await cloudPull('agenda'); await cloudPull('venta'); await cloudPull('compra'); await cloudPull('sueldo'); await cloudPull('cheque'); await cloudPull('prestamo'); await pullFinCaja(); await pullFinProy(); await pullPricingCfg(); refreshVista(); }
 function refreshVista(){ const act=document.querySelector('.screen.active'); if(!act) return;
@@ -3298,8 +3290,6 @@ function getCompras(){ return getArr('bio:compras'); }
 function saveCompras(a){ setArr('bio:compras',a); }
 function finCondLbl(k){ const c=FIN_CONDS.find(x=>x[0]===k); return c?c[1]:(k||''); }
 function finCondTerms(k){ const c=FIN_CONDS.find(x=>x[0]===k); return c?c[2]:[0]; }
-function _finAddDays(fecha,d){ const dt=new Date((fecha||hoy())+'T00:00:00'); dt.setDate(dt.getDate()+d); const y=dt.getFullYear(),m=String(dt.getMonth()+1).padStart(2,'0'),da=String(dt.getDate()).padStart(2,'0'); return y+'-'+m+'-'+da; }
-function finGenCuotas(fecha,monto,terms){ const n=terms.length||1; const base=Math.round(monto/n); return terms.map((d,i)=>({ n:i+1, venc:_finAddDays(fecha,d), monto:(i===n-1?monto-base*(n-1):base), abonos:[] })); }
 function finCuotaSaldo(cu){ const ab=(cu.abonos||[]).reduce((a,x)=>a+(Number(x.monto)||0),0); return Math.round((Number(cu.monto)||0)-ab); }
 function finSaldo(rec){ return (rec.cuotas||[]).reduce((a,cu)=>a+finCuotaSaldo(cu),0); }
 function finGs(rec,val){ return rec&&rec.moneda==='USD' ? Math.round((val||0)*(Number(rec.tc)||0)) : Math.round(val||0); }
@@ -3308,79 +3298,6 @@ function finMesLbl(ym){ const p=String(ym||'').split('-'); const M=['ene','feb',
 function finGsFmt(v){ return '₲ '+Math.round(v||0).toLocaleString('es-PY'); }
 function ventaRow(v){ return { id:v.id, fecha:v.fecha||null, factura:v.factura||'', cliente:v.cliente||'', cliente_id:v.cliente_id||'', comercial:v.comercial||'', concepto:v.concepto||'', monto:v.monto||0, moneda:v.moneda||'PYG', tc:v.tc||null, cond:v.cond||'contado', cuotas:v.cuotas||[], cotiz_id:v.cotiz_id||'', cotiz_num:(v.cotiz_num!=null?v.cotiz_num:null), items:(v.items||null), costo:(v.costo!=null?v.costo:null), sin_costeo:!!v.sin_costeo, por:v.por||'', ts:v.ts||null }; }
 function rowVenta(r){ let cu=r.cuotas; if(typeof cu==='string'){try{cu=JSON.parse(cu)}catch{cu=[]}} let it=r.items; if(typeof it==='string'){try{it=JSON.parse(it)}catch{it=null}} return { id:r.id, fecha:r.fecha||'', factura:r.factura||'', cliente:r.cliente||'', cliente_id:r.cliente_id||'', comercial:r.comercial||'', concepto:r.concepto||'', monto:Number(r.monto)||0, moneda:r.moneda||'PYG', tc:(r.tc!=null?Number(r.tc):null), cond:r.cond||'contado', cuotas:Array.isArray(cu)?cu:[], cotiz_id:r.cotiz_id||'', cotiz_num:(r.cotiz_num!=null?Number(r.cotiz_num):null), items:(Array.isArray(it)?it:null), costo:(r.costo!=null?Number(r.costo):null), sin_costeo:!!r.sin_costeo, por:r.por||'', ts:r.ts, pending:false }; }
-// ---- Costo real de una venta ----------------------------------------------
-// Costo de producción por kg: la misma cadena que arma el precio pero SIN
-// margen, plazo ni IVA — insumos + merma + mano de obra + bolsa + etiqueta,
-// más gastos administrativos.
-function costoProdKg(f){ const cfg=getCostCfg(); const kgB=plKgBolsa(f);
-  const bruto = costoBaseFormula(f)*(1+(cfg.merma||0)) + cfg.mano_obra + bolsaKgDe(f) + (kgB?cfg.etiqueta_bolsa/kgB:0);
-  return bruto*(1+(cfg.gastos_adm||0)); }
-function formulaDeKey(key){ return PL_FORMULAS.find(f=>precioKey(f)===key)||null; }
-// Comisión efectiva de un documento (cotización/venta). tipo: 'pct' (default) usa un % ; 'monto' un ₲ fijo.
-// val = número crudo del formulario (porcentaje ej. 4, o monto en ₲). Devuelve {tipo, pct, monto}.
-function comisionDoc(tipo, val){ const cfg=getCostCfg();
-  if(tipo==='monto'){ return {tipo:'monto', pct:Number(cfg.comision)||0, monto:Math.round(Number(val)||0)}; }
-  const p=(val!=null&&val!=='')?(Number(val)/100):(Number(cfg.comision)||0);
-  return {tipo:'pct', pct:p, monto:null}; }
-// Desglose de costo CONGELABLE de una línea: separa el costo de producción en sus partes y
-// snapshotea los insumos con su costo unitario del momento. Se guarda tal cual en la venta para
-// que el margen histórico no cambie si después se mueven los precios de insumos.
-function desgloseCostoLinea(f, it, fleteKg, com, cond){ const cfg=getCostCfg();
-  const kg=Number(it.kg)||0; const kgB=Number(it.kg_bolsa)||plKgBolsa(f)||0;
-  const bolsas = it.unidad==='bolsa' ? (Number(it.cantidad)||0) : (kgB?Math.round(kg/kgB):0);
-  const sub=Number(it.subtotal)||0;
-  const merma=cfg.merma||0, adm=cfg.gastos_adm||0;
-  // partes por kg → × kg
-  const insRaw = costoBaseFormula(f)*kg;                    // insumos a precio del momento (sin merma)
-  const insMerma = Math.round(insRaw*(1+merma));            // insumos con merma
-  const cMano  = Math.round((cfg.mano_obra||0)*kg);
-  const cBolsa = Math.round(bolsaKgDe(f)*kg);
-  const cEtiq  = Math.round((kgB?(cfg.etiqueta_bolsa||0)/kgB:0)*kg);
-  const subProd= insMerma+cMano+cBolsa+cEtiq;
-  const cAdm   = Math.round(subProd*adm);                   // gastos administrativos ("otros")
-  const cProd  = subProd+cAdm;                              // = costoProdKg(f)*kg (redondeado)
-  const cFlete = Math.round((Number(fleteKg)||0)*kg);
-  const cCom   = (com&&com.tipo==='monto') ? 0 : Math.round(sub*((com&&com.pct)||0));  // el monto fijo se prorratea aparte
-  const costoTotal = cProd+cFlete+cCom;
-  // informativos (van EN el precio al cliente, no restan margen): financiero e IVA implícitos en el precio
-  const pbase=Number(it.precio_base!=null?it.precio_base:it.precio_kg)||0;             // precio ₲/kg sin flete (con IVA incluido)
-  const iva=cfg.iva||0; const t=plazoMeses(cond||it.cond||''); const pm=cfg.plazo_mes||0;
-  const sinIva = iva? pbase/(1+iva) : pbase; const cIvaKg = pbase - sinIva;
-  const sinFin = (t&&pm)? sinIva/(1+t*pm) : sinIva; const cFinKg = sinIva - sinFin;
-  // detalle de insumos (código, nombre, cantidad, unidad, costo unit, costo total) al precio del momento
-  const insumos=[];
-  (f.ins||[]).forEach(i=>{ if(i.t==='p'){ const cant=Math.round(kg*(i.p/100)*100)/100; const cu=insPrecio(i.c); insumos.push({c:i.c,n:i.n,cant,unidad:'kg',cu,ct:Math.round(cant*cu)}); } });
-  // La Zeolita (INS070) ya viene como componente 'p' en las fórmulas que la usan → entra sola en el bucle de insumos.
-  const bl=(f.ins||[]).find(x=>x.t==='b'&&!/etiq/i.test(x.n||'')); if(bl){ const cu=insPrecio(bl.c); insumos.push({c:bl.c,n:bl.n,cant:bolsas,unidad:'u',cu,ct:Math.round(bolsas*cu)}); }
-  const et=(f.ins||[]).find(x=>x.t==='b'&&/etiq/i.test(x.n||'')); if(et){ const cu=insPrecio(et.c); insumos.push({c:et.c,n:et.n,cant:bolsas,unidad:'u',cu,ct:Math.round(bolsas*cu)}); }
-  return { kg, bolsas, sub, ins_raw:Math.round(insRaw), c_insumos:insMerma, c_mano:cMano, c_bolsa:cBolsa, c_etiqueta:cEtiq, c_adm:cAdm, c_flete:cFlete, c_comision:cCom,
-    c_iva_info:Math.round(cIvaKg*kg), c_financiero_info:Math.round(cFinKg*kg), costo_total:costoTotal,
-    margen: sub-costoTotal, margen_pct: sub? (sub-costoTotal)/sub*100 : 0, insumos }; }
-// Costea las líneas de una cotización. COSTO COMPLETO = producción + flete +
-// comisión. Se calcula UNA vez, al vincular la factura, y queda congelado: si
-// después cambian los precios de insumos, el margen de esta venta no se mueve.
-// Los productos sin fórmula no tienen costo calculable → quedan "sin costeo",
-// que no es lo mismo que costo cero.
-function costearItems(items, fleteKg, com, cond){ const cfg=getCostCfg(); com=com||comisionDoc('pct',null); let total=0, sin=0;
-  let lineas=(items||[]).map(it=>{
-    const f=formulaDeKey(it.key), kg=Number(it.kg)||0, sub=Number(it.subtotal)||0;
-    if(!f){ sin++; return Object.assign({},it,{sin_costeo:true, subtotal:sub}); }
-    const dg=desgloseCostoLinea(f, it, fleteKg, com, cond);
-    total+=dg.costo_total;
-    return Object.assign({},it,{costo_prod:dg.c_insumos+dg.c_mano+dg.c_bolsa+dg.c_etiqueta+dg.c_adm, costo_flete:dg.c_flete, costo_comision:dg.c_comision, costo:dg.costo_total, desglose:dg});
-  });
-  // Comisión monto fijo: se prorratea por subtotal entre las líneas costeadas y se suma al total.
-  if(com.tipo==='monto' && com.monto>0){ const conF=lineas.filter(l=>!l.sin_costeo); const totSub=conF.reduce((a,l)=>a+(Number(l.subtotal)||0),0)||1; let acc=0;
-    conF.forEach((l,i)=>{ const cm=(i===conF.length-1)?(com.monto-acc):Math.round(com.monto*(Number(l.subtotal)||0)/totSub); acc+=cm;
-      l.costo_comision=cm; l.costo=(l.costo||0)+cm; if(l.desglose){ l.desglose.c_comision=cm; l.desglose.costo_total=(l.desglose.costo_total||0)+cm; l.desglose.margen=(Number(l.subtotal)||0)-l.desglose.costo_total; l.desglose.margen_pct=(Number(l.subtotal)||0)?l.desglose.margen/(Number(l.subtotal))*100:0; } });
-    total+=com.monto; }
-  return { lineas, costo_total:total, sin_costeo:sin>0, sin_costeo_n:sin, comision:com }; }
-// ¿Esta cotización ya se facturó? Se deduce de las ventas, no se guarda: así
-// nunca queda un estado colgado si después se borra la factura.
-function cotizFacturada(id,exceptoVenta){ return getVentas().some(v=>v.cotiz_id===id && v.id!==exceptoVenta); }
-function ventaMargen(v){ if(!v || v.costo==null) return null;
-  const neto=Number(v.monto)||0, costo=Number(v.costo)||0;
-  return { costo, margen:neto-costo, pct: neto?(neto-costo)/neto*100:0 }; }
 
 // ── Ver detalle de costos (solo lectura) — cotización o venta ──
 // Para ventas usa el desglose CONGELADO; para cotizaciones (o ventas viejas) lo recalcula al momento.
@@ -4554,7 +4471,12 @@ if('serviceWorker' in navigator){
   navigator.serviceWorker.addEventListener('controllerchange',()=>{ if(_swReloaded||!_hadCtrl) return; _swReloaded=true; location.reload(); });
   window.addEventListener('load',()=>{ navigator.serviceWorker.register('sw.js').catch(()=>{}); });
 }
-function pintarConexion(){ const el=gs('hSub'); if(!el) return; el.textContent = navigator.onLine ? curSub : '📴 Sin conexión — se guarda en el equipo'; }
+function pintarConexion(){ const el=gs('hSub'); if(!el) return;
+  if(!navigator.onLine){ el.textContent='📴 Sin conexión — se guarda en el equipo'; el.style.color=''; return; }
+  const aviso=(typeof syncEstadoTxt==='function')?syncEstadoTxt():null;   // problemas de sync o columnas faltantes
+  el.textContent = aviso || curSub;
+  el.style.color = aviso ? '#b54708' : '';
+}
 window.addEventListener('online',()=>{ pintarConexion(); showToast('✓ Conexión restablecida'); syncTick(true); });   // al volver la señal, sin esperar el piso de tiempo
 window.addEventListener('offline',()=>{ pintarConexion(); showToast('📴 Sin conexión — podés seguir cargando'); });
 

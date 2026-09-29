@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>BioInnova — Pruebas del motor de costeo</title>
+<style>
+  body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;margin:0;padding:18px;background:#f6f7f9;color:#1b2430}
+  h1{font-size:17px;margin:0 0 2px} .sub{font-size:12px;color:#667085;margin-bottom:14px}
+  #res{background:#fff;border:1px solid #e4e7ec;border-radius:10px;padding:14px;font-size:13px}
+  .g{margin:12px 0 4px;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:#475467;border-bottom:1px solid #e4e7ec;padding-bottom:3px}
+  .ok{color:#067647}.no{color:#b42318;font-weight:600}
+  .l{padding:2px 0;display:flex;gap:8px}.l span:first-child{flex:0 0 18px}
+  .d{color:#667085;font-size:11px;margin-left:26px}
+  #tot{margin-top:14px;padding:11px 13px;border-radius:9px;font-weight:700;font-size:14px}
+  .verde{background:#ecfdf3;color:#067647;border:1px solid #abefc6}
+  .rojo{background:#fef3f2;color:#b42318;border:1px solid #fecdca}
+  .nota{background:#fffaeb;border:1px solid #fedf89;border-radius:8px;padding:9px 11px;font-size:12px;color:#93370d;margin-bottom:12px}
+</style>
+</head>
+<body>
+<h1>BioInnova — Pruebas del motor de costeo</h1>
+<div class="sub">Abrir este archivo antes de cada publicación. No se despliega ni entra al service worker.</div>
+<div class="nota">
+  <b>Línea de base.</b> Estas pruebas fijan el comportamiento <b>ACTUAL</b> del sistema, incluidos los
+  errores ya detectados. Las marcadas <b>[E2]</b> describen conducta que <b>debe cambiar</b> en la Etapa 2
+  (IVA fuera del margen · base única de comisión · flete neutro). Cuando se implemente esa etapa,
+  esas pruebas hay que darlas vuelta: son el registro de qué se cambió y por qué.
+</div>
+<div id="res">corriendo…</div>
+
+<script>
+// ── Dobles de prueba ────────────────────────────────────────────────────────
+// costeo.js usa globales que viven en index.html. Acá se reemplazan por valores
+// fijos: las pruebas quedan deterministas y NO se toca el localStorage real de la app.
+const CFG = { merma:0.03, mano_obra:90, bolsa:90, etiqueta_bolsa:331, gastos_adm:0.04,
+              comision:0.04, margen:0.25, margen_sal:0.15, plazo_mes:0.01, iva:0.10, flete_kg:0 };
+const PRECIOS = { X1:1000, X2:2000, B1:2400, E1:300 };
+
+// Fórmula de prueba: 30 kg/bolsa · 60% X1 + 40% X2 · bolsa B1 · etiqueta E1
+const F = { c:'TEST01', n:'Producto de prueba - 30 KG', kg:30, ins:[
+  {t:'p', c:'X1', n:'Insumo uno',  p:60},
+  {t:'p', c:'X2', n:'Insumo dos',  p:40},
+  {t:'b', c:'B1', n:'Bolsa 30 kg'},
+  {t:'b', c:'E1', n:'Etiqueta'} ]};
+
+let PL_FORMULAS = [F];
+let PL_INSUMOS  = [];
+function getArr(){ return []; }
+function setArr(){}
+function getMovs(){ return []; }
+function getVentas(){ return []; }
+function hoy(){ return '2026-09-29'; }
+function pushPricingCfg(){}
+</script>
+
+<script src="js/costeo.js"></script>
+
+<script>
+// Se sobreescriben DESPUÉS de cargar costeo.js: las funciones de adentro resuelven
+// estos nombres en el objeto global al momento de llamarlas, así que toman los dobles.
+window.getCostCfg   = () => Object.assign({}, CFG);
+window.getMargenOv  = () => ({});
+window.getInsPrecOv = () => [];
+window.insPrecio    = (c) => PRECIOS[c] || 0;
+
+// ── Arnés mínimo ────────────────────────────────────────────────────────────
+const OUT=[]; let ok=0, no=0;
+function grupo(t){ OUT.push('<div class="g">'+t+'</div>'); }
+function test(nombre, fn, detalle){
+  try{ fn(); ok++; OUT.push('<div class="l"><span class="ok">✔</span><span>'+nombre+'</span></div>'); }
+  catch(e){ no++; OUT.push('<div class="l"><span class="no">✘</span><span class="no">'+nombre+'</span></div><div class="d">'+e.message+'</div>'); }
+  if(detalle) OUT.push('<div class="d">'+detalle+'</div>');
+}
+function eq(a,b,m){ if(a!==b) throw new Error((m?m+': ':'')+'esperado '+b+', dio '+a); }
+function cerca(a,b,tol,m){ if(Math.abs(a-b)>(tol||0.5)) throw new Error((m?m+': ':'')+'esperado ~'+b+', dio '+a); }
+
+// ── Datos derivados de la fórmula de prueba (calculados a mano) ─────────────
+// costoBase = 0,60×1000 + 0,40×2000                    = 1.400 ₲/kg
+// bolsa/kg  = 2.400 / 30                               =    80 ₲/kg
+// bruto     = 1.400×1,03 + 90 + 80 + 331/30            = 1.623,0333 ₲/kg
+// costoProd = bruto × 1,04                             = 1.687,9547 ₲/kg
+// precio p0 = bruto ×1,04 ×1,25 ×1,04 ×1,10            = 2.414 ₲/kg
+const BRUTO = 1400*1.03 + 90 + 80 + 331/30;
+
+grupo('Plazos y formas de pago');
+test('plazoMeses: contado y créditos simples dan 0/1/2/3', ()=>{
+  eq(plazoMeses('p0'),0); eq(plazoMeses('p30'),1); eq(plazoMeses('p60'),2); eq(plazoMeses('p90'),3);
+});
+test('plazoMeses: multi-pago = promedio de los vencimientos', ()=>{
+  eq(plazoMeses('c2'),1.5); eq(plazoMeses('c3'),2); eq(plazoMeses('c4'),2.5);
+}, '2 pagos → 1,5 meses · 3 pagos → 2 · 4 pagos → 2,5');
+
+grupo('Cuotas');
+test('30/60/90 sobre ₲10.000.000: la suma es EXACTA', ()=>{
+  const cs = finGenCuotas('2026-09-29', 10000000, [30,60,90]);
+  eq(cs.length, 3);
+  eq(cs.reduce((a,c)=>a+c.monto,0), 10000000, 'suma de cuotas');
+}, 'el redondeo del reparto se absorbe en la última cuota');
+test('4 pagos: la suma también es exacta', ()=>{
+  const cs = finGenCuotas('2026-09-29', 10000001, [30,60,90,120]);
+  eq(cs.length, 4);
+  eq(cs.reduce((a,c)=>a+c.monto,0), 10000001, 'suma de cuotas');
+});
+test('los vencimientos caen a 30/60/90 días de la fecha', ()=>{
+  const cs = finGenCuotas('2026-09-29', 900, [30,60,90]);
+  eq(cs[0].venc,'2026-10-29'); eq(cs[1].venc,'2026-11-28'); eq(cs[2].venc,'2026-12-28');
+});
+
+grupo('Costo del producto');
+test('costoBaseFormula: sólo los insumos de %, sin merma', ()=>{
+  eq(costoBaseFormula(F), 1400);
+}, '0,60×1.000 + 0,40×2.000 = 1.400 ₲/kg');
+test('bolsaKgDe: precio real de la bolsa repartido en sus kg', ()=>{
+  eq(bolsaKgDe(F), 80);
+}, '₲2.400 la bolsa ÷ 30 kg = 80 ₲/kg');
+test('costoProdKg: insumos+merma+mano+bolsa+etiqueta, × gastos adm', ()=>{
+  cerca(costoProdKg(F), BRUTO*1.04, 0.01);
+}, '= 1.687,95 ₲/kg · SIN margen, plazo ni IVA');
+test('la merma se aplica SÓLO a los insumos, no a mano de obra ni bolsa', ()=>{
+  const sinMerma = 1400 + 90 + 80 + 331/30;
+  if(Math.abs(BRUTO - sinMerma) < 1) throw new Error('la merma no se está aplicando');
+  cerca(BRUTO - sinMerma, 1400*0.03, 0.01, 'la merma debe ser 3% de 1.400');
+});
+
+grupo('Precio (Margen → Precio)');
+test('precioBaseKg contado reproduce la cadena completa', ()=>{
+  eq(precioBaseKg(F,'p0',0.25), 2414);
+}, 'bruto ×1,04 adm ×1,25 markup ×1,04 comisión ×1,10 IVA');
+test('el orden es correcto: el flete NO entra en la base del IVA', ()=>{
+  const conFlete = precioBaseKg(F,'p0',0.25);
+  eq(conFlete, 2414, 'precioBaseKg no debe recibir ni sumar flete');
+}, 'precioBaseKg devuelve el producto con IVA y sin flete; el flete se suma después');
+test('crédito 90 aplica 3 meses de costo financiero', ()=>{
+  const p0=precioBaseKg(F,'p0',0.25), p90=precioBaseKg(F,'p90',0.25);
+  cerca(p90/p0, 1.03, 0.001, 'p90 debe ser 3% mayor que p0');
+});
+test('un markup mayor da un precio mayor', ()=>{
+  if(!(precioBaseKg(F,'p0',0.30) > precioBaseKg(F,'p0',0.25))) throw new Error('el markup no mueve el precio');
+});
+
+grupo('Comisión');
+test('comisionDoc: porcentaje escrito por el usuario', ()=>{
+  const c = comisionDoc('pct', 4.5); eq(c.tipo,'pct'); eq(c.pct,0.045); eq(c.monto,null);
+});
+test('comisionDoc: vacío → cae al % general de configuración', ()=>{
+  eq(comisionDoc('pct', null).pct, 0.04);
+});
+test('comisionDoc: monto fijo en ₲', ()=>{
+  const c = comisionDoc('monto', 250000); eq(c.tipo,'monto'); eq(c.monto,250000);
+});
+test('[E2] HOY la comisión se cobra sobre el subtotal CON IVA y CON flete', ()=>{
+  const it = item(1000);
+  const dg = desgloseCostoLinea(F, it, 1000, comisionDoc('pct',4), 'p0');
+  eq(dg.c_comision, Math.round(dg.sub*0.04), 'hoy = subtotal bruto × 4%');
+  // la regla de negocio pide: (subtotal − flete) / (1+IVA) × 4%
+  const correcta = Math.round(((dg.sub - dg.c_flete)/1.10)*0.04);
+  if(dg.c_comision === correcta) throw new Error('¡ya está corregido! dar vuelta esta prueba');
+}, '⚠ debe pasar a (precio final − flete) ÷ 1,10 × % — hoy cobra de más');
+
+grupo('Margen');
+function item(fleteKg){
+  const pbase = precioBaseKg(F,'p0',0.25);           // 2.414 (con IVA, sin flete)
+  const ef = pbase + fleteKg;                         // precio final al cliente
+  return { key:'TEST01', nombre:F.n, kg_bolsa:30, precio_base:pbase, precio_kg:ef,
+           unidad:'kg', cantidad:100, kg:100, subtotal:Math.round(100*ef) };
+}
+test('[E2] HOY el margen se calcula sobre el precio CON IVA', ()=>{
+  const dg = desgloseCostoLinea(F, item(0), 0, comisionDoc('pct',4), 'p0');
+  eq(dg.margen, dg.sub - dg.costo_total, 'margen = subtotal bruto − costo');
+  const neto = dg.sub/1.10;
+  if(Math.abs(dg.margen - (neto - dg.costo_total)) < 1) throw new Error('¡ya descuenta el IVA! dar vuelta esta prueba');
+}, '⚠ el IVA no es utilidad: debe pasar a (subtotal − flete) ÷ 1,10 − costo');
+test('el IVA informativo se calcula sobre el producto, sin el flete', ()=>{
+  const dg = desgloseCostoLinea(F, item(1000), 1000, comisionDoc('pct',4), 'p0');
+  const pbase = precioBaseKg(F,'p0',0.25);
+  eq(dg.c_iva_info, Math.round((pbase - pbase/1.10)*100));
+}, 'esto YA está bien: usa precio_base (sin flete), no precio_kg');
+test('[E2] HOY el flete NO es neutro: se le cobra comisión encima', ()=>{
+  const sin = desgloseCostoLinea(F, item(0),    0,    comisionDoc('pct',4), 'p0');
+  const con = desgloseCostoLinea(F, item(1000), 1000, comisionDoc('pct',4), 'p0');
+  if(con.margen === sin.margen) throw new Error('¡ya es neutro! dar vuelta esta prueba: debe pasar a eq(con.margen, sin.margen)');
+  eq(sin.margen - con.margen, Math.round(100000*0.04), 'el faltante debe ser exactamente la comisión sobre el flete');
+}, '⚠ el flete se cancela (ingreso y costo) pero paga comisión → ₲4.000 de margen perdido por cada ₲100.000 de flete. En la Etapa 2 esta prueba pasa a exigir margen IDÉNTICO.');
+test('el flete sí entra a los dos lados (ingreso y costo)', ()=>{
+  const dg = desgloseCostoLinea(F, item(1000), 1000, comisionDoc('pct',4), 'p0');
+  eq(dg.c_flete, 100000, '100 kg × ₲1.000');
+  eq(dg.sub - dg.c_flete, 100*precioBaseKg(F,'p0',0.25), 'el resto del subtotal es producto puro');
+}, 'la neutralidad NO se logra sacándolo de un solo lado: eso sería doble deducción');
+
+grupo('Markup vs Margen');
+test('[E2] el 25% de entrada es MARKUP sobre costo, no margen sobre venta', ()=>{
+  const dg = desgloseCostoLinea(F, item(0), 0, comisionDoc('pct',4), 'p0');
+  const ventaNeta = dg.sub/1.10;
+  const margenReal = (ventaNeta - (dg.costo_total - dg.c_comision + Math.round(ventaNeta*0.04)))/ventaNeta*100;
+  cerca(margenReal, 19.1, 0.6, 'un markup del 25% da ~19,1% de margen sobre venta neta');
+  if(Math.abs(margenReal - 25) < 1) throw new Error('markup y margen no pueden coincidir');
+}, '⚠ el sistema llama "Margen %" a las dos cosas — hay que separarlas en pantalla');
+
+grupo('Desglose: las partes suman el total');
+test('costo_total = producción + flete + comisión', ()=>{
+  const dg = desgloseCostoLinea(F, item(1000), 1000, comisionDoc('pct',4), 'p0');
+  const prod = dg.c_insumos + dg.c_mano + dg.c_bolsa + dg.c_etiqueta + dg.c_adm;
+  eq(dg.costo_total, prod + dg.c_flete + dg.c_comision);
+});
+test('los insumos del snapshot cuadran con el costo de insumos', ()=>{
+  const dg = desgloseCostoLinea(F, item(0), 0, comisionDoc('pct',4), 'p0');
+  const suma = dg.insumos.filter(i=>i.unidad==='kg').reduce((a,i)=>a+i.ct,0);
+  eq(suma, dg.ins_raw, 'los insumos de % suman el costo sin merma');
+}, 'el snapshot guarda código, cantidad y ₲/kg de cada insumo');
+test('costearItems: producto sin fórmula queda "sin costeo", nunca costo cero', ()=>{
+  const r = costearItems([{key:'NO-EXISTE', nombre:'Reventa', kg:10, subtotal:50000}], 0, comisionDoc('pct',4), 'p0');
+  eq(r.sin_costeo, true); eq(r.lineas[0].sin_costeo, true); eq(r.costo_total, 0);
+});
+test('costearItems: comisión en monto fijo se prorratea por subtotal', ()=>{
+  const r = costearItems([item(0), item(0)], 0, comisionDoc('monto', 100000), 'p0');
+  eq(r.lineas[0].costo_comision + r.lineas[1].costo_comision, 100000, 'el prorrateo debe sumar el monto exacto');
+});
+
+grupo('Margen de la venta');
+test('[E2] ventaMargen usa el monto facturado CON IVA', ()=>{
+  const m = ventaMargen({ monto:1100000, costo:800000 });
+  eq(m.margen, 300000, 'hoy: 1.100.000 − 800.000');
+  if(m.margen === 200000) throw new Error('¡ya descuenta el IVA! dar vuelta esta prueba');
+}, '⚠ debería dar ₲200.000 (venta neta 1.000.000 − costo 800.000)');
+test('ventaMargen devuelve null si la venta no tiene costo congelado', ()=>{
+  eq(ventaMargen({ monto:1000000, costo:null }), null);
+}, 'sin costeo ≠ costo cero');
+
+// ── Salida ──────────────────────────────────────────────────────────────────
+document.getElementById('res').innerHTML = OUT.join('') +
+  '<div id="tot" class="'+(no?'rojo':'verde')+'">'+
+  (no ? '✘ '+no+' prueba(s) fallan · '+ok+' pasan'
+      : '✔ Pasan las '+ok+' pruebas')+'</div>';
+</script>
+</body>
+</html>
