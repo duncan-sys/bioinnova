@@ -216,6 +216,44 @@ test('costearItems: comisión en monto fijo se prorratea por subtotal', ()=>{
   eq(r.lineas[0].costo_comision + r.lineas[1].costo_comision, 100000, 'el prorrateo debe sumar el monto exacto');
 });
 
+grupo('Productos inactivos');
+// Fixture aparte: un producto "activo" y uno de la lista de inactivos reales.
+const F_OFF = { c:'NCL003', n:'Producto inactivo de prueba', kg:25, ins:[{t:'p',c:'X1',n:'Insumo uno',p:100}] };
+test('la lista de inactivos es la acordada con el usuario', ()=>{
+  const esperados=['BAL013','BIOSAL06','PRO006-GP','BAL007','PRO010','NCL003','NCL006','NCL007'];
+  eq(PRODUCTOS_INACTIVOS.size, esperados.length, 'cantidad');
+  esperados.forEach(c=>{ if(!PRODUCTOS_INACTIVOS.has(c)) throw new Error('falta '+c); });
+}, 'BAL003 NO está: su canje va después del snapshot de cotizaciones (Etapa 3)');
+test('esActivo: distingue activo de inactivo, sin importar mayúsculas ni espacios', ()=>{
+  eq(esActivo('PRO009'), true); eq(esActivo('NCL003'), false);
+  eq(esActivo(' ncl003 '), false, 'normaliza'); eq(esActivo(''), true, 'sin clave = activo');
+});
+test('un inactivo NO aparece en precioList (cotización, catálogo, lista de precios)', ()=>{
+  PL_FORMULAS=[F, F_OFF];
+  const claves=precioList().map(p=>precioKey(p));
+  if(claves.includes('NCL003')) throw new Error('el inactivo sigue en la lista comercial');
+  if(!claves.includes('TEST01')) throw new Error('se llevó puesto al activo');
+  PL_FORMULAS=[F];
+}, 'es el mismo listado que alimenta el datalist de Nueva Cotización');
+test('INVARIANTE — un inactivo SÍ se resuelve por su clave (históricos intactos)', ()=>{
+  PL_FORMULAS=[F, F_OFF];
+  const f=formulaDeKey('NCL003');
+  if(!f) throw new Error('formulaDeKey no lo encuentra → un documento viejo diría "producto inexistente"');
+  eq(f.c, 'NCL003');
+  PL_FORMULAS=[F];
+}, 'inactivar ≠ borrar: la fórmula sigue entera para costear lo ya emitido');
+test('INVARIANTE — se puede costear una línea histórica de un producto inactivo', ()=>{
+  PL_FORMULAS=[F, F_OFF];
+  const it={ key:'NCL003', nombre:F_OFF.n, kg_bolsa:25, precio_base:2000, precio_kg:2000, unidad:'kg', cantidad:10, kg:10, subtotal:20000 };
+  const dg=desgloseCostoLinea(F_OFF, it, 0, comisionDoc('pct',4), 'p0');
+  if(!(dg.costo_total>0)) throw new Error('no costea');
+  PL_FORMULAS=[F];
+});
+test('el renombre no cambia la clave: los históricos siguen ligando', ()=>{
+  eq(precioKey({c:'PRO009', n:'Bioinnova Creep Feeding A - 30 kg'}), 'PRO009');
+  eq(precioKey({c:'PRO009', n:'Creep Feeding - 30 kg'}), 'PRO009');
+}, 'precioKey usa el código, no el nombre → cambiar el nombre es inocuo');
+
 grupo('Margen de la venta');
 test('[E2] ventaMargen usa el monto facturado CON IVA', ()=>{
   const m = ventaMargen({ monto:1100000, costo:800000 });

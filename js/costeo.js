@@ -87,12 +87,36 @@ function precioBaseKg(f, cond, margen, comPct){ const cfg=getCostCfg(); const ba
   return Math.round( conCom*(1+t*(cfg.plazo_mes||0))*(1+(cfg.iva||0)) ); }                             // × plazo × IVA
 function precioProducto(f){ const kg=plKgBolsa(f); const m=margenDe(f.c, f.n); const fk=(getCostCfg().flete_kg||0);
   return { c:f.c||'', n:f.n, kg, base:Math.round(costoBaseFormula(f)), p0:precioBaseKg(f,'p0',m)+fk, p30:precioBaseKg(f,'p30',m)+fk, p60:precioBaseKg(f,'p60',m)+fk, p90:precioBaseKg(f,'p90',m)+fk, calc:true }; }
+// ── Productos INACTIVOS ─────────────────────────────────────────────────────
+// Productos que dejaron de venderse. NO se borran: la fórmula sigue entera en
+// PL_FORMULAS, así que formulaDeKey() la resuelve y una cotización, venta u OT
+// vieja se abre completa — nunca como "producto inexistente".
+// Lo único que cambia es que desaparecen del lado COMERCIAL: lista de precios,
+// catálogo, nueva cotización y nueva OT.
+// Va como constante y no como fila en la nube a propósito: es una decisión
+// comercial, viaja con el deploy, queda igual en todos los equipos al instante
+// y es rastreable en el historial de git. El overlay `borrado` de bio_precios
+// sigue funcionando en paralelo para las bajas que se hacen desde la app.
+// Para reactivar un producto: sacarlo de esta lista y publicar.
+const PRODUCTOS_INACTIVOS = new Set([
+  'BAL013',      // Terminacion OR - 40kg
+  'BIOSAL06',    // Biosal Ureada - 30kg
+  'PRO006-GP',   // Bioinnovas Secas Extras - GP - 30 KG
+  'BAL007',      // Bioinnova Terminacion 18% - 40 kg
+  'PRO010',      // Bioinnova Creep Feeding B - 30 kg
+  'NCL003',      // Bioinnova Confi 4 AS - 25 KG
+  'NCL006',      // Bioinnova Confi 4 L - 25 KG
+  'NCL007'       // Bioinnova Confi 4 O - 25 KG
+]);
+// ¿Se puede usar este producto en una operación NUEVA?
+function esActivo(key){ return !PRODUCTOS_INACTIVOS.has(String(key||'').trim().toUpperCase()); }
+
 // Lista efectiva: productos con fórmula = calculados; sin fórmula = manual (respaldo) + altas/ediciones del gerente
 function precioList(){ const m={};
   PL_FORMULAS.forEach(f=>{ const p=precioProducto(f); m[precioKey(p)]=p; });
   PL_PRECIOS_MANUAL.forEach(p=>{ const k=precioKey(p); if(!m[k]) m[k]=Object.assign({calc:false},p); });
   getPreciosOv().forEach(o=>{ if(o&&o.borrado){ delete m[precioKey(o)]; return; } const k=precioKey(o); m[k]=Object.assign({},m[k]||{},o,{calc:false}); });
-  return Object.values(m).filter(p=>!p.borrado).sort((a,b)=>String(a.n||'').localeCompare(String(b.n||''))); }
+  return Object.values(m).filter(p=>!p.borrado && esActivo(precioKey(p))).sort((a,b)=>String(a.n||'').localeCompare(String(b.n||''))); }
 
 // ── Cuotas (vencimientos y reparto del monto) ──
 function _finAddDays(fecha,d){ const dt=new Date((fecha||hoy())+'T00:00:00'); dt.setDate(dt.getDate()+d); const y=dt.getFullYear(),m=String(dt.getMonth()+1).padStart(2,'0'),da=String(dt.getDate()).padStart(2,'0'); return y+'-'+m+'-'+da; }
