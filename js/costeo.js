@@ -106,7 +106,9 @@ const PRODUCTOS_INACTIVOS = new Set([
   'PRO010',      // Bioinnova Creep Feeding B - 30 kg
   'NCL003',      // Bioinnova Confi 4 AS - 25 KG
   'NCL006',      // Bioinnova Confi 4 L - 25 KG
-  'NCL007'       // Bioinnova Confi 4 O - 25 KG
+  'NCL007',      // Bioinnova Confi 4 O - 25 KG
+  'BAL003-GP'    // su composición pasó a ser la de BAL003 (30/09/2026). Se conserva la
+                 // fórmula para que las cotizaciones y OT que lo usaron sigan costeando.
 ]);
 // ¿Se puede usar este producto en una operación NUEVA?
 function esActivo(key){ return !PRODUCTOS_INACTIVOS.has(String(key||'').trim().toUpperCase()); }
@@ -129,7 +131,30 @@ function finGenCuotas(fecha,monto,terms){ const n=terms.length||1; const base=Ma
 function costoProdKg(f){ const cfg=getCostCfg(); const kgB=plKgBolsa(f);
   const bruto = costoBaseFormula(f)*(1+(cfg.merma||0)) + cfg.mano_obra + bolsaKgDe(f) + (kgB?cfg.etiqueta_bolsa/kgB:0);
   return bruto*(1+(cfg.gastos_adm||0)); }
-function formulaDeKey(key){ return PL_FORMULAS.find(f=>precioKey(f)===key)||null; }
+// ── Sucesión de fórmulas ───────────────────────────────────────────────────
+// Cuando un código comercial cambia de fórmula, el código sigue siendo el mismo
+// pero la composición no. Los documentos viejos guardan el CÓDIGO, así que sin
+// esto una cotización de antes del cambio se recostearía con la fórmula nueva y
+// mostraría un margen que nunca existió.
+// Acá se anota desde cuándo rige la fórmula nueva y bajo qué código quedó la
+// vieja: un documento anterior a esa fecha se resuelve contra la fórmula que
+// regía ese día. Así "BAL003 histórico" y "BAL003 nuevo" conviven sin tocar un
+// solo documento emitido.
+const FORMULA_SUCESION = {
+  // BAL003 pasó a llevar la composición que tenía BAL003-GP (30/09/2026).
+  // La fórmula anterior se conserva íntegra bajo el código BAL003-M.
+  'BAL003': [ { hasta:'2026-09-30', codigo:'BAL003-M' } ]
+};
+// Fórmula de un código. Con `fecha` (la del documento) devuelve la que regía ese
+// día; sin fecha, la vigente. Un código inactivo también se resuelve: inactivar
+// no borra, así que los históricos nunca quedan huérfanos.
+function formulaDeKey(key, fecha){
+  const k = String(key||'').trim().toUpperCase();
+  const hist = FORMULA_SUCESION[k];
+  if(hist && fecha){ const f = String(fecha).slice(0,10);
+    for(const tramo of hist){ if(f < tramo.hasta){ const ant = PL_FORMULAS.find(x=>precioKey(x)===tramo.codigo); if(ant) return ant; } } }
+  return PL_FORMULAS.find(f2=>precioKey(f2)===k)||null;
+}
 // Comisión efectiva de un documento (cotización/venta). tipo: 'pct' (default) usa un % ; 'monto' un ₲ fijo.
 // val = número crudo del formulario (porcentaje ej. 4, o monto en ₲). Devuelve {tipo, pct, monto}.
 function comisionDoc(tipo, val){ const cfg=getCostCfg();
@@ -175,9 +200,9 @@ function desgloseCostoLinea(f, it, fleteKg, com, cond){ const cfg=getCostCfg();
 // después cambian los precios de insumos, el margen de esta venta no se mueve.
 // Los productos sin fórmula no tienen costo calculable → quedan "sin costeo",
 // que no es lo mismo que costo cero.
-function costearItems(items, fleteKg, com, cond){ const cfg=getCostCfg(); com=com||comisionDoc('pct',null); let total=0, sin=0;
+function costearItems(items, fleteKg, com, cond, fechaDoc){ const cfg=getCostCfg(); com=com||comisionDoc('pct',null); let total=0, sin=0;
   let lineas=(items||[]).map(it=>{
-    const f=formulaDeKey(it.key), kg=Number(it.kg)||0, sub=Number(it.subtotal)||0;
+    const f=formulaDeKey(it.key, fechaDoc), kg=Number(it.kg)||0, sub=Number(it.subtotal)||0;   // fechaDoc: costear con la fórmula que regía ese día
     if(!f){ sin++; return Object.assign({},it,{sin_costeo:true, subtotal:sub}); }
     const dg=desgloseCostoLinea(f, it, fleteKg, com, cond);
     total+=dg.costo_total;
