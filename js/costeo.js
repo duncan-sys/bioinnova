@@ -32,7 +32,14 @@ const PL_INSPREC={
 'INS038':13987,'INS056':7420,'INS040':155,'INS007':1619,'INS050':4367,'INS075':331,'INS019':90,'INS039':20687,'INS048':12602,'INS014':3649,'INS074':565282,'INS049':26305,'INS037':7420,'INS071':11181,'INS058':1175,'INS047':15264,'INS041':1755,'INS046':3407,'INS045':5813,'INS042':1329,'INS002':1303,'INS008':1847,'INS031':2455,'INS001':1078,'INS015':5476,'INS070':4229,'INS030':1936,'INS003':876,'INS027':11327,'INS022':436,'INS076':54900,'INS077':67100,'INS073':156000
 };
 // Parámetros de costeo (globales, editables por el gerente)
-const PL_COSTCFG={ merma:0.03, mano_obra:90, bolsa:90, etiqueta_bolsa:331, gastos_adm:0.04, comision:0.04, margen:0.25, margen_sal:0.15, plazo_mes:0.01, iva:0.10, flete_kg:0, dolar:6100 };
+// `margen` y `margen_sal` son MARGEN SOBRE VENTA NETA (no markup sobre costo).
+// Calibrados el 30/09/2026 para que el precio de CONTADO no se moviera al pasar
+// del markup encadenado a la fórmula inversa: markup 25% ≡ margen 19,08% y
+// markup 15% (sal) ≡ margen 12,39%. Las condiciones a crédito suben hasta ~1%
+// porque antes el recargo por plazo no alcanzaba a cubrir el costo financiero.
+// mano_obra / bolsa / etiqueta_bolsa quedan sólo como respaldo: el costo sale
+// del código que declara la fórmula (ver costoProduccionKg).
+const PL_COSTCFG={ merma:0.03, mano_obra:90, bolsa:90, etiqueta_bolsa:331, gastos_adm:0.04, comision:0.04, margen:0.1908, margen_sal:0.1239, plazo_mes:0.01, iva:0.10, flete_kg:0, dolar:6100 };
 const PL_MARGEN={};   // margen por producto (override); default = cfg.margen
 function getInsPrecOv(){ return getArr('bio:insprec'); }
 function saveInsPrecOv(a){ setArr('bio:insprec',a); }
@@ -57,12 +64,29 @@ function insPrecio(c){ const o=getInsPrecOv().find(x=>x.c===c); if(o) return Num
 function getCostCfg(){ let o={}; try{ o=JSON.parse(localStorage.getItem('bio:costcfg'))||{}; }catch{} return Object.assign({},PL_COSTCFG,o); }
 function saveCostCfg(o){ try{ localStorage.setItem('bio:costcfg',JSON.stringify(o)); }catch{} if(typeof pushPricingCfg==='function') pushPricingCfg(); }
 function getMargenOv(){ let o={}; try{ o=JSON.parse(localStorage.getItem('bio:margen'))||{}; }catch{} return o; }
-function setMargenOv(cod,pct){ const o=getMargenOv(); if(pct==null||pct==='') delete o[cod]; else o[cod]=Number(pct); try{ localStorage.setItem('bio:margen',JSON.stringify(o)); }catch{} if(typeof pushPricingCfg==='function') pushPricingCfg(); }
+// `pct` entra como MARGEN sobre venta (lo que muestra la interfaz) y se guarda
+// convertido a markup, que es el formato histórico de esta clave.
+function setMargenOv(cod,pct){ const o=getMargenOv(); if(pct==null||pct==='') delete o[cod]; else o[cod]=_margenAMarkup(Number(pct)); try{ localStorage.setItem('bio:margen',JSON.stringify(o)); }catch{} if(typeof pushPricingCfg==='function') pushPricingCfg(); }
 // ¿Es sal mineral? (código BIOSAL o nombre lo indica) → usa el margen de sal por defecto
 function esSalMineral(cod,nombre){ return /^BIOSAL/i.test(cod||'') || /biosal|sal\s*mineral/i.test(nombre||''); }
-// Margen de un producto: override individual → default por línea (sal mineral vs general)
-function margenDe(cod, nombre){ const ov=getMargenOv(); if(cod&&ov[cod]!=null) return Number(ov[cod]);
-  const cfg=getCostCfg(); return esSalMineral(cod,nombre) ? (cfg.margen_sal!=null?cfg.margen_sal:0.15) : cfg.margen; }
+// ── Markup ↔ margen sobre venta ─────────────────────────────────────────────
+// Hasta el 30/09/2026 el precio se formaba con markup encadenado:
+//     precio_neto = C × (1+markup) × (1+comisión)
+// Ahora se forma despejando el margen sobre la venta:
+//     precio_neto = C / (1 − margen − comisión − financiación)
+// Los porcentajes por producto guardados en `bio:margen` siguen estando en
+// unidades de MARKUP (así se cargaron), así que se convierten al leerlos y se
+// re-convierten al guardarlos: el formato almacenado no cambia y no hizo falta
+// ninguna migración. La equivalencia se calibra a CONTADO (financiación 0), que
+// es el precio de referencia de la lista.
+function _markupAMargen(mk, com){ const c=(com!=null?com:(getCostCfg().comision||0));
+  return 1 - c - 1/((1+(Number(mk)||0))*(1+c)); }
+function _margenAMarkup(mg, com){ const c=(com!=null?com:(getCostCfg().comision||0));
+  const d=1-(Number(mg)||0)-c; return d>0 ? (1/(d*(1+c)))-1 : 0; }
+// Margen objetivo (sobre venta neta) de un producto: override individual → default por línea
+function margenDe(cod, nombre){ const ov=getMargenOv();
+  if(cod&&ov[cod]!=null) return _markupAMargen(Number(ov[cod]));   // lo guardado es markup
+  const cfg=getCostCfg(); return esSalMineral(cod,nombre) ? (cfg.margen_sal!=null?cfg.margen_sal:0.1239) : cfg.margen; }
 // Costo ₲/kg de la mezcla. Incluye el secuestrante en las fórmulas que llevan
 // maíz: la Zeolítica se agrega al 0,3% POR ENCIMA del 100% y se consume de
 // verdad en la producción, así que su costo tiene que estar en el precio.
@@ -78,13 +102,103 @@ function bolsaKgDe(f){ const cfg=getCostCfg(); const kgB=plKgBolsa(f)||0;
   const l=(f&&f.ins||[]).find(i=>i.t==='b' && !/etiq/i.test(i.n||''));
   const p=l?insPrecio(l.c):0;
   return (p>0 && kgB) ? p/kgB : (cfg.bolsa||0); }
-// Precio ₲/kg (SIN flete) para una condición y un margen dado
-function precioBaseKg(f, cond, margen, comPct){ const cfg=getCostCfg(); const base=costoBaseFormula(f); const kg=plKgBolsa(f);
-  const com=(comPct!=null?comPct:cfg.comision);                                                        // comisión de la cotización (o la general)
-  const bruto = base*(1+(cfg.merma||0)) + cfg.mano_obra + bolsaKgDe(f) + (kg?cfg.etiqueta_bolsa/kg:0);  // TOTAL BRUTO
-  const conCom = bruto*(1+cfg.gastos_adm)*(1+margen)*(1+com);                                           // × gastos adm × margen × comisión
-  const t=plazoMeses(cond);
-  return Math.round( conCom*(1+t*(cfg.plazo_mes||0))*(1+(cfg.iva||0)) ); }                             // × plazo × IVA
+// ═══════════════════════════════════════════════════════════════════════════
+//  MOTOR ÚNICO DE COSTO Y RENTABILIDAD
+//  Todas las pantallas de cotización pasan por acá. Si hay que cambiar una
+//  fórmula, se cambia una sola vez.
+//
+//  Orden comercial (el flete va AL FINAL, después del IVA):
+//     costo producción → margen → comisión → financiación = VENTA NETA
+//     VENTA NETA + IVA = precio del producto c/IVA
+//     precio del producto c/IVA + FLETE = precio final al cliente
+//
+//  Bases: la comisión y la financiación se calculan sobre la VENTA NETA.
+//  Nunca sobre el IVA (no es ingreso) ni sobre el flete (es un pasamanos).
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Costo de producción ₲/kg, con el detalle de dónde salió cada parte.
+// La FÓRMULA manda: mano de obra, bolsa y etiqueta se cobran al precio del
+// código que la fórmula declara. cfg.* queda sólo como respaldo para fórmulas
+// viejas o incompletas, y cuando se usa queda anotado en `fallbacks` para poder
+// auditarlo.
+function costoProduccionKg(f){
+  const cfg=getCostCfg(), kgB=plKgBolsa(f)||0, fallbacks=[];
+  const materias = costoBaseFormula(f);                         // NO se normaliza: las Z suman 100,30 a propósito
+  const conMerma = materias*(1+(cfg.merma||0));                 // la merma es sólo sobre materias primas
+  const lMano = (f&&f.ins||[]).find(i=>i.t==='m');
+  let mano = lMano ? insPrecio(lMano.c) : 0;
+  if(!mano){ mano = cfg.mano_obra||0; fallbacks.push('mano_obra'); }
+  const lBolsa = (f&&f.ins||[]).find(i=>i.t==='b' && !/etiq/i.test(i.n||''));
+  let bolsa = (lBolsa && kgB) ? insPrecio(lBolsa.c)/kgB : 0;
+  if(!bolsa){ bolsa = cfg.bolsa||0; fallbacks.push('bolsa'); }
+  const lEtiq = (f&&f.ins||[]).find(i=>i.t==='b' && /etiq/i.test(i.n||''));
+  let etiq = (lEtiq && kgB) ? insPrecio(lEtiq.c)/kgB : 0;
+  if(!etiq){ etiq = kgB ? (cfg.etiqueta_bolsa||0)/kgB : 0; fallbacks.push('etiqueta'); }
+  const subtotal = conMerma + mano + bolsa + etiq;
+  const adm = subtotal*(cfg.gastos_adm||0);
+  return { materias, merma:conMerma-materias, mano_obra:mano, bolsa, etiqueta:etiq,
+           subtotal_produccion:subtotal, gastos_adm:adm, costo_kg:subtotal+adm, fallbacks };
+}
+
+// Tasa financiera total de una condición de pago (ej. crédito 90 → 3 meses × 1% = 3%).
+function tasaFinanciera(cond){ const cfg=getCostCfg(); return plazoMeses(cond)*(cfg.plazo_mes||0); }
+
+// ── LA función. Dado el precio del producto c/IVA, devuelve toda la economía.
+// Es la única fuente de verdad: la usan el detalle de costos, el lector de
+// margen del modal, los totales y el snapshot.
+function economiaLinea(o){
+  const cfg=getCostCfg();
+  const iva     = (o.iva!=null?o.iva:(cfg.iva||0));
+  const kg      = Number(o.kg)||0;
+  const pProdIva= Number(o.precioProductoIva)||0;          // ₲/kg del producto, IVA incluido, SIN flete
+  const fleteKg = Number(o.fleteKg)||0;
+  const comPct  = (o.comPct!=null?o.comPct:(cfg.comision||0));
+  const finPct  = (o.finPct!=null?o.finPct:tasaFinanciera(o.cond));
+  const costoKg = Number(o.costoProdKg)||0;
+
+  const ventaNetaKg = iva ? pProdIva/(1+iva) : pProdIva;
+  const ivaKg       = pProdIva - ventaNetaKg;
+  const venta_neta  = ventaNetaKg*kg;
+  const comision_gs = venta_neta*comPct;                    // sobre venta neta: ni IVA ni flete
+  const fin_gs      = venta_neta*finPct;                    // ídem
+  const costo_produccion = costoKg*kg;
+  const margen_gs   = venta_neta - costo_produccion - comision_gs - fin_gs;
+  return {
+    version_costeo:2, kg,
+    costo_produccion_kg:costoKg, costo_produccion,
+    venta_neta_kg:ventaNetaKg, venta_neta,
+    iva_pct:iva, iva_gs:ivaKg*kg,
+    precio_producto_iva_kg:pProdIva, precio_producto_iva:pProdIva*kg,
+    flete_kg:fleteKg, flete_gs:fleteKg*kg,
+    precio_final_kg:pProdIva+fleteKg, precio_final:(pProdIva+fleteKg)*kg,
+    comision_pct:comPct, comision_gs,
+    fin_pct:finPct, fin_gs,
+    margen_gs, margen_pct: venta_neta? (margen_gs/venta_neta)*100 : 0,
+    // Markup sobre costo: OTRO indicador, se muestra aparte y nunca se llama margen.
+    markup_pct: costo_produccion? ((venta_neta-costo_produccion)/costo_produccion)*100 : 0
+  };
+}
+
+// ── La inversa: dado un margen objetivo, qué precio hay que cobrar.
+// venta_neta = C / (1 − margen − comisión − financiación)
+function precioDesdeMargen(o){
+  const cfg=getCostCfg();
+  const iva   = (o.iva!=null?o.iva:(cfg.iva||0));
+  const C     = Number(o.costoProdKg)||0;
+  const m     = Number(o.margen)||0;
+  const c     = (o.comPct!=null?o.comPct:(cfg.comision||0));
+  const fi    = (o.finPct!=null?o.finPct:tasaFinanciera(o.cond));
+  const base  = 1 - m - c - fi;
+  if(base<=0) return { error:'Margen + comisión + financiación dejan una base inválida para formar el precio.', base };
+  const ventaNetaKg = C/base;
+  return { venta_neta_kg:ventaNetaKg, precio_producto_iva_kg:ventaNetaKg*(1+iva), base };
+}
+
+// Precio ₲/kg del producto CON IVA y SIN flete, para una condición y un margen objetivo.
+function precioBaseKg(f, cond, margen, comPct){
+  const r = precioDesdeMargen({ costoProdKg:costoProduccionKg(f).costo_kg, margen, comPct, cond });
+  return r.error ? 0 : Math.round(r.precio_producto_iva_kg);
+}
 function precioProducto(f){ const kg=plKgBolsa(f); const m=margenDe(f.c, f.n); const fk=(getCostCfg().flete_kg||0);
   return { c:f.c||'', n:f.n, kg, base:Math.round(costoBaseFormula(f)), p0:precioBaseKg(f,'p0',m)+fk, p30:precioBaseKg(f,'p30',m)+fk, p60:precioBaseKg(f,'p60',m)+fk, p90:precioBaseKg(f,'p90',m)+fk, calc:true }; }
 // ── Productos INACTIVOS ─────────────────────────────────────────────────────
@@ -128,9 +242,9 @@ function finGenCuotas(fecha,monto,terms){ const n=terms.length||1; const base=Ma
 // Costo de producción por kg: la misma cadena que arma el precio pero SIN
 // margen, plazo ni IVA — insumos + merma + mano de obra + bolsa + etiqueta,
 // más gastos administrativos.
-function costoProdKg(f){ const cfg=getCostCfg(); const kgB=plKgBolsa(f);
-  const bruto = costoBaseFormula(f)*(1+(cfg.merma||0)) + cfg.mano_obra + bolsaKgDe(f) + (kgB?cfg.etiqueta_bolsa/kgB:0);
-  return bruto*(1+(cfg.gastos_adm||0)); }
+// Se conserva el nombre por compatibilidad: ahora es un atajo a costoProduccionKg,
+// que toma mano de obra, bolsa y etiqueta del código que declara la fórmula.
+function costoProdKg(f){ return costoProduccionKg(f).costo_kg; }
 // ── Sucesión de fórmulas ───────────────────────────────────────────────────
 // Cuando un código comercial cambia de fórmula, el código sigue siendo el mismo
 // pero la composición no. Los documentos viejos guardan el CÓDIGO, así que sin
@@ -167,34 +281,32 @@ function comisionDoc(tipo, val){ const cfg=getCostCfg();
 function desgloseCostoLinea(f, it, fleteKg, com, cond){ const cfg=getCostCfg();
   const kg=Number(it.kg)||0; const kgB=Number(it.kg_bolsa)||plKgBolsa(f)||0;
   const bolsas = it.unidad==='bolsa' ? (Number(it.cantidad)||0) : (kgB?Math.round(kg/kgB):0);
-  const sub=Number(it.subtotal)||0;
-  const merma=cfg.merma||0, adm=cfg.gastos_adm||0;
-  // partes por kg → × kg
-  const insRaw = costoBaseFormula(f)*kg;                    // insumos a precio del momento (sin merma)
-  const insMerma = Math.round(insRaw*(1+merma));            // insumos con merma
-  const cMano  = Math.round((cfg.mano_obra||0)*kg);
-  const cBolsa = Math.round(bolsaKgDe(f)*kg);
-  const cEtiq  = Math.round((kgB?(cfg.etiqueta_bolsa||0)/kgB:0)*kg);
-  const subProd= insMerma+cMano+cBolsa+cEtiq;
-  const cAdm   = Math.round(subProd*adm);                   // gastos administrativos ("otros")
-  const cProd  = subProd+cAdm;                              // = costoProdKg(f)*kg (redondeado)
-  const cFlete = Math.round((Number(fleteKg)||0)*kg);
-  const cCom   = (com&&com.tipo==='monto') ? 0 : Math.round(sub*((com&&com.pct)||0));  // el monto fijo se prorratea aparte
-  const costoTotal = cProd+cFlete+cCom;
-  // informativos (van EN el precio al cliente, no restan margen): financiero e IVA implícitos en el precio
-  const pbase=Number(it.precio_base!=null?it.precio_base:it.precio_kg)||0;             // precio ₲/kg sin flete (con IVA incluido)
-  const iva=cfg.iva||0; const t=plazoMeses(cond||it.cond||''); const pm=cfg.plazo_mes||0;
-  const sinIva = iva? pbase/(1+iva) : pbase; const cIvaKg = pbase - sinIva;
-  const sinFin = (t&&pm)? sinIva/(1+t*pm) : sinIva; const cFinKg = sinIva - sinFin;
-  // detalle de insumos (código, nombre, cantidad, unidad, costo unit, costo total) al precio del momento
+  const cp = costoProduccionKg(f);
+  // precio_base = ₲/kg del producto CON IVA y SIN flete (el flete se suma después).
+  // En documentos viejos sin precio_base se cae a precio_kg, que sí lo incluye: se descuenta.
+  const fk = Number(fleteKg)||0;
+  const pProdIva = Number(it.precio_base!=null ? it.precio_base : ((Number(it.precio_kg)||0)-fk))||0;
+  const e = economiaLinea({ kg, precioProductoIva:pProdIva, fleteKg:fk, costoProdKg:cp.costo_kg,
+                            comPct:(com&&com.tipo==='monto')?0:((com&&com.pct)||0),   // el monto fijo se prorratea aparte
+                            cond:(cond||it.cond||'') });
+  // Detalle de insumos al precio del momento (código, nombre, cantidad, ₲/u, ₲ total)
   const insumos=[];
   (f.ins||[]).forEach(i=>{ if(i.t==='p'){ const cant=Math.round(kg*(i.p/100)*100)/100; const cu=insPrecio(i.c); insumos.push({c:i.c,n:i.n,cant,unidad:'kg',cu,ct:Math.round(cant*cu)}); } });
-  // La Zeolita (INS070) ya viene como componente 'p' en las fórmulas que la usan → entra sola en el bucle de insumos.
   const bl=(f.ins||[]).find(x=>x.t==='b'&&!/etiq/i.test(x.n||'')); if(bl){ const cu=insPrecio(bl.c); insumos.push({c:bl.c,n:bl.n,cant:bolsas,unidad:'u',cu,ct:Math.round(bolsas*cu)}); }
   const et=(f.ins||[]).find(x=>x.t==='b'&&/etiq/i.test(x.n||'')); if(et){ const cu=insPrecio(et.c); insumos.push({c:et.c,n:et.n,cant:bolsas,unidad:'u',cu,ct:Math.round(bolsas*cu)}); }
-  return { kg, bolsas, sub, ins_raw:Math.round(insRaw), c_insumos:insMerma, c_mano:cMano, c_bolsa:cBolsa, c_etiqueta:cEtiq, c_adm:cAdm, c_flete:cFlete, c_comision:cCom,
-    c_iva_info:Math.round(cIvaKg*kg), c_financiero_info:Math.round(cFinKg*kg), costo_total:costoTotal,
-    margen: sub-costoTotal, margen_pct: sub? (sub-costoTotal)/sub*100 : 0, insumos }; }
+  const lm=(f.ins||[]).find(x=>x.t==='m'); if(lm){ const cu=insPrecio(lm.c); insumos.push({c:lm.c,n:lm.n,cant:kg,unidad:'kg',cu,ct:Math.round(kg*cu)}); }
+  return Object.assign({}, e, {
+    fecha_costeo:new Date().toISOString(), bolsas, fallbacks:cp.fallbacks,
+    // partes del costo de producción, ya multiplicadas por los kg de la línea
+    c_materias:Math.round(cp.materias*kg), c_merma:Math.round(cp.merma*kg), c_mano:Math.round(cp.mano_obra*kg),
+    c_bolsa:Math.round(cp.bolsa*kg), c_etiqueta:Math.round(cp.etiqueta*kg), c_adm:Math.round(cp.gastos_adm*kg),
+    insumos,
+    // Compatibilidad con los snapshots v1 y con el HTML del detalle
+    sub:e.venta_neta, c_insumos:Math.round((cp.materias+cp.merma)*kg), c_flete:e.flete_gs,
+    c_comision:Math.round(e.comision_gs), c_iva_info:Math.round(e.iva_gs),
+    costo_total:Math.round(e.costo_produccion+e.comision_gs+e.fin_gs),
+    margen:Math.round(e.margen_gs), margen_pct:e.margen_pct
+  }); }
 // Costea las líneas de una cotización. COSTO COMPLETO = producción + flete +
 // comisión. Se calcula UNA vez, al vincular la factura, y queda congelado: si
 // después cambian los precios de insumos, el margen de esta venta no se mueve.
@@ -206,14 +318,33 @@ function costearItems(items, fleteKg, com, cond, fechaDoc){ const cfg=getCostCfg
     if(!f){ sin++; return Object.assign({},it,{sin_costeo:true, subtotal:sub}); }
     const dg=desgloseCostoLinea(f, it, fleteKg, com, cond);
     total+=dg.costo_total;
-    return Object.assign({},it,{costo_prod:dg.c_insumos+dg.c_mano+dg.c_bolsa+dg.c_etiqueta+dg.c_adm, costo_flete:dg.c_flete, costo_comision:dg.c_comision, costo:dg.costo_total, desglose:dg});
+    return Object.assign({},it,{costo_prod:Math.round(dg.costo_produccion), costo_flete:dg.c_flete, costo_comision:dg.c_comision, costo:dg.costo_total, desglose:dg});
   });
-  // Comisión monto fijo: se prorratea por subtotal entre las líneas costeadas y se suma al total.
-  if(com.tipo==='monto' && com.monto>0){ const conF=lineas.filter(l=>!l.sin_costeo); const totSub=conF.reduce((a,l)=>a+(Number(l.subtotal)||0),0)||1; let acc=0;
-    conF.forEach((l,i)=>{ const cm=(i===conF.length-1)?(com.monto-acc):Math.round(com.monto*(Number(l.subtotal)||0)/totSub); acc+=cm;
-      l.costo_comision=cm; l.costo=(l.costo||0)+cm; if(l.desglose){ l.desglose.c_comision=cm; l.desglose.costo_total=(l.desglose.costo_total||0)+cm; l.desglose.margen=(Number(l.subtotal)||0)-l.desglose.costo_total; l.desglose.margen_pct=(Number(l.subtotal)||0)?l.desglose.margen/(Number(l.subtotal))*100:0; } });
+  // Comisión en monto fijo: se reparte entre las líneas costeadas a prorrata de la
+  // VENTA NETA de cada una (no del subtotal bruto: el IVA y el flete no generan comisión).
+  if(com.tipo==='monto' && com.monto>0){ const conF=lineas.filter(l=>!l.sin_costeo);
+    const totNeto=conF.reduce((a,l)=>a+((l.desglose&&l.desglose.venta_neta)||0),0)||1; let acc=0;
+    conF.forEach((l,i)=>{ const cm=(i===conF.length-1)?(com.monto-acc):Math.round(com.monto*((l.desglose&&l.desglose.venta_neta)||0)/totNeto); acc+=cm;
+      l.costo_comision=cm; l.costo=(l.costo||0)+cm;
+      if(l.desglose){ const d=l.desglose; d.c_comision=cm; d.comision_gs=cm;
+        d.costo_total=Math.round(d.costo_produccion+cm+d.fin_gs);
+        d.margen_gs=d.venta_neta-d.costo_produccion-cm-d.fin_gs; d.margen=Math.round(d.margen_gs);
+        d.margen_pct=d.venta_neta? (d.margen_gs/d.venta_neta)*100 : 0; } });
     total+=com.monto; }
   return { lineas, costo_total:total, sin_costeo:sin>0, sin_costeo_n:sin, comision:com }; }
+
+// Totales de una cotización a partir de sus líneas ya costeadas.
+// El % global es margen total / venta neta total — NUNCA el promedio de los % de línea.
+function totalesCotiz(lineas){
+  const T={ costo_produccion:0, venta_neta:0, iva_gs:0, precio_producto_iva:0, flete_gs:0,
+            precio_final:0, comision_gs:0, fin_gs:0, margen_gs:0, sin_costeo_n:0 };
+  (lineas||[]).forEach(l=>{ const d=l.desglose; if(!d){ T.sin_costeo_n++; return; }
+    T.costo_produccion+=d.costo_produccion; T.venta_neta+=d.venta_neta; T.iva_gs+=d.iva_gs;
+    T.precio_producto_iva+=d.precio_producto_iva; T.flete_gs+=d.flete_gs; T.precio_final+=d.precio_final;
+    T.comision_gs+=d.comision_gs; T.fin_gs+=d.fin_gs; T.margen_gs+=d.margen_gs; });
+  T.margen_pct = T.venta_neta ? (T.margen_gs/T.venta_neta)*100 : 0;
+  return T;
+}
 // ¿Esta cotización ya se facturó? Se deduce de las ventas, no se guarda: así
 // nunca queda un estado colgado si después se borra la factura.
 function cotizFacturada(id,exceptoVenta){ return getVentas().some(v=>v.cotiz_id===id && v.id!==exceptoVenta); }

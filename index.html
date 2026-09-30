@@ -925,7 +925,7 @@ const visitasDe   =cid=>getVisitas().filter(v=>v.cliente_id===cid);
 // Versión de la app. SUBIR JUNTO CON `CACHE` en sw.js en cada publicación.
 // Es sólo informativa (se muestra en la cabecera) y sirve para saber de un vistazo
 // si un equipo ya tomó el último cambio o quedó con una copia vieja en caché.
-const APP_VERSION = 121;
+const APP_VERSION = 122;
 try{ document.addEventListener('DOMContentLoaded', ()=>{ const v=document.getElementById('verChip'); if(v) v.textContent='v'+APP_VERSION; }); }catch(e){}
 const SUPABASE_URL = 'https://mnuldrgynighabwtulkf.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_uAH-nT2MczSB8m9F4THmdw_T6u77exI';
@@ -1096,7 +1096,7 @@ const SYNC_DEFS = {
   viat:{ get:getRend, save:saveRend, table:'bio_viat', toRow:viatRow, fromRow:rowViat },
   insumo:{ get:getInsumosExtra, save:saveInsumosExtra, table:'bio_insumos', toRow:insuRow, fromRow:rowInsu },
   precio:{ get:getPreciosOv, save:savePreciosOv, table:'bio_precios', toRow:precRow, fromRow:rowPrec },
-  cotiz:{ get:getCotiz, save:saveCotiz, table:'bio_cotiz', toRow:cotizRow, fromRow:rowCotiz, criticos:['margen','flete_kg','subtotal'], toRowSafe:(c)=>{ const r=cotizRow(c); delete r.subtotal; delete r.flete; delete r.flete_kg; delete r.margen; return r; } },
+  cotiz:{ get:getCotiz, save:saveCotiz, table:'bio_cotiz', toRow:cotizRow, fromRow:rowCotiz, criticos:['margen','flete_kg','subtotal','comision_tipo','comision_val','cuotas'], toRowSafe:(c)=>{ const r=cotizRow(c); delete r.subtotal; delete r.flete; delete r.flete_kg; delete r.margen; delete r.comision_tipo; delete r.comision_val; delete r.lugar; delete r.cuotas; return r; } },
   insprec:{ get:getInsPrecOv, save:saveInsPrecOv, table:'bio_insprec', toRow:insprecRow, fromRow:rowInsprec },
   formula:{ get:getFormulasExtra, save:saveFormulasExtra, table:'bio_formulas', toRow:formulaRow, fromRow:rowFormula },
   ptmov:{ get:getPtMovs, save:savePtMovs, table:'bio_ptmov', toRow:ptmovRow, fromRow:rowPtmov },
@@ -1135,8 +1135,9 @@ async function pullPricingCfg(){ if(!AUTH_ON) return; try{ const rows=await sb.q
 async function pushPricingCfg(){ if(!AUTH_ON) return; try{ await sb.upsert('bio_config',{id:'pricing',data:{costcfg:getCostCfg(),margen:getMargenOv()},ts:new Date().toISOString()},'id'); }catch(e){} }
 function precRow(p){ return { id:p.id, c:p.c||'', n:p.n||'', kg:p.kg||null, p0:p.p0||0, p30:p.p30||0, p60:p.p60||0, p90:p.p90||0, borrado:!!p.borrado, ts:p.ts||null }; }
 function rowPrec(r){ return { id:r.id, c:r.c||'', n:r.n||'', kg:Number(r.kg)||0, p0:Number(r.p0)||0, p30:Number(r.p30)||0, p60:Number(r.p60)||0, p90:Number(r.p90)||0, borrado:!!r.borrado, ts:r.ts, pending:false }; }
-function cotizRow(c){ return { id:c.id, num:c.num, fecha:c.fecha||null, cliente:c.cliente||'', cliente_id:c.cliente_id||'', condicion:c.condicion||'p0', moneda:c.moneda||'PYG', dolar:c.dolar||null, validez:c.validez||7, vendedor:c.vendedor||'', items:c.items||[], margen:c.margen||0, subtotal:c.subtotal||0, flete_kg:c.flete_kg||0, flete:c.flete||0, total:c.total||0, obs:c.obs||'', por:c.por||'', ts:c.ts||null }; }
-function rowCotiz(r){ return { id:r.id, num:r.num, fecha:r.fecha||'', cliente:r.cliente||'', cliente_id:r.cliente_id||'', condicion:r.condicion||'p0', moneda:r.moneda||'PYG', dolar:r.dolar, validez:r.validez||7, vendedor:r.vendedor||'', items:(typeof r.items==='string'?(()=>{try{return JSON.parse(r.items)}catch{return[]}})():(r.items||[])), margen:(r.margen!=null?Number(r.margen):null), subtotal:Number(r.subtotal)||0, flete_kg:Number(r.flete_kg)||0, flete:Number(r.flete)||0, total:Number(r.total)||0, obs:r.obs||'', por:r.por||'', ts:r.ts, pending:false }; }
+function cotizRow(c){ return { id:c.id, num:c.num, fecha:c.fecha||null, cliente:c.cliente||'', cliente_id:c.cliente_id||'', condicion:c.condicion||'p0', comision_tipo:c.comision_tipo||'pct', comision_val:(c.comision_val!=null?c.comision_val:null), lugar:c.lugar||'', cuotas:c.cuotas||[], moneda:c.moneda||'PYG', dolar:c.dolar||null, validez:c.validez||7, vendedor:c.vendedor||'', items:c.items||[], margen:c.margen||0, subtotal:c.subtotal||0, flete_kg:c.flete_kg||0, flete:c.flete||0, total:c.total||0, obs:c.obs||'', por:c.por||'', ts:c.ts||null }; }
+function rowCotiz(r){ const _pj=x=>typeof x==='string'?(()=>{try{return JSON.parse(x)}catch{return[]}})():(x||[]);
+ return { id:r.id, num:r.num, fecha:r.fecha||'', cliente:r.cliente||'', cliente_id:r.cliente_id||'', condicion:r.condicion||'p0', comision_tipo:r.comision_tipo||'pct', comision_val:(r.comision_val!=null?Number(r.comision_val):null), lugar:r.lugar||'', cuotas:_pj(r.cuotas), moneda:r.moneda||'PYG', dolar:r.dolar, validez:r.validez||7, vendedor:r.vendedor||'', items:(typeof r.items==='string'?(()=>{try{return JSON.parse(r.items)}catch{return[]}})():(r.items||[])), margen:(r.margen!=null?Number(r.margen):null), subtotal:Number(r.subtotal)||0, flete_kg:Number(r.flete_kg)||0, flete:Number(r.flete)||0, total:Number(r.total)||0, obs:r.obs||'', por:r.por||'', ts:r.ts, pending:false }; }
 function insuRow(i){ return { id:i.id, c:i.c||'', n:i.n||'', prov:i.prov||'', u:i.u||'kg', cat:i.cat||'Otro', ts:i.ts||null }; }
 function rowInsu(r){ return { id:r.id, c:r.c||'', n:r.n||'', prov:r.prov||'', u:r.u||'kg', cat:r.cat||'Otro', ts:r.ts, pending:false }; }
 function viatRow(r){ return { id:r.id, comercial:r.comercial||'', desde:r.desde||null, hasta:r.hasta||null, anticipo:r.anticipo||0, anticipo_fecha:r.anticipo_fecha||null, anticipo_ref:r.anticipo_ref||'', gastos:r.gastos||[], estado:r.estado||'abierta', liq_fecha:r.liq_fecha||null, liq_ref:r.liq_ref||'', por:r.por||'', ts:r.ts||null }; }
@@ -2301,7 +2302,7 @@ function cotizAddLinea(idx){ _czEditIdx=(idx!=null)?idx:null; const ln=_czEditId
    <label class="fl">Producto</label><input id="lnProd" list="lnProdList" placeholder="Elegí un producto" autocomplete="off" value="${ln?esc(ln.nombre):''}" oninput="lnProdChange()"><datalist id="lnProdList">${precioList().map(p=>`<option value="${esc(p.n)}">`).join('')}</datalist>
    <div class="row2"><div><label class="fl">Cantidad</label><input type="number" id="lnCant" inputmode="decimal" value="${ln?ln.cantidad:''}" placeholder="0"></div><div><label class="fl">Unidad</label><select id="lnUnidad"><option value="bolsa" ${!ln||ln.unidad==='bolsa'?'selected':''}>bolsas</option><option value="kg" ${ln&&ln.unidad==='kg'?'selected':''}>kg</option></select></div></div>
    <div style="display:flex;gap:5px;margin:8px 0 4px"><button type="button" id="lnModoM" onclick="lnToggleModo('m')" style="flex:1;font-size:11px;padding:6px 4px;border-radius:6px;cursor:pointer;border:1px solid var(--brand,#2f7d3b);background:var(--brand,#2f7d3b);color:#fff">Margen → precio</button><button type="button" id="lnModoP" onclick="lnToggleModo('p')" style="flex:1;font-size:11px;padding:6px 4px;border-radius:6px;cursor:pointer;border:1px solid var(--gray-300);background:#fff;color:var(--gray-600)">Precio → margen</button></div>
-   <div class="row2"><div><label class="fl">Margen % (de esta línea)</label><input type="number" step="0.1" id="lnMargen" inputmode="decimal" value="${ln&&ln.margen!=null?(ln.margen*100).toFixed(1):''}" oninput="lnOnMargen()"></div><div><label class="fl">Precio final ₲/kg</label><input type="number" id="lnPKg" inputmode="numeric" value="${ln?ln.precio_kg:''}" oninput="lnOnPrecio()"></div></div>
+   <div class="row2"><div><label class="fl">Margen % sobre venta neta</label><input type="number" step="0.1" id="lnMargen" inputmode="decimal" value="${ln&&ln.margen!=null?(ln.margen*100).toFixed(1):''}" oninput="lnOnMargen()"></div><div><label class="fl">Precio producto c/IVA ₲/kg</label><input type="number" id="lnPKg" inputmode="numeric" value="${ln?ln.precio_kg:''}" oninput="lnOnPrecio()"></div></div>
    <div id="lnMgOut" style="font-size:12px;margin-top:2px"></div>
    <div class="row2" style="margin-top:6px"><div><label class="fl">Kg/bolsa</label><input type="number" id="lnKgB" value="${ln?ln.kg_bolsa:''}" oninput="lnMgReadout()"></div><div></div></div>
    <div style="font-size:11px;color:var(--gray-400)">Modo <b>Margen → precio</b>: escribís el margen y sale el precio (default de la línea, ej. Sal Mineral 15%). Modo <b>Precio → margen</b>: escribís el precio final y muestra el margen resultante. Precio según ${COND_LBL[cond]}.</div>
@@ -2324,11 +2325,26 @@ function lnMgReadout(){ const out=gs('lnMgOut'); if(!out) return; const nom=gs('
   const P=num(gs('lnPKg').value)||0; const kgB=num(gs('lnKgB').value)||0;
   if(!f){ out.innerHTML=nom?'<span style="color:var(--gray-400)">Producto sin fórmula: no se calcula el margen.</span>':''; return; }
   if(!P){ out.innerHTML=''; return; }
-  const fleteKg=num(gs('czFlete').value)||0; const com=cotizComActual(); const ef=P+fleteKg;
-  const costoKg=costoProdKg(f)+fleteKg+(com.tipo==='monto'?0:ef*com.pct); const mg=ef-costoKg; const pct=ef?mg/ef*100:0;
-  const col=pct<0?'var(--red)':(pct<10?'var(--amber)':'var(--green)'); const warn=pct<0?' ⚠ margen negativo (pérdida)':(pct<10?' ⚠ margen bajo':'');
-  out.innerHTML='Margen: <b style="color:'+col+'">₲ '+Math.round(mg).toLocaleString('es-PY')+'/kg'+(kgB?' · ₲ '+Math.round(mg*kgB).toLocaleString('es-PY')+'/bolsa':'')+' · '+pct.toFixed(1)+'%</b>'+(warn?'<span style="color:'+col+'">'+warn+'</span>':'')
-    + (com.tipo==='monto'?'<br><span style="color:var(--gray-400)">Comisión fija ₲ aparte (se aplica al total, no a este margen por kg).</span>':''); }
+  // Mismo motor que el detalle de costos y el snapshot: acá no se calcula nada aparte.
+  const fleteKg=num(gs('czFlete').value)||0; const com=cotizComActual(); const cond=gs('czCond').value||'p0';
+  const e=economiaLinea({ kg:1, precioProductoIva:P, fleteKg, costoProdKg:costoProdKg(f),
+                          comPct:(com.tipo==='monto'?0:com.pct), cond });
+  const nf=n=>Math.round(n).toLocaleString('es-PY');
+  const pct=e.margen_pct, col=pct<0?'var(--red)':(pct<10?'var(--amber)':'var(--green)');
+  const warn=pct<0?' ⚠ margen negativo (pérdida)':(pct<10?' ⚠ margen bajo':'');
+  const fila=(l,v,fuerte)=>'<div style="display:flex;justify-content:space-between'+(fuerte?';font-weight:700;border-top:1px solid var(--gray-200)':'')+'"><span style="color:var(--gray-600)">'+l+'</span><span>₲ '+nf(v)+'</span></div>';
+  out.innerHTML=
+      fila('Costo producción/kg', e.costo_produccion_kg)
+    + fila('Venta neta/kg', e.venta_neta_kg)
+    + fila('IVA/kg ('+Math.round(e.iva_pct*100)+'%)', e.iva_gs)
+    + fila('Precio producto c/IVA', e.precio_producto_iva_kg, true)
+    + (fleteKg? fila('Flete/kg', fleteKg) + fila('Precio final cliente', e.precio_final_kg, true) : '')
+    + fila('Comisión '+(e.comision_pct*100).toFixed(1)+'%', e.comision_gs)
+    + fila('Financiación '+(e.fin_pct*100).toFixed(1)+'%', e.fin_gs)
+    + '<div style="display:flex;justify-content:space-between;font-weight:700;border-top:1px solid var(--gray-300);margin-top:2px"><span>Margen real</span><span style="color:'+col+'">₲ '+nf(e.margen_gs)+'/kg'+(kgB?' · ₲ '+nf(e.margen_gs*kgB)+'/bolsa':'')+' · '+pct.toFixed(1)+'%</span></div>'
+    + (warn?'<div style="color:'+col+';font-size:11px">'+warn+'</div>':'')
+    + '<div style="font-size:10px;color:var(--gray-400)">Markup sobre costo '+e.markup_pct.toFixed(1)+'% (otro indicador, no es el margen)</div>'
+    + (com.tipo==='monto'?'<div style="font-size:10px;color:var(--gray-400)">Comisión fija ₲ aparte: se prorratea por venta neta al guardar.</div>':''); }
 // Al elegir/cambiar el producto: setea kg/bolsa y el margen default de su línea, luego calcula el precio
 function lnProdChange(){ const nom=gs('lnProd').value; const f=PL_FORMULAS.find(x=>x.n===nom);
   if(f){ gs('lnKgB').value=plKgBolsa(f); if(_lnModo==='m' && gs('lnMargen')) gs('lnMargen').value=(margenDe(f.c,f.n)*100).toFixed(1); }
@@ -2373,7 +2389,23 @@ function cotizGuardar(imprimir){ if(!puedeVer('cotizaciones')) return;
   const prev=curCotizId?getCotiz().find(x=>x.id===curCotizId):null;
   const comTipo=(gs('czComTipo')&&gs('czComTipo').value)||'pct'; const comVal=(gs('czCom')&&gs('czCom').value!=='')?num(gs('czCom').value):null;
   const cuotas=finGenCuotas(gs('czFecha').value||hoy(), total, FORMA_TERMS[cond]||[0]);   // plan de pagos desde la fecha de la cotización
-  const c={ id:curCotizId||('CZ-'+Date.now()), num:prev?prev.num:cotizNextNum(), fecha:gs('czFecha').value||hoy(), cliente, cliente_id:cli?cli.id:'', condicion:cond, forma_pago:cond, comision_tipo:comTipo, comision_val:comVal, cuotas, moneda:usd?'USD':'PYG', dolar:dol, validez:num(gs('czValidez').value)||7, vendedor:gs('czVendedor').value.trim(), lugar:(gs('czLugar').value||'').trim(), items, margen:null, flete_kg:fleteKg, subtotal:total, flete:0, total, obs:gs('czObs').value.trim(), por:(getSession()&&getSession().nombre)||'', ts:new Date().toISOString(), pending:true };
+  // ── Snapshot económico ───────────────────────────────────────────────────
+  // Se congela el costo del momento dentro de cada ítem para que la rentabilidad de
+  // esta cotización no cambie si mañana se mueve el precio de un insumo.
+  // Un cambio puramente administrativo (obs, lugar, vendedor, validez) NO recongela:
+  // se compara un hash de lo que sí afecta la economía y, si no cambió, se conserva
+  // el costeo original.
+  const _hashEco = JSON.stringify({ it:items.map(i=>[i.key,i.kg,i.precio_base,i.cantidad,i.unidad]), fleteKg, cond, comTipo, comVal });
+  let itemsFinales;
+  if(prev && prev.eco_hash===_hashEco && (prev.items||[]).some(i=>i.desglose)){
+    itemsFinales = prev.items;                                              // sólo cambió algo administrativo
+  } else {
+    itemsFinales = costearItems(items, fleteKg, comisionDoc(comTipo, comVal), cond, gs('czFecha').value||hoy()).lineas;
+  }
+  // `condicion` es la fuente canónica de la forma de pago (es la que tiene columna en la
+  // nube y la que leen todas las pantallas). `forma_pago` era un duplicado exacto que no
+  // se persistía: se elimina.
+  const c={ id:curCotizId||('CZ-'+Date.now()), num:prev?prev.num:cotizNextNum(), fecha:gs('czFecha').value||hoy(), cliente, cliente_id:cli?cli.id:'', condicion:cond, comision_tipo:comTipo, comision_val:comVal, cuotas, moneda:usd?'USD':'PYG', dolar:dol, validez:num(gs('czValidez').value)||7, vendedor:gs('czVendedor').value.trim(), lugar:(gs('czLugar').value||'').trim(), items:itemsFinales, eco_hash:_hashEco, margen:null, flete_kg:fleteKg, subtotal:total, flete:0, total, obs:gs('czObs').value.trim(), por:(getSession()&&getSession().nombre)||'', ts:new Date().toISOString(), pending:true };
   let a=getCotiz(); if(curCotizId){ a=a.map(x=>x.id===curCotizId?c:x); } else a.unshift(c);
   saveCotiz(a); cloudPush('cotiz',c); curCotizId=null; showToast('✓ Cotización guardada'); if(imprimir) cotizPrint(c.id); openCotiz();
 }
@@ -3385,28 +3417,49 @@ function rowVenta(r){ let cu=r.cuotas; if(typeof cu==='string'){try{cu=JSON.pars
 function costoDetItemHtml(it, dg){ const nf=n=>Math.round(Number(n)||0).toLocaleString('es-PY');
   const kgT=nf(dg.kg); const cant=Number(it.cantidad)||0; const cabec=esc(it.nombre)+' — '+cant+' '+(it.unidad==='bolsa'?'bolsa(s) × '+(it.kg_bolsa||'?')+'kg':'kg')+' = '+kgT+' kg · '+nf(it.precio_kg||it.precio_base)+' ₲/kg';
   const row=(l,val,strong)=>'<div style="display:flex;justify-content:space-between;padding:2px 0'+(strong?';border-top:1px solid var(--gray-300);font-weight:700':'')+'"><span'+(strong?'':' style="color:var(--gray-600)"')+'>'+l+'</span><span'+(strong?'':' style="font-weight:600"')+'>₲ '+nf(val)+'</span></div>';
-  let filas=row('Insumos (con merma)', dg.c_insumos)+row('Bolsa / envase', dg.c_bolsa)+row('Etiqueta', dg.c_etiqueta)+row('Mano de obra', dg.c_mano)+row('Gastos administrativos', dg.c_adm)+row('Comisión', dg.c_comision)+row('Entrega (flete)', dg.c_flete)+row('Costo total', dg.costo_total, true);
+  // Se arma de abajo hacia arriba: costo → precio → y recién al final la rentabilidad.
+  let filas=row('Materias primas', dg.c_materias!=null?dg.c_materias:dg.c_insumos)
+    +(dg.c_merma!=null?row('Merma', dg.c_merma):'')
+    +row('Mano de obra', dg.c_mano)+row('Bolsa / envase', dg.c_bolsa)+row('Etiqueta', dg.c_etiqueta)
+    +row('Gastos administrativos', dg.c_adm)
+    +row('Costo de producción', dg.costo_produccion!=null?dg.costo_produccion:dg.costo_total, true);
+  filas+='<div style="height:5px"></div>'
+    +row('Venta neta', dg.venta_neta!=null?dg.venta_neta:dg.sub)
+    +row('IVA'+(dg.iva_pct!=null?' ('+Math.round(dg.iva_pct*100)+'%)':''), dg.iva_gs!=null?dg.iva_gs:dg.c_iva_info)
+    +row('Precio producto c/IVA', dg.precio_producto_iva!=null?dg.precio_producto_iva:0, true)
+    +(dg.flete_gs?row('Flete', dg.flete_gs)+row('Precio final cliente', dg.precio_final, true):'');
   const mgcol=dg.margen<0?'var(--red)':(dg.margen_pct<10?'var(--amber)':'var(--green)');
-  filas+='<div style="display:flex;justify-content:space-between;padding:2px 0"><span style="color:var(--gray-600)">Precio neto</span><span style="font-weight:600">₲ '+nf(dg.sub)+'</span></div>';
-  filas+='<div style="display:flex;justify-content:space-between;padding:2px 0;font-weight:700"><span>Margen</span><span style="color:'+mgcol+'">₲ '+nf(dg.margen)+' · '+dg.margen_pct.toFixed(1)+'%</span></div>';
-  filas+='<div style="font-size:10px;color:var(--gray-400);margin-top:3px">En el precio al cliente (no restan margen): costo financiero ₲ '+nf(dg.c_financiero_info)+' · IVA ₲ '+nf(dg.c_iva_info)+'</div>';
+  filas+='<div style="height:5px"></div>'
+    +row('Comisión'+(dg.comision_pct!=null?' '+(dg.comision_pct*100).toFixed(1)+'%':''), dg.c_comision)
+    +row('Financiación'+(dg.fin_pct!=null?' '+(dg.fin_pct*100).toFixed(1)+'%':''), dg.fin_gs||0);
+  filas+='<div style="display:flex;justify-content:space-between;padding:3px 0;font-weight:700;border-top:1px solid var(--gray-300)"><span>Margen real</span><span style="color:'+mgcol+'">₲ '+nf(dg.margen)+' · '+dg.margen_pct.toFixed(2)+'%</span></div>';
+  if(dg.markup_pct!=null) filas+='<div style="font-size:10px;color:var(--gray-400)">Markup sobre costo '+dg.markup_pct.toFixed(1)+'% — otro indicador, no es el margen</div>';
+  if(dg.fallbacks&&dg.fallbacks.length) filas+='<div style="font-size:10px;color:var(--amber)">⚠ sin código en la fórmula, se usó el valor general: '+dg.fallbacks.join(', ')+'</div>';
   const ins=(dg.insumos||[]).map(x=>'<tr style="border-top:1px solid var(--gray-100)"><td style="color:var(--gray-500);padding:2px 4px">'+esc(x.c)+'</td><td>'+esc(x.n)+'</td><td style="text-align:right">'+nf(x.cant)+' '+x.unidad+'</td><td style="text-align:right">'+nf(x.cu)+'</td><td style="text-align:right;font-weight:600;padding-right:4px">'+nf(x.ct)+'</td></tr>').join('');
   const insTbl=ins?'<div style="font-size:10px;color:var(--gray-500);margin-top:6px">Insumos utilizados</div><table style="width:100%;border-collapse:collapse;font-size:11px"><thead><tr style="color:var(--gray-400)"><th style="text-align:left;padding:2px 4px">Cód.</th><th style="text-align:left">Insumo</th><th style="text-align:right">Cant.</th><th style="text-align:right">₲/u</th><th style="text-align:right;padding-right:4px">₲ total</th></tr></thead><tbody>'+ins+'</tbody></table>':'';
   return '<details style="margin:6px 0;border:1px solid var(--gray-200);border-radius:8px;padding:8px"><summary style="cursor:pointer;font-weight:600;font-size:12px">'+cabec+'</summary><div style="font-size:12px;margin-top:6px">'+filas+insTbl+'</div></details>';
 }
 function verCostoDetalle(tipo, id){ const doc = tipo==='venta' ? getVentas().find(x=>x.id===id) : getCotiz().find(x=>x.id===id); if(!doc){ showToast('No encontrado'); return; }
   const items=doc.items||[]; const fleteKg=doc.flete_kg||0; const com=comisionDoc(doc.comision_tipo, doc.comision_val); const cond=doc.condicion||doc.forma_pago||'';
-  const nf=n=>Math.round(Number(n)||0).toLocaleString('es-PY'); let cuerpo=''; let totCosto=0, totNeto=0, sinF=0;
-  items.forEach(it=>{ const f=formulaDeKey(it.key, doc.fecha); let dg=it.desglose; if(!dg && f) dg=desgloseCostoLinea(f, it, fleteKg, com, cond);   // la fórmula que regía el día del documento
-    if(!dg){ sinF++; totNeto+=Number(it.subtotal)||0; cuerpo+='<div style="margin:6px 0;border:1px dashed var(--gray-300);border-radius:8px;padding:8px;font-size:12px;color:var(--gray-500)">'+esc(it.nombre)+' — sin fórmula, no se puede costear.</div>'; return; }
-    totCosto+=dg.costo_total; totNeto+=dg.sub; cuerpo+=costoDetItemHtml(it, dg); });
-  const mg=totNeto-totCosto; const mgcol=mg<0?'var(--red)':((totNeto?mg/totNeto*100:0)<10?'var(--amber)':'var(--green)');
+  const nf=n=>Math.round(Number(n)||0).toLocaleString('es-PY'); let cuerpo=''; let sinF=0, recalculado=0; const lineas=[];
+  items.forEach(it=>{ const f=formulaDeKey(it.key, doc.fecha); let dg=it.desglose;
+    if(!dg && f){ dg=desgloseCostoLinea(f, it, fleteKg, com, cond); recalculado++; }   // sin snapshot: se recalcula con los precios de HOY
+    if(!dg){ sinF++; cuerpo+='<div style="margin:6px 0;border:1px dashed var(--gray-300);border-radius:8px;padding:8px;font-size:12px;color:var(--gray-500)">'+esc(it.nombre)+' — sin fórmula, no se puede costear.</div>'; return; }
+    lineas.push({desglose:dg}); cuerpo+=costoDetItemHtml(it, dg); });
+  const T=totalesCotiz(lineas);
+  const mgcol=T.margen_gs<0?'var(--red)':(T.margen_pct<10?'var(--amber)':'var(--green)');
   const cabec=(tipo==='venta'?'Venta':'Cotización')+(doc.num?(' N° '+doc.num):(doc.factura?' Fact '+esc(doc.factura):''))+(tipo==='venta'&&doc.cotiz_num?' · Cot '+doc.cotiz_num:'');
+  const tot=(l,v,b)=>'<div style="display:flex;justify-content:space-between;font-size:'+(b?'14':'12')+'px'+(b?';font-weight:700':';color:var(--gray-600)')+'"><span>'+l+'</span><span>₲ '+nf(v)+'</span></div>';
   gs('modalBox').innerHTML='<h3>Detalle de costos</h3><div style="font-size:12px;color:var(--gray-600);margin-bottom:4px">'+esc(cabec)+' · '+esc(doc.cliente||'')+'</div>'
-    +(com.tipo==='monto'?'<div style="font-size:11px;color:var(--gray-500);margin-bottom:4px">Comisión fija de ₲ '+nf(com.monto)+' prorrateada entre los ítems.</div>':'')
+    +(recalculado?'<div style="background:#fffaeb;border:1px solid #fedf89;border-radius:8px;padding:8px 10px;font-size:11px;color:#93370d;margin-bottom:6px">⚠ Costo recalculado con valores actuales — '+(recalculado===items.length?'cotización':recalculado+' ítem(s)')+' sin snapshot histórico. No es necesariamente el costo que tenía el día que se emitió.</div>':'')
+    +(com.tipo==='monto'?'<div style="font-size:11px;color:var(--gray-500);margin-bottom:4px">Comisión fija de ₲ '+nf(com.monto)+' prorrateada por venta neta entre los ítems.</div>':'')
     + cuerpo
-    + '<div style="display:flex;justify-content:space-between;font-size:14px;margin-top:8px;border-top:2px solid var(--gray-300);padding-top:6px"><b>Total costo</b><b>₲ '+nf(totCosto)+'</b></div>'
-    + '<div style="display:flex;justify-content:space-between;font-size:14px"><b>Margen total</b><b style="color:'+mgcol+'">₲ '+nf(mg)+(totNeto?' · '+(mg/totNeto*100).toFixed(1)+'%':'')+'</b></div>'
+    + '<div style="margin-top:8px;border-top:2px solid var(--gray-300);padding-top:6px">'
+    + tot('Total cliente', T.precio_final, true) + tot('Total flete', T.flete_gs) + tot('Total producto c/IVA', T.precio_producto_iva)
+    + tot('Total IVA', T.iva_gs) + tot('Total venta neta', T.venta_neta, true)
+    + '<div style="height:4px"></div>'
+    + tot('Total costo producción', T.costo_produccion) + tot('Total comisión', T.comision_gs) + tot('Total financiación', T.fin_gs)
+    + '<div style="display:flex;justify-content:space-between;font-size:14px;font-weight:700;border-top:1px solid var(--gray-300);padding-top:3px"><span>Margen real</span><span style="color:'+mgcol+'">₲ '+nf(T.margen_gs)+' · '+T.margen_pct.toFixed(2)+'%</span></div></div>'
     + (sinF?'<div style="font-size:11px;color:var(--amber);margin-top:4px">⚠ '+sinF+' ítem(s) sin fórmula quedan fuera del costo.</div>':'')
     + '<button class="btn btn-ghost btn-block" style="margin-top:10px" onclick="cerrarModal()">Cerrar</button>';
   gs('modal').classList.add('show');

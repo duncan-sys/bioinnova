@@ -80,7 +80,7 @@ function cerca(a,b,tol,m){ if(Math.abs(a-b)>(tol||0.5)) throw new Error((m?m+': 
 // bruto     = 1.400×1,03 + 90 + 80 + 331/30            = 1.623,0333 ₲/kg
 // costoProd = bruto × 1,04                             = 1.687,9547 ₲/kg
 // precio p0 = bruto ×1,04 ×1,25 ×1,04 ×1,10            = 2.414 ₲/kg
-const BRUTO = 1400*1.03 + 90 + 80 + 331/30;
+const BRUTO = 1400*1.03 + 90 + 80 + 300/30;   // etiqueta desde el código E1 (300), no desde cfg
 
 grupo('Plazos y formas de pago');
 test('plazoMeses: contado y créditos simples dan 0/1/2/3', ()=>{
@@ -115,24 +115,24 @@ test('bolsaKgDe: precio real de la bolsa repartido en sus kg', ()=>{
 }, '₲2.400 la bolsa ÷ 30 kg = 80 ₲/kg');
 test('costoProdKg: insumos+merma+mano+bolsa+etiqueta, × gastos adm', ()=>{
   cerca(costoProdKg(F), BRUTO*1.04, 0.01);
-}, '= 1.687,95 ₲/kg · SIN margen, plazo ni IVA');
+}, '= 1.686,88 ₲/kg · SIN margen, plazo ni IVA. Mano de obra por respaldo (la fórmula no la declara), bolsa y etiqueta desde su código');
 test('la merma se aplica SÓLO a los insumos, no a mano de obra ni bolsa', ()=>{
-  const sinMerma = 1400 + 90 + 80 + 331/30;
+  const sinMerma = 1400 + 90 + 80 + 300/30;
   if(Math.abs(BRUTO - sinMerma) < 1) throw new Error('la merma no se está aplicando');
   cerca(BRUTO - sinMerma, 1400*0.03, 0.01, 'la merma debe ser 3% de 1.400');
 });
 
 grupo('Precio (Margen → Precio)');
 test('precioBaseKg contado reproduce la cadena completa', ()=>{
-  eq(precioBaseKg(F,'p0',0.25), 2414);
-}, 'bruto ×1,04 adm ×1,25 markup ×1,04 comisión ×1,10 IVA');
+  eq(precioBaseKg(F,'p0',0.25), 2613);
+}, 'costo 1.686,88 ÷ (1−0,25 margen−0,04 comisión) × 1,10 IVA');
 test('el orden es correcto: el flete NO entra en la base del IVA', ()=>{
   const conFlete = precioBaseKg(F,'p0',0.25);
-  eq(conFlete, 2414, 'precioBaseKg no debe recibir ni sumar flete');
+  eq(conFlete, 2613, 'precioBaseKg no debe recibir ni sumar flete');
 }, 'precioBaseKg devuelve el producto con IVA y sin flete; el flete se suma después');
 test('crédito 90 aplica 3 meses de costo financiero', ()=>{
   const p0=precioBaseKg(F,'p0',0.25), p90=precioBaseKg(F,'p90',0.25);
-  cerca(p90/p0, 1.03, 0.001, 'p90 debe ser 3% mayor que p0');
+  cerca(p90/p0, 1.0444, 0.001, 'la financiación va en el denominador, así que pesa algo más que 3%');
 });
 test('un markup mayor da un precio mayor', ()=>{
   if(!(precioBaseKg(F,'p0',0.30) > precioBaseKg(F,'p0',0.25))) throw new Error('el markup no mueve el precio');
@@ -148,14 +148,12 @@ test('comisionDoc: vacío → cae al % general de configuración', ()=>{
 test('comisionDoc: monto fijo en ₲', ()=>{
   const c = comisionDoc('monto', 250000); eq(c.tipo,'monto'); eq(c.monto,250000);
 });
-test('[E2] HOY la comisión se cobra sobre el subtotal CON IVA y CON flete', ()=>{
-  const it = item(1000);
-  const dg = desgloseCostoLinea(F, it, 1000, comisionDoc('pct',4), 'p0');
-  eq(dg.c_comision, Math.round(dg.sub*0.04), 'hoy = subtotal bruto × 4%');
-  // la regla de negocio pide: (subtotal − flete) / (1+IVA) × 4%
-  const correcta = Math.round(((dg.sub - dg.c_flete)/1.10)*0.04);
-  if(dg.c_comision === correcta) throw new Error('¡ya está corregido! dar vuelta esta prueba');
-}, '⚠ debe pasar a (precio final − flete) ÷ 1,10 × % — hoy cobra de más');
+test('✔ la comisión se cobra sobre la venta neta, sin IVA ni flete', ()=>{
+  const dg = desgloseCostoLinea(F, item(1000), 1000, comisionDoc('pct',4), 'p0');
+  eq(dg.c_comision, Math.round(dg.venta_neta*0.04), 'venta neta × 4%');
+  const bruto = Math.round((dg.venta_neta + dg.iva_gs + dg.flete_gs)*0.04);
+  if(dg.c_comision === bruto) throw new Error('volvió a cobrar sobre el bruto');
+}, 'corregido el 30/09/2026; antes cobraba sobre el subtotal con IVA y flete');
 
 grupo('Margen');
 function item(fleteKg){
@@ -164,49 +162,64 @@ function item(fleteKg){
   return { key:'TEST01', nombre:F.n, kg_bolsa:30, precio_base:pbase, precio_kg:ef,
            unidad:'kg', cantidad:100, kg:100, subtotal:Math.round(100*ef) };
 }
-test('[E2] HOY el margen se calcula sobre el precio CON IVA', ()=>{
+test('✔ el margen se calcula sobre la venta neta, sin IVA', ()=>{
   const dg = desgloseCostoLinea(F, item(0), 0, comisionDoc('pct',4), 'p0');
-  eq(dg.margen, dg.sub - dg.costo_total, 'margen = subtotal bruto − costo');
-  const neto = dg.sub/1.10;
-  if(Math.abs(dg.margen - (neto - dg.costo_total)) < 1) throw new Error('¡ya descuenta el IVA! dar vuelta esta prueba');
-}, '⚠ el IVA no es utilidad: debe pasar a (subtotal − flete) ÷ 1,10 − costo');
-test('el IVA informativo se calcula sobre el producto, sin el flete', ()=>{
+  const esperado = dg.venta_neta - dg.costo_produccion - dg.comision_gs - dg.fin_gs;
+  cerca(dg.margen, Math.round(esperado), 1, 'venta neta − costo − comisión − financiación');
+  const conIva = dg.venta_neta + dg.iva_gs - dg.costo_produccion;
+  if(Math.abs(dg.margen - conIva) < 1) throw new Error('el IVA volvió a contar como utilidad');
+}, 'corregido el 30/09/2026');
+test('el IVA se calcula sobre el producto, nunca sobre el flete', ()=>{
   const dg = desgloseCostoLinea(F, item(1000), 1000, comisionDoc('pct',4), 'p0');
   const pbase = precioBaseKg(F,'p0',0.25);
-  eq(dg.c_iva_info, Math.round((pbase - pbase/1.10)*100));
-}, 'esto YA está bien: usa precio_base (sin flete), no precio_kg');
-test('[E2] HOY el flete NO es neutro: se le cobra comisión encima', ()=>{
+  cerca(dg.iva_gs, (pbase - pbase/1.10)*100, 1);
+}, 'el flete se agrega DESPUÉS del IVA: no forma parte de su base');
+test('✔ INVARIANTE — el flete es neutro para el margen', ()=>{
   const sin = desgloseCostoLinea(F, item(0),    0,    comisionDoc('pct',4), 'p0');
   const con = desgloseCostoLinea(F, item(1000), 1000, comisionDoc('pct',4), 'p0');
-  if(con.margen === sin.margen) throw new Error('¡ya es neutro! dar vuelta esta prueba: debe pasar a eq(con.margen, sin.margen)');
-  eq(sin.margen - con.margen, Math.round(100000*0.04), 'el faltante debe ser exactamente la comisión sobre el flete');
-}, '⚠ el flete se cancela (ingreso y costo) pero paga comisión → ₲4.000 de margen perdido por cada ₲100.000 de flete. En la Etapa 2 esta prueba pasa a exigir margen IDÉNTICO.');
-test('el flete sí entra a los dos lados (ingreso y costo)', ()=>{
+  eq(con.margen, sin.margen, 'cobrar flete no puede mover el margen del producto');
+  eq(con.comision_gs, sin.comision_gs, 'ni la comisión');
+}, 'es la prueba que bloquea la doble deducción del flete');
+test('el flete queda FUERA de las cuatro bases', ()=>{
   const dg = desgloseCostoLinea(F, item(1000), 1000, comisionDoc('pct',4), 'p0');
-  eq(dg.c_flete, 100000, '100 kg × ₲1.000');
-  eq(dg.sub - dg.c_flete, 100*precioBaseKg(F,'p0',0.25), 'el resto del subtotal es producto puro');
-}, 'la neutralidad NO se logra sacándolo de un solo lado: eso sería doble deducción');
+  eq(dg.flete_gs, 100000, '100 kg × ₲1.000');
+  cerca(dg.precio_final - dg.precio_producto_iva, 100000, 1, 'se suma al final, después del IVA');
+  eq(dg.costo_total, Math.round(dg.costo_produccion + dg.comision_gs + dg.fin_gs), 'no es un costo: no está adentro');
+}, 'no entra al IVA, ni a la comisión, ni a la financiación, ni al margen');
 
 grupo('Markup vs Margen');
-test('[E2] el 25% de entrada es MARKUP sobre costo, no margen sobre venta', ()=>{
+test('✔ "margen" ahora significa margen sobre venta, y el markup se informa aparte', ()=>{
   const dg = desgloseCostoLinea(F, item(0), 0, comisionDoc('pct',4), 'p0');
-  const ventaNeta = dg.sub/1.10;
-  const margenReal = (ventaNeta - (dg.costo_total - dg.c_comision + Math.round(ventaNeta*0.04)))/ventaNeta*100;
-  cerca(margenReal, 19.1, 0.6, 'un markup del 25% da ~19,1% de margen sobre venta neta');
-  if(Math.abs(margenReal - 25) < 1) throw new Error('markup y margen no pueden coincidir');
-}, '⚠ el sistema llama "Margen %" a las dos cosas — hay que separarlas en pantalla');
+  cerca(dg.margen_pct, 25, 0.05, 'se pidió 25% de margen y eso es lo que da');
+  if(dg.markup_pct==null) throw new Error('falta informar el markup por separado');
+  if(Math.abs(dg.markup_pct - dg.margen_pct) < 1) throw new Error('markup y margen no pueden coincidir');
+}, 'el precio se formó con precioBaseKg(F,"p0",0.25) = margen objetivo del 25%');
+test('markup ↔ margen: la conversión es reversible', ()=>{
+  [0.15,0.25,0.30].forEach(mk=>{ cerca(_margenAMarkup(_markupAMargen(mk)), mk, 0.0001, 'markup '+mk); });
+  cerca(_markupAMargen(0.25)*100, 19.08, 0.02, 'markup 25% ≡ margen 19,08%');
+  cerca(_markupAMargen(0.15)*100, 12.39, 0.02, 'markup 15% (sal) ≡ margen 12,39%');
+});
 
 grupo('Desglose: las partes suman el total');
-test('costo_total = producción + flete + comisión', ()=>{
+test('las partes del costo de producción suman el total', ()=>{
   const dg = desgloseCostoLinea(F, item(1000), 1000, comisionDoc('pct',4), 'p0');
-  const prod = dg.c_insumos + dg.c_mano + dg.c_bolsa + dg.c_etiqueta + dg.c_adm;
-  eq(dg.costo_total, prod + dg.c_flete + dg.c_comision);
+  const partes = dg.c_materias + dg.c_merma + dg.c_mano + dg.c_bolsa + dg.c_etiqueta + dg.c_adm;
+  cerca(partes, dg.costo_produccion, 3, 'materias + merma + mano + bolsa + etiqueta + administrativos');
+  eq(dg.costo_total, Math.round(dg.costo_produccion + dg.comision_gs + dg.fin_gs), 'costo total = producción + comisión + financiación');
 });
-test('los insumos del snapshot cuadran con el costo de insumos', ()=>{
+test('los insumos del snapshot cuadran con el costo de materias primas', ()=>{
   const dg = desgloseCostoLinea(F, item(0), 0, comisionDoc('pct',4), 'p0');
-  const suma = dg.insumos.filter(i=>i.unidad==='kg').reduce((a,i)=>a+i.ct,0);
-  eq(suma, dg.ins_raw, 'los insumos de % suman el costo sin merma');
-}, 'el snapshot guarda código, cantidad y ₲/kg de cada insumo');
+  const suma = dg.insumos.filter(i=>i.unidad==='kg' && i.c!=='M1').reduce((a,i)=>a+i.ct,0);
+  cerca(suma, dg.c_materias, 2, 'los insumos de % suman las materias primas sin merma');
+}, 'el snapshot guarda código, nombre, cantidad, ₲/u y ₲ total de cada insumo');
+test('el snapshot trae todo lo necesario para auditar después', ()=>{
+  const dg = desgloseCostoLinea(F, item(1000), 1000, comisionDoc('pct',4), 'p90');
+  ['version_costeo','fecha_costeo','costo_produccion','venta_neta','iva_pct','iva_gs',
+   'precio_producto_iva','flete_kg','precio_final','comision_pct','comision_gs',
+   'fin_pct','fin_gs','margen_gs','margen_pct','insumos'].forEach(k=>{
+     if(dg[k]===undefined) throw new Error('falta '+k+' en el snapshot'); });
+  eq(dg.version_costeo, 2); cerca(dg.fin_pct, 0.03, 0.0001, 'crédito 90 → 3% guardado');
+});
 test('costearItems: producto sin fórmula queda "sin costeo", nunca costo cero', ()=>{
   const r = costearItems([{key:'NO-EXISTE', nombre:'Reventa', kg:10, subtotal:50000}], 0, comisionDoc('pct',4), 'p0');
   eq(r.sin_costeo, true); eq(r.lineas[0].sin_costeo, true); eq(r.costo_total, 0);
@@ -256,6 +269,115 @@ test('el renombre no cambia la clave: los históricos siguen ligando', ()=>{
   eq(precioKey({c:'PRO009', n:'Bioinnova Creep Feeding A - 30 kg'}), 'PRO009');
   eq(precioKey({c:'PRO009', n:'Creep Feeding - 30 kg'}), 'PRO009');
 }, 'precioKey usa el código, no el nombre → cambiar el nombre es inocuo');
+
+grupo('Motor único: IVA, flete, comisión y financiación');
+// Fixture: kg/bolsa 30 · 60% X1(1000) + 40% X2(2000) · bolsa B1(2400) · etiqueta E1(300) · mano M1(90)
+const F_ECO = { c:'ECO01', n:'Producto motor', kg:30, ins:[
+  {t:'p',c:'X1',n:'Insumo uno',p:60},{t:'p',c:'X2',n:'Insumo dos',p:40},
+  {t:'b',c:'B1',n:'Bolsa 30 kg'},{t:'b',c:'E1',n:'Etiqueta'},{t:'m',c:'M1',n:'Mano de obra'} ]};
+PRECIOS.M1 = 90;
+const CP = () => costoProduccionKg(F_ECO).costo_kg;
+
+test('1· el IVA no aumenta el margen', ()=>{
+  const e=economiaLinea({kg:1, precioProductoIva:1100, fleteKg:0, costoProdKg:800, comPct:0, cond:'p0'});
+  eq(Math.round(e.venta_neta),1000); eq(Math.round(e.iva_gs),100); eq(Math.round(e.margen_gs),200);
+}, 'sobre 1.100 con IVA y costo 800 el margen es 200, no 300');
+test('2· el flete no aumenta el margen', ()=>{
+  const sin=economiaLinea({kg:1, precioProductoIva:1100, fleteKg:0,   costoProdKg:800, comPct:0.04, cond:'p0'});
+  const con=economiaLinea({kg:1, precioProductoIva:1100, fleteKg:500, costoProdKg:800, comPct:0.04, cond:'p0'});
+  eq(Math.round(con.margen_gs), Math.round(sin.margen_gs), 'cobrar flete no mueve el margen');
+});
+test('3· el flete no genera comisión', ()=>{
+  const con=economiaLinea({kg:1, precioProductoIva:1100, fleteKg:500, costoProdKg:800, comPct:0.04, cond:'p0'});
+  eq(Math.round(con.comision_gs), 40, '4% de 1.000, no de 1.600');
+});
+test('4· la comisión porcentual se calcula sobre la venta neta', ()=>{
+  const e=economiaLinea({kg:1, precioProductoIva:3500, fleteKg:350, costoProdKg:0, comPct:0.04, cond:'p0'});
+  cerca(e.venta_neta, 3181.82, 0.02); cerca(e.comision_gs, 127.27, 0.02);
+}, 'tu ejemplo del punto 9');
+['p30','p60','p90'].forEach((c,i)=>{
+  test((5+i)+'· '+c+' genera '+(i+1)+'% financiero', ()=>{
+    cerca(tasaFinanciera(c), (i+1)/100, 0.0001);
+    const e=economiaLinea({kg:1, precioProductoIva:1100, fleteKg:0, costoProdKg:0, comPct:0, cond:c});
+    cerca(e.fin_gs, 1000*(i+1)/100, 0.01);
+  });
+});
+test('8· 30/60 usa plazo promedio de 45 días = 1,5%', ()=>{
+  eq(plazoMeses('c2'),1.5); cerca(tasaFinanciera('c2'),0.015,0.0001);
+});
+test('9· Margen → Precio entrega el margen pedido', ()=>{
+  const r=precioDesdeMargen({costoProdKg:2000, margen:0.20, comPct:0.04, finPct:0.02, iva:0.10});
+  cerca(r.venta_neta_kg, 2702.70, 0.01);
+  const e=economiaLinea({kg:1, precioProductoIva:r.precio_producto_iva_kg, fleteKg:0, costoProdKg:2000, comPct:0.04, finPct:0.02, iva:0.10});
+  cerca(e.comision_gs,108.11,0.02); cerca(e.fin_gs,54.05,0.02); cerca(e.margen_gs,540.54,0.05); cerca(e.margen_pct,20,0.01);
+}, 'tu ejemplo del punto 16, exacto');
+test('10· Precio → Margen recupera el mismo margen (ida y vuelta)', ()=>{
+  [0.10,0.1908,0.25].forEach(m=>{
+    ['p0','p30','c3','p90'].forEach(cond=>{
+      const r=precioDesdeMargen({costoProdKg:CP(), margen:m, cond});
+      const e=economiaLinea({kg:1, precioProductoIva:r.precio_producto_iva_kg, fleteKg:777, costoProdKg:CP(), cond});
+      cerca(e.margen_pct, m*100, 0.01, 'margen '+(m*100)+'% en '+cond);
+    });
+  });
+}, 'con flete distinto de cero, para probar que no contamina');
+test('11· la mano de obra sale de su código en la fórmula', ()=>{
+  eq(costoProduccionKg(F_ECO).mano_obra, 90);
+  if(costoProduccionKg(F_ECO).fallbacks.includes('mano_obra')) throw new Error('usó el valor general');
+});
+test('12· cambiar el precio del código cambia el costo de las cotizaciones nuevas', ()=>{
+  const antes=CP(); PRECIOS.M1=100; const despues=CP(); PRECIOS.M1=90;
+  cerca(despues-antes, 10*1.04, 0.01, 'los 10 ₲ más, con gastos administrativos');
+});
+test('13· la bolsa sale del código de la fórmula', ()=>{
+  eq(costoProduccionKg(F_ECO).bolsa, 2400/30);
+  if(costoProduccionKg(F_ECO).fallbacks.includes('bolsa')) throw new Error('usó el valor general');
+});
+test('14· la etiqueta sale del código de la fórmula', ()=>{
+  eq(costoProduccionKg(F_ECO).etiqueta, 300/30);
+  if(costoProduccionKg(F_ECO).fallbacks.includes('etiqueta')) throw new Error('usó el valor general');
+});
+test('14b· sin código en la fórmula cae al valor general y queda anotado', ()=>{
+  const sinNada={ c:'X', n:'Sin componentes', kg:30, ins:[{t:'p',c:'X1',n:'Insumo uno',p:100}] };
+  const cp=costoProduccionKg(sinNada);
+  ['mano_obra','bolsa','etiqueta'].forEach(k=>{ if(!cp.fallbacks.includes(k)) throw new Error('no anotó '+k); });
+}, 'auditable: el detalle avisa cuándo se usó un respaldo');
+test('15· una fórmula Z de 100,30% no se normaliza', ()=>{
+  const z={ c:'Z', n:'Zeta', kg:30, ins:[{t:'p',c:'X1',n:'uno',p:100},{t:'p',c:'X2',n:'zeolita',p:0.30}] };
+  cerca(costoBaseFormula(z), 100/100*1000 + 0.30/100*2000, 0.01);
+  cerca((z.ins).reduce((a,i)=>a+i.p,0), 100.30, 0.001);
+});
+test('16· el margen global es margen total / venta neta total', ()=>{
+  const mk=(p,c,kg)=>({desglose:economiaLinea({kg, precioProductoIva:p, fleteKg:0, costoProdKg:c, comPct:0, cond:'p0'})});
+  const T=totalesCotiz([ mk(1100,800,1), mk(2200,1000,10) ]);
+  const esperado=T.margen_gs/T.venta_neta*100;
+  cerca(T.margen_pct, esperado, 0.0001);
+  const promSimple=(1100/1.1-800)/(1100/1.1)*100/2 + (2200/1.1-1000)/(2200/1.1)*100/2;
+  if(Math.abs(T.margen_pct-promSimple)<0.01) throw new Error('está promediando los % de línea');
+});
+
+grupo('Regresión con cotizaciones reales');
+test('19· Cotización 79 (OSCAR RAMIREZ) reproduce los números', ()=>{
+  const kg=32800, total=131832000, fk=214;
+  const e=economiaLinea({kg, precioProductoIva:(total/kg)-fk, fleteKg:fk, costoProdKg:90751656/kg, comPct:0.04, cond:'p90'});
+  cerca(e.venta_neta,113466182,10); cerca(e.comision_gs,4538647,10);
+  cerca(e.fin_gs,3403985,10); cerca(e.margen_gs,14771894,20); cerca(e.margen_pct,13.02,0.01);
+});
+test('20· Cotización 80 (Monteverde) reproduce los números', ()=>{
+  const kg=12750, total=58722000, fk=350;
+  const e=economiaLinea({kg, precioProductoIva:(total/kg)-fk, fleteKg:fk, costoProdKg:40318842/kg, comPct:0.04, cond:'p60'});
+  cerca(e.venta_neta,49326818,10); cerca(e.comision_gs,1973073,10);
+  cerca(e.fin_gs,986536,10); cerca(e.margen_gs,6048368,20); cerca(e.margen_pct,12.26,0.01);
+});
+test('validación: margen + comisión + financiación imposibles no forman precio', ()=>{
+  const r=precioDesdeMargen({costoProdKg:1000, margen:0.95, comPct:0.04, finPct:0.03});
+  if(!r.error) throw new Error('debería avisar en vez de calcular');
+});
+test('la calibración dejó quieto el precio de contado', ()=>{
+  const C=CP(), m=getCostCfg().margen, com=getCostCfg().comision;
+  const viejo=C*(1+_margenAMarkup(m,com))*(1+com)*(1+getCostCfg().iva);
+  const nuevo=precioDesdeMargen({costoProdKg:C, margen:m, comPct:com, finPct:0}).precio_producto_iva_kg;
+  cerca(nuevo, viejo, 0.5, 'contado no se mueve');
+}, 'markup 25% ≡ margen 19,08%');
 
 grupo('Canje de fórmula (BAL003)');
 // El caso real: BAL003 cambió de composición el 30/09/2026. La vieja quedó como BAL003-M.
