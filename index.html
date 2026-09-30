@@ -127,7 +127,7 @@ textarea{resize:vertical;min-height:66px}
 <div class="app">
   <div class="hdr">
     <div class="logo" id="hLogo">🐂</div>
-    <div class="htxt"><div class="htitle" id="hTitle">BioInnova</div><div class="hsub" id="hSub">Visitas técnicas a campo</div></div>
+    <div class="htxt"><div class="htitle" id="hTitle">BioInnova <span id="verChip" style="font-size:10px;font-weight:500;color:#94a3b8;letter-spacing:.3px"></span></div><div class="hsub" id="hSub">Visitas técnicas a campo</div></div>
     <div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px">
       <div id="hBack" style="display:none;gap:5px">
         <button class="hback" onclick="navBack()">← Volver</button>
@@ -271,6 +271,7 @@ textarea{resize:vertical;min-height:66px}
     <div id="prodCatWrap">
       <button class="btn btn-primary btn-block" id="btnNuevoProducto" style="margin-bottom:10px;display:none" onclick="productoEditor()">＋ Nuevo producto</button>
       <button class="btn btn-sec btn-block" id="btnDesglosarNuc" style="margin-bottom:10px;display:none;font-size:12px" onclick="desglosarNucleos()">🧬 Desglosar núcleos en fórmulas</button>
+      <button class="btn btn-sec btn-block" id="btnLimpiarOv" style="margin-bottom:10px;display:none;font-size:12px" onclick="limpiarOverrides()">🧹 Revisar ediciones manuales de precio</button>
       <div style="margin-bottom:10px"><input type="search" id="prodBuscar" placeholder="🔎 Buscar producto…" oninput="renderProductosCat()"></div>
       <div class="card"><div class="card-h"><span>Productos terminados</span><span id="prodCount" style="font-weight:500;color:var(--gray-400)"></span></div><div id="prodList"></div></div>
     </div>
@@ -920,6 +921,11 @@ const visitasDe   =cid=>getVisitas().filter(v=>v.cliente_id===cid);
 //  Pegá la URL y la anon key del proyecto Supabase de BioInnova.
 //  Mientras estén vacías, la app funciona SIN login (modo local).
 // ══════════════════════════════════════════════════════════
+// Versión de la app. SUBIR JUNTO CON `CACHE` en sw.js en cada publicación.
+// Es sólo informativa (se muestra en la cabecera) y sirve para saber de un vistazo
+// si un equipo ya tomó el último cambio o quedó con una copia vieja en caché.
+const APP_VERSION = 120;
+try{ document.addEventListener('DOMContentLoaded', ()=>{ const v=document.getElementById('verChip'); if(v) v.textContent='v'+APP_VERSION; }); }catch(e){}
 const SUPABASE_URL = 'https://mnuldrgynighabwtulkf.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_uAH-nT2MczSB8m9F4THmdw_T6u77exI';
 const AUTH_ON = !!(SUPABASE_URL && SUPABASE_KEY);
@@ -2934,12 +2940,78 @@ function openProductos(){ if(!(puedeVer('formulas')||puedeVer('inventario'))){ s
 function prodSetTab(t){ _prodTab=t; const cat=t==='cat', inv=t==='inv', gar=t==='gar';
   gs('prodCatWrap').style.display=cat?'':'none'; gs('prodInvWrap').style.display=inv?'':'none'; if(gs('prodGarWrap')) gs('prodGarWrap').style.display=gar?'':'none';
   gs('prodTabCat').className='btn '+(cat?'btn-primary':'btn-sec'); gs('prodTabInv').className='btn '+(inv?'btn-primary':'btn-sec'); if(gs('prodTabGar')) gs('prodTabGar').className='btn '+(gar?'btn-primary':'btn-sec');
-  if(cat){ const b=gs('btnNuevoProducto'); if(b) b.style.display=puedeEditarFormula()?'':'none'; const bd=gs('btnDesglosarNuc'); if(bd) bd.style.display=puedeEditarFormula()?'':'none'; renderProductosCat(); } else if(inv) renderProductosInv(); else renderProductosGar();
+  if(cat){ const b=gs('btnNuevoProducto'); if(b) b.style.display=puedeEditarFormula()?'':'none'; const bd=gs('btnDesglosarNuc'); if(bd) bd.style.display=puedeEditarFormula()?'':'none'; const bl=gs('btnLimpiarOv'); if(bl) bl.style.display=esGerente()?'':'none'; renderProductosCat(); } else if(inv) renderProductosInv(); else renderProductosGar();
 }
 function renderProductosCat(){ const q=(gs('prodBuscar').value||'').trim().toLowerCase(); let ls=precioList(); if(q) ls=ls.filter(p=>((p.n||'')+' '+(p.c||'')).toLowerCase().includes(q)); if(gs('prodCount')) gs('prodCount').textContent=ls.length+' productos';
   gs('prodList').innerHTML=ls.map(p=>{ const key=precioKey(p); const st=ptStock(key); const fx=tieneFormula(p);
     const gk=garantiaDe(key); const gok=garTieneDatos(gk);
     return `<div class="li" onclick="productoEditor('${encodeURIComponent(key)}')"><div style="min-width:0"><div class="li-t">${esc(p.n)} ${fx?'<span style="font-size:10px;color:var(--green)">fórmula</span>':'<span style="font-size:10px;color:var(--gray-400)">sin fórmula</span>'}</div><div class="li-s">${p.c?esc(p.c)+' · ':''}${p.kg||prodKgBolsa(p)}kg · Contado ${gsFmt(p.p0)}/kg</div></div><div style="display:flex;align-items:center;gap:8px;flex-shrink:0"><button onclick="event.stopPropagation();garVer('${encodeURIComponent(key)}')" title="Nivel de garantía" style="border:none;background:${gok?'var(--green-lt)':'var(--gray-100)'};color:${gok?'var(--green)':'var(--gray-400)'};border-radius:8px;padding:6px 9px;cursor:pointer;font-size:14px">📄</button><div style="text-align:right"><div style="font-weight:700">${st.toLocaleString('es-PY')}</div><div style="font-size:10px;color:var(--gray-400)">bolsas</div></div></div></div>`; }).join('') || '<div class="empty">Sin productos.</div>';
+}
+// ── Revisión de ediciones manuales de precio (bio_precios) ──────────────────
+// Una fila en bio_precios "pisa" al maestro producto por producto. El problema:
+// además de cambiar nombre y precios, pone calc:false → ese producto DEJA de
+// recalcularse cuando cambian los costos de insumos, y queda con el precio
+// congelado del día que se editó, sin que nada lo avise.
+// No todas sobran, así que acá se clasifican y el gerente decide:
+//   · inactivación  → borrado:true. Es el mecanismo de baja. NO tocar.
+//   · producto manual (sin fórmula) → la fila ES el producto. Borrarla lo borra.
+//   · pisa una fórmula → la candidata a limpiar: al quitarla el producto vuelve
+//     a calcularse solo y a tomar el nombre del maestro.
+function _ovClasificar(){
+  const conFormula = {}; PL_FORMULAS.forEach(f=>conFormula[precioKey(f)]=f);
+  return getPreciosOv().map(o=>{
+    const k = precioKey(o), f = conFormula[k];
+    const tipo = o.borrado ? 'baja' : (f ? 'pisa' : 'manual');
+    let detalle = '';
+    if(tipo==='pisa'){
+      const dif = [];
+      if((o.n||'') && (o.n||'') !== (f.n||'')) dif.push('nombre: «'+(o.n||'')+'» en vez de «'+(f.n||'')+'»');
+      const calc = precioProducto(f);
+      if(Number(o.p0)||0) { const d = (Number(o.p0)||0) - (calc.p0||0); if(Math.abs(d) > 1) dif.push('contado ₲'+(Number(o.p0)||0).toLocaleString('es-PY')+' en vez de ₲'+(calc.p0||0).toLocaleString('es-PY')+' calculado'); }
+      detalle = dif.length ? dif.join(' · ') : 'sin diferencias: sólo congela el precio';
+    } else if(tipo==='manual'){ detalle = 'producto sin fórmula: esta fila ES el producto'; }
+    else { detalle = 'producto dado de baja'; }
+    return { id:o.id, key:k, nombre:o.n||'(sin nombre)', tipo, detalle };
+  }).sort((a,b)=>a.tipo.localeCompare(b.tipo) || a.key.localeCompare(b.key));
+}
+function limpiarOverrides(){
+  if(!esGerente()){ showToast('Sólo el gerente'); return; }
+  const filas = _ovClasificar();
+  if(!filas.length){ showToast('No hay ediciones manuales de precio: todo sale del maestro'); return; }
+  const pisan = filas.filter(x=>x.tipo==='pisa');
+  const chip = t => t==='pisa' ? '<span style="background:#fef0c7;color:#93370d;border-radius:4px;padding:1px 5px;font-size:10px">pisa la fórmula</span>'
+              : t==='manual' ? '<span style="background:#e0eaff;color:#1e40af;border-radius:4px;padding:1px 5px;font-size:10px">producto manual</span>'
+              : '<span style="background:#f2f4f7;color:#475467;border-radius:4px;padding:1px 5px;font-size:10px">baja</span>';
+  const html = filas.map(x=>
+    '<div style="border-bottom:1px solid var(--gray-100);padding:7px 2px;display:flex;gap:8px;align-items:flex-start">'
+    + '<div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:600">'+esc(x.key)+' '+chip(x.tipo)+'</div>'
+    + '<div style="font-size:11px;color:var(--gray-500)">'+esc(x.nombre)+'</div>'
+    + '<div style="font-size:10px;color:var(--gray-400)">'+esc(x.detalle)+'</div></div>'
+    + (x.tipo==='pisa' ? '<button class="btn btn-sec" style="font-size:11px;padding:4px 8px" onclick="quitarOverride(\''+encodeURIComponent(x.key)+'\')">Quitar</button>' : '')
+    + '</div>').join('');
+  gs('modalBox').innerHTML = '<h3>Ediciones manuales de precio</h3>'
+    + '<div style="font-size:11px;color:var(--gray-500);margin-bottom:8px">'+filas.length+' fila(s) en la lista de precios pisan al maestro. Quitar una hace que el producto vuelva a calcularse solo y tome el nombre de su fórmula.</div>'
+    + '<div style="max-height:46vh;overflow:auto">'+html+'</div>'
+    + (pisan.length ? '<button class="btn btn-amber btn-block" style="margin-top:10px" onclick="quitarOverridesTodos()">Quitar las '+pisan.length+' que pisan una fórmula</button>' : '')
+    + '<div style="font-size:10px;color:var(--gray-400);margin-top:6px">Las bajas y los productos manuales no se tocan: borrarlos haría desaparecer el producto.</div>'
+    + '<button class="btn btn-ghost btn-block" style="margin-top:8px" onclick="cerrarModal()">Cerrar</button>';
+  gs('modal').classList.add('show');
+}
+function quitarOverride(keyEnc){
+  if(!esGerente()) return;
+  const key = decodeURIComponent(keyEnc);
+  _removePrecioOv(key);
+  showToast('✓ '+key+' vuelve a calcularse desde su fórmula');
+  limpiarOverrides(); renderProductosCat();
+}
+function quitarOverridesTodos(){
+  if(!esGerente()) return;
+  const pisan = _ovClasificar().filter(x=>x.tipo==='pisa');
+  if(!pisan.length) return;
+  if(!confirm('¿Quitar '+pisan.length+' edición(es) manual(es)?\n\nEsos productos vuelven a calcular su precio desde la fórmula y a tomar el nombre del maestro.\nNo se borra ningún producto ni ningún documento.')) return;
+  pisan.forEach(x=>_removePrecioOv(x.key));
+  showToast('✓ '+pisan.length+' producto(s) vuelven al maestro');
+  limpiarOverrides(); renderProductosCat();
 }
 function _removePrecioOv(key){ const ov=getPreciosOv(); const ex=ov.find(o=>precioKey(o)===key); if(ex){ savePreciosOv(ov.filter(o=>o.id!==ex.id)); if(typeof cloudDelete==='function') cloudDelete('precio',ex.id); } }
 function productoEditor(keyEnc){ if(!puedeEditarFormula()){ showToast('Sin permiso'); return; }
