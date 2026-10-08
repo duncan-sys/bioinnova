@@ -946,7 +946,7 @@ const visitasDe   =cid=>getVisitas().filter(v=>v.cliente_id===cid);
 // Versión de la app. SUBIR JUNTO CON `CACHE` en sw.js en cada publicación.
 // Es sólo informativa (se muestra en la cabecera) y sirve para saber de un vistazo
 // si un equipo ya tomó el último cambio o quedó con una copia vieja en caché.
-const APP_VERSION = 123;
+const APP_VERSION = 124;
 try{ document.addEventListener('DOMContentLoaded', ()=>{ const v=document.getElementById('verChip'); if(v) v.textContent='v'+APP_VERSION; }); }catch(e){}
 const SUPABASE_URL = 'https://mnuldrgynighabwtulkf.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_uAH-nT2MczSB8m9F4THmdw_T6u77exI';
@@ -1237,12 +1237,28 @@ function _mtFilaHtml(f,i,esMio){
 }
 
 // ── Editor de metas (solo gerente) ─────────────────────────────────────────
-let _mtEdAnio=0, _mtEdDraft=null;
-function mtEditor(anio){
+// Se carga POR TRAMO, no por año entero: a mitad de año no tiene sentido pedir
+// una meta anual y repartirla sobre meses que ya pasaron. Por defecto, del mes
+// en curso a diciembre; para un año futuro, los 12 meses.
+// Los meses fuera del tramo NO se tocan al guardar.
+const MESES_AB=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+let _mtEdAnio=0, _mtEdDraft=null, _mtEdD=1, _mtEdH=12;
+
+function mtEditor(anio, desde, hasta){
   if(!esGerente()){ showToast('Solo el gerente carga metas'); return; }
+  const hoyP=ymParse(String(hoy()).slice(0,7));
   const p=ymParse(mtYm());
-  _mtEdAnio = Number(anio) || (p?p.a:new Date().getFullYear());
-  // Borrador: todos los comerciales conocidos + los que ya tienen meta ese año.
+  const nuevoAnio = Number(anio) || (p?p.a:hoyP.a);
+  if(nuevoAnio!==_mtEdAnio || desde==null){
+    // Al abrir o al cambiar de año, el tramo se recalcula solo.
+    _mtEdD = (nuevoAnio===hoyP.a) ? hoyP.m : 1;
+    _mtEdH = 12;
+  }
+  if(desde!=null) _mtEdD=Math.max(1,Math.min(12,Number(desde)||1));
+  if(hasta!=null) _mtEdH=Math.max(1,Math.min(12,Number(hasta)||12));
+  if(_mtEdH<_mtEdD) _mtEdH=_mtEdD;
+  _mtEdAnio=nuevoAnio;
+
   const nombres=new Set(comercialesLocal().filter(n=>String(n||'').trim()));
   getMetas().filter(f=>Number(f.anio)===_mtEdAnio).forEach(f=>nombres.add(f.comercial));
   _mtEdDraft=[...nombres].sort((a,b)=>a.localeCompare(b)).map(c=>{
@@ -1251,71 +1267,113 @@ function mtEditor(anio){
   });
   mtEdRender();
 }
+function mtEdRangoSet(cual,val){
+  if(cual==='d') mtEditor(_mtEdAnio, val, null);
+  else mtEditor(_mtEdAnio, null, val);
+}
+function _mtEdMesesRango(){ const a=[]; for(let m=_mtEdD;m<=_mtEdH;m++) a.push(m); return a; }
+function _mtEdTotRango(i){ return _mtEdMesesRango().reduce((a,m)=>a+(Number(_mtEdDraft[i].meses[m-1])||0),0); }
+function _mtEdFueraRango(i){ let s=0; for(let m=1;m<=12;m++){ if(m<_mtEdD||m>_mtEdH) s+=Number(_mtEdDraft[i].meses[m-1])||0; } return s; }
+
 function mtEdRender(){
-  const M=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
   const nf=n=>Math.round(Number(n)||0).toLocaleString('es-PY');
-  const filas=_mtEdDraft.map((d,i)=>{ const tot=d.meses.reduce((a,b)=>a+(Number(b)||0),0);
-    return `<div style="border-bottom:1px solid var(--gray-200);padding:8px 0">
+  const R=_mtEdMesesRango();
+  const hoyP=ymParse(String(hoy()).slice(0,7));
+  const selMes=(cual,val)=>`<select onchange="mtEdRangoSet('${cual}',this.value)" style="font-size:12px;padding:4px 6px">`
+    + MESES_AB.map((lb,k)=>`<option value="${k+1}"${(k+1)===val?' selected':''}>${lb}</option>`).join('')+'</select>';
+
+  const filas=_mtEdDraft.map((d,i)=>{
+    const tot=_mtEdTotRango(i), fuera=_mtEdFueraRango(i);
+    return `<div style="border-bottom:1px solid var(--gray-200);padding:9px 0">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">
         <div style="flex:1;font-size:13px;font-weight:600">${esc(_finComLbl(d.comercial))}</div>
-        <div style="font-size:12px;color:var(--gray-500)">Año: <b id="mtEdTot${i}">₲ ${nf(tot)}</b></div>
+        <div style="font-size:12px;color:var(--gray-500)">Tramo: <b id="mtEdTot${i}">₲ ${nf(tot)}</b></div>
       </div>
+      ${fuera>0?`<div style="font-size:10px;color:var(--gray-400);margin-bottom:5px">Fuera del tramo ya hay cargados ₲ ${nf(fuera)} — no se tocan.</div>`:''}
       <div style="display:flex;gap:5px;margin-bottom:6px">
-        <input type="number" id="mtEdAnual${i}" placeholder="Meta anual ₲" style="flex:1;font-size:12px;padding:5px 7px">
-        <button type="button" class="btn btn-sec" style="font-size:11px;padding:5px 8px" onclick="mtEdRepartir(${i})">Repartir por mes</button>
+        <input type="number" id="mtEdTotal${i}" placeholder="Total del tramo ₲" style="flex:1;font-size:12px;padding:5px 7px">
+        <button type="button" class="btn btn-sec" style="font-size:11px;padding:5px 8px" onclick="mtEdRepartir(${i})">Repartir</button>
         <button type="button" class="btn btn-sec" style="font-size:11px;padding:5px 8px" onclick="mtEdSugerir(${i})">Sugerir</button>
       </div>
       <div id="mtEdHint${i}" style="font-size:10px;color:var(--gray-500);margin-bottom:5px"></div>
-      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px">
-        ${d.meses.map((v,m)=>`<div><label style="font-size:9px;color:var(--gray-400);display:block">${M[m]}</label>
-          <input type="number" value="${Math.round(Number(v)||0)||''}" oninput="mtEdCell(${i},${m},this.value)" style="width:100%;font-size:11px;padding:4px 5px" placeholder="0"></div>`).join('')}
+      <div style="display:grid;grid-template-columns:repeat(${Math.min(4,R.length)},1fr);gap:4px">
+        ${R.map(m=>{ const pas=(_mtEdAnio<hoyP.a)||(_mtEdAnio===hoyP.a&&m<hoyP.m);
+          return `<div><label style="font-size:9px;color:${pas?'var(--gray-300)':'var(--gray-400)'};display:block">${MESES_AB[m-1]}${pas?' ·pasado':''}</label>
+          <input type="number" value="${Math.round(Number(d.meses[m-1])||0)||''}" oninput="mtEdCell(${i},${m},this.value)" style="width:100%;font-size:11px;padding:4px 5px" placeholder="0"></div>`; }).join('')}
       </div></div>`; }).join('');
+
+  const totalEquipo=_mtEdDraft.reduce((a,d,i)=>a+_mtEdTotRango(i),0);
   gs('modalBox').innerHTML=`<h3>Metas de facturación ${_mtEdAnio}</h3>
-    <div style="font-size:11px;color:var(--gray-500);margin-bottom:9px">Montos de <b>facturación con IVA</b>, que es lo que el comercial ve en su factura. «Repartir por mes» usa la estacionalidad real del negocio (octubre pesa 1,33 y noviembre 0,72), así que la meta de noviembre queda más baja a propósito.</div>
-    <div style="display:flex;gap:6px;margin-bottom:9px;align-items:center">
+    <div style="display:flex;gap:6px;margin-bottom:8px;align-items:center">
       <button type="button" class="btn btn-sec" style="font-size:11px;padding:5px 9px" onclick="mtEditor(${_mtEdAnio-1})">← ${_mtEdAnio-1}</button>
       <div style="flex:1;text-align:center;font-weight:700">${_mtEdAnio}</div>
       <button type="button" class="btn btn-sec" style="font-size:11px;padding:5px 9px" onclick="mtEditor(${_mtEdAnio+1})">${_mtEdAnio+1} →</button>
     </div>
-    <div style="max-height:52vh;overflow:auto">${filas||'<div style="color:var(--gray-400);font-size:12px;padding:10px 0">No hay comerciales conocidos todavía. Cargá una venta con comercial y volvé.</div>'}</div>
+    <div style="display:flex;gap:7px;align-items:center;background:var(--gray-100);padding:7px 9px;border-radius:8px;margin-bottom:9px">
+      <span style="font-size:11px;color:var(--gray-600);font-weight:600">Cargar de</span>
+      ${selMes('d',_mtEdD)} <span style="font-size:11px;color:var(--gray-600)">a</span> ${selMes('h',_mtEdH)}
+      <div style="flex:1"></div>
+      <div style="font-size:11px;color:var(--gray-600);text-align:right">Equipo<br><b>₲ ${nf(totalEquipo)}</b></div>
+    </div>
+    <div style="font-size:11px;color:var(--gray-500);margin-bottom:9px">Montos de <b>facturación con IVA</b>. «Repartir» divide el total del tramo entre esos meses según la estacionalidad del negocio (octubre pesa 1,33 y noviembre 0,72), así que noviembre queda más bajo a propósito. Los meses fuera del tramo quedan como están.</div>
+    <div style="max-height:48vh;overflow:auto">${filas||'<div style="color:var(--gray-400);font-size:12px;padding:10px 0">No hay comerciales conocidos todavía. Cargá una venta con comercial y volvé.</div>'}</div>
     <div style="display:flex;gap:7px;margin-top:11px">
       <button class="btn btn-sec" style="flex:1" onclick="cerrarModal()">Cancelar</button>
       <button class="btn btn-primary" style="flex:1" onclick="mtEdGuardar()">Guardar</button>
     </div>`;
   gs('modal').classList.add('show');
 }
-function mtEdCell(i,m,val){ _mtEdDraft[i].meses[m]=Number(val)||0; const t=_mtEdDraft[i].meses.reduce((a,b)=>a+(Number(b)||0),0);
-  const el=gs('mtEdTot'+i); if(el) el.textContent='₲ '+Math.round(t).toLocaleString('es-PY'); }
+function mtEdCell(i,m,val){
+  _mtEdDraft[i].meses[m-1]=Number(val)||0;
+  const el=gs('mtEdTot'+i); if(el) el.textContent='₲ '+Math.round(_mtEdTotRango(i)).toLocaleString('es-PY');
+}
 function mtEdRepartir(i){
-  const anual=Number(gs('mtEdAnual'+i).value)||0;
-  if(anual<=0){ showToast('Poné la meta anual primero'); return; }
-  _mtEdDraft[i].meses=metaRepartirAnual(anual);
+  const total=Number(gs('mtEdTotal'+i).value)||0;
+  if(total<=0){ showToast('Poné el total del tramo primero'); return; }
+  const R=_mtEdMesesRango();
+  const idx=R.map(m=>metaIdx(m));
+  const suma=idx.reduce((a,b)=>a+b,0)||R.length;
+  let acum=0;
+  R.forEach((m,k)=>{
+    const v = (k===R.length-1) ? Math.round(total)-acum : Math.round(total*idx[k]/suma);
+    _mtEdDraft[i].meses[m-1]=v; acum+=v;
+  });
   mtEdRender();
-  const el=gs('mtEdAnual'+i); if(el) el.value=anual;
+  const el=gs('mtEdTotal'+i); if(el) el.value=total;
 }
 function mtEdSugerir(i){
   const com=_mtEdDraft[i].comercial;
-  const hasta = _mtEdAnio===new Date().getFullYear() ? String(hoy()).slice(0,7) : ymDe(_mtEdAnio,1);
+  const hoyP=ymParse(String(hoy()).slice(0,7));
+  const hasta = _mtEdAnio>=hoyP.a ? String(hoy()).slice(0,7) : ymDe(_mtEdAnio,1);
   const s=sugerirMetaAnual(getVentas(),com,{hastaYm:hasta,meses:6,crecimiento:0},_finComDe,finGs);
   const nf=n=>Math.round(Number(n)||0).toLocaleString('es-PY');
-  if(!s.meses_usados){ gs('mtEdHint'+i).innerHTML='<span style="color:#b54708">Sin historial de ventas para sugerir. Cargá la meta a mano (para un comercial nuevo, lo acordado: ₲200 a 250 millones mensuales).</span>'; return; }
-  gs('mtEdAnual'+i).value=s.anual;
-  gs('mtEdHint'+i).innerHTML=`Nivel desestacionalizado de los últimos ${s.meses_usados} mes(es) con venta: <b>₲ ${nf(s.nivel)}</b>/mes → anual <b>₲ ${nf(s.anual)}</b> sin crecimiento. Subí el número si querés exigir más y tocá «Repartir por mes».`;
+  if(!s.meses_usados){
+    gs('mtEdHint'+i).innerHTML='<span style="color:#b54708">Sin historial de ventas para sugerir. Cargalo a mano (para un comercial nuevo, lo acordado: ₲200 a 250 millones mensuales).</span>';
+    return;
+  }
+  // El tramo pesa según la estacionalidad de SUS meses, no según cuántos son.
+  const peso=_mtEdMesesRango().reduce((a,m)=>a+metaIdx(m),0);
+  const sug=Math.round(s.nivel*peso);
+  gs('mtEdTotal'+i).value=sug;
+  gs('mtEdHint'+i).innerHTML=`Nivel desestacionalizado de los últimos ${s.meses_usados} mes(es) con venta: <b>₲ ${nf(s.nivel)}</b>/mes. Para ${MESES_AB[_mtEdD-1]}–${MESES_AB[_mtEdH-1]} (peso estacional ${peso.toFixed(2)}) sale <b>₲ ${nf(sug)}</b> sin crecimiento. Subilo si querés exigir más y tocá «Repartir».`;
 }
 function mtEdGuardar(){
   const act=getMetas(); const ts=Date.now(); const subir=[];
   _mtEdDraft.forEach(d=>{
-    const tot=d.meses.reduce((a,b)=>a+(Number(b)||0),0);
     const id=metaId(d.comercial,_mtEdAnio);
     const k=act.findIndex(f=>f.id===id);
-    if(tot<=0){ if(k>=0){ act.splice(k,1); cloudDelete('meta',id); } return; }   // meta en cero = no hay meta
-    const fila={ id, comercial:d.comercial, anio:_mtEdAnio, meses:d.meses.map(x=>Math.round(Number(x)||0)), ts, pending:true };
+    // Partir de lo que ya estaba guardado y pisar SOLO los meses del tramo.
+    const base = k>=0 ? act[k].meses.slice() : new Array(12).fill(0);
+    while(base.length<12) base.push(0);
+    _mtEdMesesRango().forEach(m=>{ base[m-1]=Math.round(Number(d.meses[m-1])||0); });
+    const tot=base.reduce((a,b)=>a+(Number(b)||0),0);
+    if(tot<=0){ if(k>=0){ act.splice(k,1); cloudDelete('meta',id); } return; }
+    const fila={ id, comercial:d.comercial, anio:_mtEdAnio, meses:base.map(x=>Math.round(Number(x)||0)), ts, pending:true };
     if(k>=0) act[k]=fila; else act.push(fila);
     subir.push(fila);
   });
   saveMetas(act); cerrarModal(); subir.forEach(f=>cloudPush('meta',f)); renderMetas(); showToast('Metas guardadas');
 }
-
 // ── PDF de una hoja para mandar ────────────────────────────────────────────
 function metasPDF(){
   const ym=mtYm(), p=ymParse(ym);
