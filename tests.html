@@ -563,6 +563,21 @@ test('rankingMes calcula lo que falta y no da negativo al sobrecumplir', ()=>{
   eq(ana.falta,0); cerca(ana.pct,3,0.001);
 });
 
+test('metaId normaliza acentos y no colisiona entre nombres distintos', ()=>{
+  eq(metaId('Lorena Benítez',2026), 'META-2026-lorena-benitez');
+  eq(metaId('José Núñez',2026), 'META-2026-jose-nunez');
+  if(metaId('Peña',2026) === metaId('Pea',2026)) throw new Error('Peña y Pea comparten id');
+}, 'sin normalizar, los acentos se caen y dos nombres distintos se pisan');
+
+test('metaId no deja un id vacio si el nombre no tiene letras', ()=>{
+  eq(metaId('   ',2026), 'META-2026-sin-nombre');
+  eq(metaId('***',2026), 'META-2026-sin-nombre');
+});
+
+test('metaId separa por anio', ()=>{
+  if(metaId('Juan',2026) === metaId('Juan',2027)) throw new Error('mismo id para dos anios');
+});
+
 test('primerMesConMeta encuentra el arranque del programa', ()=>{
   eq(primerMesConMeta(METAS,2026), 7);
   eq(primerMesConMeta(METAS,2027), 0, 'sin metas ese anio');

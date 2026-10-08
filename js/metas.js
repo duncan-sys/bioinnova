@@ -82,6 +82,15 @@ function sugerirMetaAnual(ventas, comercial, opts, cmp, gs){
   };
 }
 
+// Id estable de la fila. Normaliza acentos (í→i, ñ→n) para que dos nombres
+// distintos no caigan en el mismo slug: sin eso "Peña" y "Pea" colisionarían
+// y una meta pisaría a la otra.
+function metaId(com, anio){
+  const s = String(com || '').trim().normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  return 'META-' + anio + '-' + (s || 'sin-nombre');
+}
+
 // Meta de un comercial para un mes, desde la fila anual {anio, meses:[12]}.
 function metaDelMes(fila, mes){
   if(!fila || !Array.isArray(fila.meses)) return 0;
@@ -167,5 +176,5 @@ function proyeccionCierre(acum, metaAnual, mesActual){
 }
 
 if(typeof module !== 'undefined' && module.exports){
-  module.exports = { META_IDX, primerMesConMeta, metaIdx, ymParse, ymDe, ymSuma, metaRepartirAnual, facturadoMes, nivelDesest, sugerirMetaAnual, metaDelMes, cumplimientoPct, rankingMes, acumuladoAnio, proyeccionCierre };
+  module.exports = { META_IDX, primerMesConMeta, metaId, metaIdx, ymParse, ymDe, ymSuma, metaRepartirAnual, facturadoMes, nivelDesest, sugerirMetaAnual, metaDelMes, cumplimientoPct, rankingMes, acumuladoAnio, proyeccionCierre };
 }

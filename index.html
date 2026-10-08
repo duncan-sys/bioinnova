@@ -946,7 +946,7 @@ const visitasDe   =cid=>getVisitas().filter(v=>v.cliente_id===cid);
 // Versión de la app. SUBIR JUNTO CON `CACHE` en sw.js en cada publicación.
 // Es sólo informativa (se muestra en la cabecera) y sirve para saber de un vistazo
 // si un equipo ya tomó el último cambio o quedó con una copia vieja en caché.
-const APP_VERSION = 125;
+const APP_VERSION = 126;
 try{ document.addEventListener('DOMContentLoaded', ()=>{ const v=document.getElementById('verChip'); if(v) v.textContent='v'+APP_VERSION; }); }catch(e){}
 const SUPABASE_URL = 'https://mnuldrgynighabwtulkf.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_uAH-nT2MczSB8m9F4THmdw_T6u77exI';
@@ -1143,7 +1143,6 @@ function metaRow(m){ return { id:m.id, comercial:m.comercial||'', anio:Number(m.
 function rowMeta(r){ let ms=r.meses; if(typeof ms==='string'){ try{ ms=JSON.parse(ms); }catch{ ms=[]; } }
   if(!Array.isArray(ms)) ms=[]; while(ms.length<12) ms.push(0);
   return { id:r.id, comercial:r.comercial||'', anio:Number(r.anio)||0, meses:ms.slice(0,12).map(x=>Number(x)||0), ts:r.ts, pending:false }; }
-function metaId(com,anio){ return 'META-'+anio+'-'+String(com||'').trim().toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,''); }
 function metaFila(com,anio){ return getMetas().find(f=>String(f.comercial||'')===String(com) && Number(f.anio)===Number(anio)) || null; }
 
 // La facturación lleva IVA; el EERR y el análisis del Directorio van en neto.
@@ -1267,15 +1266,48 @@ function mtEditor(anio, desde, hasta){
   if(_mtEdH<_mtEdD) _mtEdH=_mtEdD;
   _mtEdAnio=nuevoAnio;
 
+  // comercialesLocal() sale de clientes, ventas y viáticos: una vendedora recién
+  // incorporada no figura en ninguno. Por eso se suman los perfiles de rol
+  // comercial (una consulta, sólo al abrir el editor) y los agregados a mano.
   const nombres=new Set(comercialesLocal().filter(n=>String(n||'').trim()));
   getMetas().filter(f=>Number(f.anio)===_mtEdAnio).forEach(f=>nombres.add(f.comercial));
+  _mtComsExtra.forEach(c=>nombres.add(c));
+  _mtPerfilNombres.forEach(c=>nombres.add(c));
+  if(!_mtPerfilesPedidos){ _mtPerfilesPedidos=true; mtEdCargarPerfiles(); }
   _mtEdDraft=[...nombres].sort((a,b)=>a.localeCompare(b)).map(c=>{
     const f=metaFila(c,_mtEdAnio);
     return { comercial:c, meses:(f?f.meses.slice():new Array(12).fill(0)) };
   });
   mtEdRender();
 }
+// Perfiles de rol comercial que todavía no vendieron nada. Se pide UNA vez por
+// sesión y sólo al abrir el editor, que lo usa el gerente: no mueve el egress.
+let _mtComsExtra=new Set(), _mtPerfilNombres=new Set(), _mtPerfilesPedidos=false;
+async function mtEdCargarPerfiles(){
+  try{
+    const rows=await sb.query('perfiles');
+    if(!Array.isArray(rows)) return;
+    let hubo=false;
+    rows.forEach(u=>{ if(u && u.rol==='tecnico' && u.nombre && !_mtPerfilNombres.has(u.nombre)){ _mtPerfilNombres.add(String(u.nombre).trim()); hubo=true; } });
+    if(hubo && gs('modal') && gs('modal').classList.contains('show')) mtEditor(_mtEdAnio,_mtEdD,_mtEdH);
+  }catch(e){}
+}
+function mtEdAgregar(){
+  const inp=gs('mtEdNuevo'); if(!inp) return;
+  const c=String(inp.value||'').trim();
+  if(!c){ showToast('Escribí el nombre'); return; }
+  if(_mtEdDraft.some(d=>d.comercial===c)){ showToast('Ya está en la lista'); inp.value=''; return; }
+  _mtComsExtra.add(c); inp.value='';
+  mtEditor(_mtEdAnio,_mtEdD,_mtEdH);
+}
+function mtEdQuitar(i){
+  const c=_mtEdDraft[i].comercial;
+  _mtComsExtra.delete(c);
+  _mtEdDraft.splice(i,1);
+  mtEdRender();
+}
 function mtEdRangoSet(cual,val){
+
   if(cual==='d') mtEditor(_mtEdAnio, val, null);
   else mtEditor(_mtEdAnio, null, val);
 }
@@ -1296,6 +1328,7 @@ function mtEdRender(){
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">
         <div style="flex:1;font-size:13px;font-weight:600">${esc(_finComLbl(d.comercial))}</div>
         <div style="font-size:12px;color:var(--gray-500)">Tramo: <b id="mtEdTot${i}">₲ ${nf(tot)}</b></div>
+        ${(tot===0&&fuera===0)?`<button type="button" title="Quitar de la lista" onclick="mtEdQuitar(${i})" style="border:none;background:none;color:var(--gray-400);font-size:15px;cursor:pointer;padding:0 2px">×</button>`:''}
       </div>
       ${fuera>0?`<div style="font-size:10px;color:var(--gray-400);margin-bottom:5px">Fuera del tramo ya hay cargados ₲ ${nf(fuera)} — no se tocan.</div>`:''}
       <div style="display:flex;gap:5px;margin-bottom:6px">
@@ -1324,7 +1357,13 @@ function mtEdRender(){
       <div style="font-size:11px;color:var(--gray-600);text-align:right">Equipo<br><b>₲ ${nf(totalEquipo)}</b></div>
     </div>
     <div style="font-size:11px;color:var(--gray-500);margin-bottom:9px">Montos de <b>facturación con IVA</b>. «Repartir» divide el total del tramo entre esos meses según la estacionalidad del negocio (octubre pesa 1,33 y noviembre 0,72), así que noviembre queda más bajo a propósito. Los meses fuera del tramo quedan como están.</div>
-    <div style="max-height:48vh;overflow:auto">${filas||'<div style="color:var(--gray-400);font-size:12px;padding:10px 0">No hay comerciales conocidos todavía. Cargá una venta con comercial y volvé.</div>'}</div>
+    <div style="display:flex;gap:5px;margin-bottom:9px">
+      <input id="mtEdNuevo" list="mtEdComDL" placeholder="Agregar comercial (nombre exacto)" style="flex:1;font-size:12px;padding:6px 8px" onkeydown="if(event.key==='Enter'){event.preventDefault();mtEdAgregar()}">
+      <button type="button" class="btn btn-sec" style="font-size:11px;padding:6px 10px" onclick="mtEdAgregar()">＋ Agregar</button>
+    </div>
+    <datalist id="mtEdComDL">${[..._mtPerfilNombres].concat(comercialesLocal()).filter((v,i,a)=>a.indexOf(v)===i).sort().map(x=>`<option value="${esc(x)}">`).join('')}</datalist>
+    <div style="font-size:10px;color:#b54708;margin-bottom:9px">El nombre tiene que escribirse <b>igual</b> que en el campo Comercial de las ventas, o la meta no se va a cruzar con lo que facture.</div>
+    <div style="max-height:44vh;overflow:auto">${filas||'<div style="color:var(--gray-400);font-size:12px;padding:10px 0">Todavía no hay comerciales. Agregá uno arriba.</div>'}</div>
     <div style="display:flex;gap:7px;margin-top:11px">
       <button class="btn btn-sec" style="flex:1" onclick="cerrarModal()">Cancelar</button>
       <button class="btn btn-primary" style="flex:1" onclick="mtEdGuardar()">Guardar</button>
@@ -1368,8 +1407,8 @@ function mtEdSugerir(i){
 function mtEdGuardar(){
   const act=getMetas(); const ts=Date.now(); const subir=[];
   _mtEdDraft.forEach(d=>{
-    const id=metaId(d.comercial,_mtEdAnio);
-    const k=act.findIndex(f=>f.id===id);
+    const k=act.findIndex(f=>String(f.comercial||'')===d.comercial && Number(f.anio)===_mtEdAnio);
+    const id = k>=0 ? act[k].id : metaId(d.comercial,_mtEdAnio);   // conservar el id existente
     // Partir de lo que ya estaba guardado y pisar SOLO los meses del tramo.
     const base = k>=0 ? act[k].meses.slice() : new Array(12).fill(0);
     while(base.length<12) base.push(0);
