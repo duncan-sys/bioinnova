@@ -168,6 +168,7 @@ textarea{resize:vertical;min-height:66px}
       <div class="tile" id="tileViat" onclick="openViaticos()" style="display:none"><div class="ico">🧾</div><div class="tlab">Viáticos</div><div class="tsub">rendición de comerciales</div></div>
       <div class="tile" id="tileCrm" onclick="openCrm()" style="display:none"><div class="ico">🤝</div><div class="tlab">CRM</div><div class="tsub">seguimiento de clientes</div></div>
       <div class="tile" id="tileCotiz" onclick="openCotiz()" style="display:none"><div class="ico">🧮</div><div class="tlab">Cotizaciones</div><div class="tsub">precios y pedidos</div></div>
+      <div class="tile" id="tileMetas" onclick="openMetas()" style="display:none"><div class="ico">🎯</div><div class="tlab">Metas de venta</div><div class="tsub">avance del equipo</div></div>
       <div class="tile" id="tileUsuarios" onclick="openUsuarios()" style="display:none"><div class="ico">👥</div><div class="tlab">Usuarios</div><div class="tsub">accesos y roles</div></div>
     </div>
     <div class="sect-t">Últimas visitas</div>
@@ -332,6 +333,23 @@ textarea{resize:vertical;min-height:66px}
     <div style="margin-bottom:8px"><input type="search" id="crmBuscar" placeholder="🔎 Buscar cliente…" oninput="renderCrm()"></div>
     <div id="crmChips" style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap"></div>
     <div class="card"><div class="card-h"><span>Clientes</span><span id="crmCount" style="font-weight:500;color:var(--gray-400)"></span></div><div id="crmList"></div></div>
+  </div>
+
+  <!-- METAS DE VENTA -->
+  <div class="screen" id="sMetas">
+    <div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap;align-items:center">
+      <select class="finmes" id="mtMes" onchange="mtSetMes(this.value)" aria-label="Mes"></select>
+      <div style="display:flex;gap:4px">
+        <button class="mtTab" id="mtTabMes" onclick="mtSetVista('mes')">Del mes</button>
+        <button class="mtTab" id="mtTabAcum" onclick="mtSetVista('acum')">Acumulado</button>
+      </div>
+      <div style="flex:1"></div>
+      <button class="btn btn-sec" id="mtBtnPDF" style="padding:6px 10px;font-size:12px" onclick="metasPDF()">📄 PDF</button>
+      <button class="btn btn-sec" id="mtBtnCargar" style="padding:6px 10px;font-size:12px;display:none" onclick="mtEditor()">🎯 Cargar metas</button>
+    </div>
+    <div id="mtMiCard"></div>
+    <div class="card"><div class="card-h"><span id="mtRankTit">Tabla de posiciones</span><span id="mtRankSub" style="font-weight:500;color:var(--gray-400)"></span></div><div id="mtRank"></div></div>
+    <div id="mtEquipo"></div>
   </div>
 
   <!-- COTIZACIONES (lista) -->
@@ -500,7 +518,9 @@ textarea{resize:vertical;min-height:66px}
   .findet[open]>summary{border-bottom:1px solid var(--gray-100);background:var(--gray-100)}
   .finrow{padding:7px 12px;border-top:1px solid var(--gray-100);display:flex;justify-content:space-between;gap:8px;align-items:center}
   .finchip{flex:0 0 auto;border:none;background:var(--gray-200);color:var(--gray-600);border-radius:12px;padding:5px 11px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit}.finchip.on{background:var(--green);color:#fff}
-  .finmes{flex:0 0 auto;border:1.5px solid var(--green);background:#fff;color:var(--green);border-radius:12px;padding:4px 8px;font-size:11px;font-weight:700;font-family:inherit;cursor:pointer;max-width:170px}</style>
+  .finmes{flex:0 0 auto;border:1.5px solid var(--green);background:#fff;color:var(--green);border-radius:12px;padding:4px 8px;font-size:11px;font-weight:700;font-family:inherit;cursor:pointer;max-width:170px}
+  .mtTab{flex:0 0 auto;border:1.5px solid var(--gray-200);background:#fff;color:var(--gray-500);border-radius:12px;padding:4px 10px;font-size:11px;font-weight:700;font-family:inherit;cursor:pointer}
+  .mtTab.on{border-color:var(--green);background:var(--green);color:#fff}</style>
   <div class="screen" id="sFinanzas">
     <div style="display:flex;gap:5px;margin-bottom:10px;overflow-x:auto;padding-bottom:2px">
       <button class="fintab on" id="finT_ventas" onclick="finSetTab('ventas')">💰 Ventas</button>
@@ -577,6 +597,7 @@ textarea{resize:vertical;min-height:66px}
 <div class="modal" id="modal"><div class="modal-box" id="modalBox"></div></div>
 
 <script src="js/costeo.js"></script>
+<script src="js/metas.js"></script>
 <script>
 // ══════════════════════════════════════════════════════════
 //  BioInnova — Visitas técnicas (v1)
@@ -925,7 +946,7 @@ const visitasDe   =cid=>getVisitas().filter(v=>v.cliente_id===cid);
 // Versión de la app. SUBIR JUNTO CON `CACHE` en sw.js en cada publicación.
 // Es sólo informativa (se muestra en la cabecera) y sirve para saber de un vistazo
 // si un equipo ya tomó el último cambio o quedó con una copia vieja en caché.
-const APP_VERSION = 122;
+const APP_VERSION = 123;
 try{ document.addEventListener('DOMContentLoaded', ()=>{ const v=document.getElementById('verChip'); if(v) v.textContent='v'+APP_VERSION; }); }catch(e){}
 const SUPABASE_URL = 'https://mnuldrgynighabwtulkf.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_uAH-nT2MczSB8m9F4THmdw_T6u77exI';
@@ -977,8 +998,8 @@ const sb = {
 const ROLES = { gerente:{label:'Gerente',editar:true}, tecnico:{label:'Comercial',editar:true}, supervisor:{label:'Supervisor de planta',editar:true}, planta:{label:'Planta',editar:false}, asesor:{label:'Asesor Técnico Externo',editar:false}, lectura:{label:'Solo lectura',editar:false} };
 // Qué módulos ve cada rol. Editar acá para ajustar accesos.
 const ROL_MODULOS = {
-  gerente:    ['visita','clientes','historial','crm','viaticos','cotizaciones','ot','formulas','inventario','caja','usuarios','agenda','finanzas'],
-  tecnico:    ['visita','clientes','historial','crm','viaticos','cotizaciones','agenda'],
+  gerente:    ['visita','clientes','historial','crm','viaticos','cotizaciones','metas','ot','formulas','inventario','caja','usuarios','agenda','finanzas'],
+  tecnico:    ['visita','clientes','historial','crm','viaticos','cotizaciones','metas','agenda'],
   supervisor: ['ot','formulas','inventario','caja'],
   planta:     ['inventario','caja'],
   asesor:     ['formulas'],
@@ -987,7 +1008,7 @@ const ROL_MODULOS = {
 function puedeVer(mod){ if(!currentRol) return true; if(currentAccesos&&Object.prototype.hasOwnProperty.call(currentAccesos,mod)) return !!currentAccesos[mod]; return (ROL_MODULOS[currentRol]||[]).includes(mod); }
 // Acceso efectivo de un usuario dado (rol + overrides) — para el cuadro de Usuarios
 function accesoEfectivo(rol, accesos, mod){ if(accesos&&Object.prototype.hasOwnProperty.call(accesos,mod)) return !!accesos[mod]; return (ROL_MODULOS[rol]||[]).includes(mod); }
-const MODULOS_LBL=[['visita','Visitas'],['clientes','Clientes'],['historial','Historial'],['crm','CRM'],['viaticos','Viáticos'],['cotizaciones','Cotizaciones'],['agenda','Agenda'],['ot','OT'],['formulas','Formulaciones'],['inventario','Inventario'],['caja','Caja chica'],['finanzas','Finanzas'],['usuarios','Usuarios']];
+const MODULOS_LBL=[['visita','Visitas'],['clientes','Clientes'],['historial','Historial'],['crm','CRM'],['viaticos','Viáticos'],['cotizaciones','Cotizaciones'],['metas','Metas de venta'],['agenda','Agenda'],['ot','OT'],['formulas','Formulaciones'],['inventario','Inventario'],['caja','Caja chica'],['finanzas','Finanzas'],['usuarios','Usuarios']];
 function esPlanta(){ return puedeVer('ot'); }   // compat (usado por funciones de OT)
 let currentUser=null, currentRol=null, currentAccesos=null;   // accesos = overrides por-usuario {mod:true|false}
 function rolLabel(r){ return (ROLES[r]&&ROLES[r].label)||r; }
@@ -1066,6 +1087,7 @@ function applyRoleUI(){
   showEl('tileCrm', puedeVer('crm'));
   showEl('tileViat', puedeVer('viaticos'));
   showEl('tileCotiz', puedeVer('cotizaciones'));
+  showEl('tileMetas', puedeVer('metas'));
   showEl('tileOT', puedeVer('ot'));
   showEl('tileProductos', puedeVer('formulas')||puedeVer('inventario'));
   showEl('tileFormulas', false);   // integrado en Productos → Catálogo
@@ -1107,7 +1129,230 @@ const SYNC_DEFS = {
   sueldo:{ get:getSueldos, save:saveSueldos, table:'bio_sueldos', toRow:sueldoRow, fromRow:rowSueldo },
   cheque:{ get:getCheques, save:saveCheques, table:'bio_cheques', toRow:chequeRow, fromRow:rowCheque },
   prestamo:{ get:getPrestamos, save:savePrestamos, table:'bio_prestamos', toRow:prestamoRow, fromRow:rowPrestamo, criticos:['proveedor'], toRowSafe:(p)=>{ const r=prestamoRow(p); delete r.proveedor; return r; } },
+  meta:{ get:getMetas, save:saveMetas, table:'bio_metas', toRow:metaRow, fromRow:rowMeta, criticos:['meses'] },
 };
+
+// ══ METAS DE VENTA POR COMERCIAL ═══════════════════════════════════════════
+// El cálculo vive en js/metas.js (probado en tests.html). Acá sólo la pantalla.
+// Se mide FACTURACIÓN del mes (bio_ventas.monto, con IVA) porque es lo que el
+// comercial controla y puede seguir día a día. El equivalente en venta neta se
+// muestra al lado para poder atarlo al punto de equilibrio del Directorio.
+function getMetas(){ return getArr('bio:metas'); }
+function saveMetas(a){ setArr('bio:metas',a); }
+function metaRow(m){ return { id:m.id, comercial:m.comercial||'', anio:Number(m.anio)||0, meses:(m.meses||[]), ts:m.ts||null }; }
+function rowMeta(r){ let ms=r.meses; if(typeof ms==='string'){ try{ ms=JSON.parse(ms); }catch{ ms=[]; } }
+  if(!Array.isArray(ms)) ms=[]; while(ms.length<12) ms.push(0);
+  return { id:r.id, comercial:r.comercial||'', anio:Number(r.anio)||0, meses:ms.slice(0,12).map(x=>Number(x)||0), ts:r.ts, pending:false }; }
+function metaId(com,anio){ return 'META-'+anio+'-'+String(com||'').trim().toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,''); }
+function metaFila(com,anio){ return getMetas().find(f=>String(f.comercial||'')===String(com) && Number(f.anio)===Number(anio)) || null; }
+
+// La facturación lleva IVA; el EERR y el análisis del Directorio van en neto.
+function mtNeto(v){ const iva=(getCostCfg().iva!=null?Number(getCostCfg().iva):0.10); return Math.round((Number(v)||0)/(1+iva)); }
+
+let _mtMes='', _mtVista='mes';
+function mtSetMes(ym){ _mtMes=ym||''; renderMetas(); }
+function mtSetVista(v){ _mtVista=v; renderMetas(); }
+function mtYm(){ return _mtMes || String(hoy()).slice(0,7); }
+function mtSoyComercial(){ const s=getSession()||{}; return String(s.nombre||'').trim(); }
+
+function openMetas(){ if(!puedeVer('metas')){ showToast('Sin permiso'); return; }
+  _mtMes=''; _mtVista='mes'; showScreen('sMetas','Metas de venta','Avance del equipo',true); renderMetas(); }
+
+// Meses con movimiento + los 12 del año en curso, para poder mirar hacia atrás.
+function _mtMesesDisp(){
+  const s=new Set(getVentas().map(v=>String(v.fecha||'').slice(0,7)).filter(x=>x.length===7));
+  getMetas().forEach(f=>{ for(let m=1;m<=12;m++) if(metaDelMes(f,m)>0) s.add(ymDe(f.anio,m)); });
+  s.add(String(hoy()).slice(0,7));
+  return [...s].sort().reverse();
+}
+
+function renderMetas(){
+  const ym=mtYm(), p=ymParse(ym), ventas=getVentas(), metas=getMetas();
+  gs('mtMes').innerHTML=_mtMesesDisp().map(m=>`<option value="${m}"${m===ym?' selected':''}>📅 ${esc(finMesLbl(m))}</option>`).join('');
+  ['mes','acum'].forEach(v=>{ const b=gs('mtTab'+(v==='mes'?'Mes':'Acum')); if(b){ b.className='mtTab'+(_mtVista===v?' on':''); } });
+  gs('mtBtnCargar').style.display = esGerente()?'':'none';
+
+  const filas = _mtVista==='mes' ? rankingMes(ventas,metas,ym,_finComDe,finGs)
+                                 : acumuladoAnio(ventas,metas,ym,_finComDe,finGs);
+  gs('mtRankTit').textContent = _mtVista==='mes' ? 'Tabla de posiciones · '+finMesLbl(ym) : 'Acumulado '+(p?p.a:'')+' hasta '+finMesLbl(ym);
+  gs('mtRankSub').textContent = filas.length? filas.length+(filas.length===1?' comercial':' comerciales') : '';
+
+  // Tarjeta propia: si el que mira es un comercial del cuadro, su fila va arriba y grande.
+  const yo=mtSoyComercial();
+  const mia=filas.find(f=>f.comercial===yo);
+  gs('mtMiCard').innerHTML = mia ? _mtMiCardHtml(mia,ym,p) : '';
+
+  gs('mtRank').innerHTML = filas.length ? filas.map((f,i)=>_mtFilaHtml(f,i,f.comercial===yo)).join('')
+    : '<div style="padding:16px;text-align:center;color:var(--gray-400);font-size:13px">Sin ventas ni metas cargadas para este período.</div>';
+
+  // Total del equipo contra la suma de las metas.
+  const tm=filas.reduce((a,f)=>a+f.meta,0), tf=filas.reduce((a,f)=>a+f.facturado,0);
+  const pct=cumplimientoPct(tf,tm);
+  gs('mtEquipo').innerHTML = filas.length ? `<div class="findet" style="padding:11px 13px;margin-top:8px">
+      <div style="font-size:10px;font-weight:700;color:var(--gray-500);margin-bottom:7px">TOTAL DEL EQUIPO</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <div style="flex:1;min-width:110px"><div style="font-size:10px;color:var(--gray-400)">Facturado</div><div style="font-weight:700;font-size:15px">${finGsFmt(tf)}</div><div style="font-size:10px;color:var(--gray-400)">neto ${finGsFmt(mtNeto(tf))}</div></div>
+        <div style="flex:1;min-width:110px"><div style="font-size:10px;color:var(--gray-400)">Meta</div><div style="font-weight:700;font-size:15px">${tm>0?finGsFmt(tm):'—'}</div>${tm>0?`<div style="font-size:10px;color:var(--gray-400)">neto ${finGsFmt(mtNeto(tm))}</div>`:''}</div>
+        <div style="flex:1;min-width:110px"><div style="font-size:10px;color:var(--gray-400)">Cumplimiento</div><div style="font-weight:700;font-size:15px;color:${_mtColor(pct)}">${pct==null?'—':Math.round(pct*100)+'%'}</div>${tm>tf?`<div style="font-size:10px;color:var(--gray-400)">faltan ${finGsFmt(tm-tf)}</div>`:''}</div>
+      </div></div>` : '';
+}
+
+function _mtColor(pct){ if(pct==null) return 'var(--gray-400)'; if(pct>=1) return 'var(--green)'; if(pct>=0.8) return '#b54708'; return 'var(--red)'; }
+
+function _mtMiCardHtml(f,ym,p){
+  const pct=f.pct, w=pct==null?0:Math.min(100,Math.round(pct*100));
+  // Si falta y el mes es el corriente, cuánto por día hábil restante.
+  let ritmo='';
+  if(_mtVista==='mes' && f.falta>0 && ym===String(hoy()).slice(0,7)){
+    const d=new Date(hoy()+'T00:00:00'), fin=new Date(p.a,p.m,0);
+    let hab=0; for(let x=new Date(d); x<=fin; x.setDate(x.getDate()+1)){ const w2=x.getDay(); if(w2!==0) hab++; }
+    if(hab>0) ritmo=`<div style="font-size:11px;color:var(--gray-500);margin-top:5px">Quedan ${hab} día(s) hábil(es): <b>${finGsFmt(Math.round(f.falta/hab))}</b> por día para llegar</div>`;
+  }
+  return `<div class="card" style="margin-bottom:8px"><div class="card-b" style="padding:13px">
+    <div style="font-size:10px;font-weight:700;color:var(--gray-500)">TU META · ${esc(_mtVista==='mes'?finMesLbl(ym):'acumulado '+p.a)}</div>
+    <div style="display:flex;align-items:flex-end;gap:10px;margin:6px 0 4px">
+      <div style="font-size:26px;font-weight:800;color:${_mtColor(pct)};line-height:1">${pct==null?'—':Math.round(pct*100)+'%'}</div>
+      <div style="font-size:12px;color:var(--gray-500);padding-bottom:4px">${finGsFmt(f.facturado)}${f.meta>0?' de '+finGsFmt(f.meta):' (sin meta cargada)'}</div>
+    </div>
+    <div style="height:9px;background:var(--gray-200);border-radius:5px;overflow:hidden"><div style="height:9px;width:${w}%;background:${_mtColor(pct)};border-radius:5px;transition:width .3s"></div></div>
+    ${f.falta>0?`<div style="font-size:12px;color:var(--gray-600);margin-top:6px">Faltan <b>${finGsFmt(f.falta)}</b></div>`:(f.meta>0?`<div style="font-size:12px;color:var(--green);margin-top:6px;font-weight:600">✔ Meta cumplida${f.facturado>f.meta?' · '+finGsFmt(f.facturado-f.meta)+' por encima':''}</div>`:'')}
+    ${ritmo}
+  </div></div>`;
+}
+
+function _mtFilaHtml(f,i,esMio){
+  const pct=f.pct, w=pct==null?0:Math.min(100,Math.round(pct*100));
+  const medalla=['🥇','🥈','🥉'][i]||'';
+  return `<div class="li" style="${esMio?'background:#f0f7ff;':''}display:flex;align-items:center;gap:9px;padding:9px 12px">
+    <div style="flex:0 0 26px;text-align:center;font-size:${medalla?'15px':'12px'};font-weight:700;color:var(--gray-500)">${medalla||(i+1)}</div>
+    <div style="flex:1;min-width:0">
+      <div style="font-size:13px;font-weight:${esMio?'700':'600'};color:var(--gray-800);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(_finComLbl(f.comercial))}${esMio?' <span style="font-size:10px;color:var(--blue);font-weight:600">· vos</span>':''}</div>
+      <div style="height:5px;background:var(--gray-200);border-radius:3px;margin-top:4px"><div style="height:5px;width:${w}%;background:${_mtColor(pct)};border-radius:3px"></div></div>
+      <div style="font-size:10px;color:var(--gray-400);margin-top:3px">${finGsFmt(f.facturado)}${f.meta>0?' / '+finGsFmt(f.meta):' · sin meta'}${f.nfact!=null?' · '+f.nfact+' fact.':''}</div>
+    </div>
+    <div style="text-align:right;flex-shrink:0">
+      <div style="font-weight:800;font-size:15px;color:${_mtColor(pct)}">${pct==null?'—':Math.round(pct*100)+'%'}</div>
+      ${f.falta>0?`<div style="font-size:9px;color:var(--gray-400)">falta ${finGsFmt(f.falta)}</div>`:''}
+    </div></div>`;
+}
+
+// ── Editor de metas (solo gerente) ─────────────────────────────────────────
+let _mtEdAnio=0, _mtEdDraft=null;
+function mtEditor(anio){
+  if(!esGerente()){ showToast('Solo el gerente carga metas'); return; }
+  const p=ymParse(mtYm());
+  _mtEdAnio = Number(anio) || (p?p.a:new Date().getFullYear());
+  // Borrador: todos los comerciales conocidos + los que ya tienen meta ese año.
+  const nombres=new Set(comercialesLocal().filter(n=>String(n||'').trim()));
+  getMetas().filter(f=>Number(f.anio)===_mtEdAnio).forEach(f=>nombres.add(f.comercial));
+  _mtEdDraft=[...nombres].sort((a,b)=>a.localeCompare(b)).map(c=>{
+    const f=metaFila(c,_mtEdAnio);
+    return { comercial:c, meses:(f?f.meses.slice():new Array(12).fill(0)) };
+  });
+  mtEdRender();
+}
+function mtEdRender(){
+  const M=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+  const nf=n=>Math.round(Number(n)||0).toLocaleString('es-PY');
+  const filas=_mtEdDraft.map((d,i)=>{ const tot=d.meses.reduce((a,b)=>a+(Number(b)||0),0);
+    return `<div style="border-bottom:1px solid var(--gray-200);padding:8px 0">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">
+        <div style="flex:1;font-size:13px;font-weight:600">${esc(_finComLbl(d.comercial))}</div>
+        <div style="font-size:12px;color:var(--gray-500)">Año: <b id="mtEdTot${i}">₲ ${nf(tot)}</b></div>
+      </div>
+      <div style="display:flex;gap:5px;margin-bottom:6px">
+        <input type="number" id="mtEdAnual${i}" placeholder="Meta anual ₲" style="flex:1;font-size:12px;padding:5px 7px">
+        <button type="button" class="btn btn-sec" style="font-size:11px;padding:5px 8px" onclick="mtEdRepartir(${i})">Repartir por mes</button>
+        <button type="button" class="btn btn-sec" style="font-size:11px;padding:5px 8px" onclick="mtEdSugerir(${i})">Sugerir</button>
+      </div>
+      <div id="mtEdHint${i}" style="font-size:10px;color:var(--gray-500);margin-bottom:5px"></div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px">
+        ${d.meses.map((v,m)=>`<div><label style="font-size:9px;color:var(--gray-400);display:block">${M[m]}</label>
+          <input type="number" value="${Math.round(Number(v)||0)||''}" oninput="mtEdCell(${i},${m},this.value)" style="width:100%;font-size:11px;padding:4px 5px" placeholder="0"></div>`).join('')}
+      </div></div>`; }).join('');
+  gs('modalBox').innerHTML=`<h3>Metas de facturación ${_mtEdAnio}</h3>
+    <div style="font-size:11px;color:var(--gray-500);margin-bottom:9px">Montos de <b>facturación con IVA</b>, que es lo que el comercial ve en su factura. «Repartir por mes» usa la estacionalidad real del negocio (octubre pesa 1,33 y noviembre 0,72), así que la meta de noviembre queda más baja a propósito.</div>
+    <div style="display:flex;gap:6px;margin-bottom:9px;align-items:center">
+      <button type="button" class="btn btn-sec" style="font-size:11px;padding:5px 9px" onclick="mtEditor(${_mtEdAnio-1})">← ${_mtEdAnio-1}</button>
+      <div style="flex:1;text-align:center;font-weight:700">${_mtEdAnio}</div>
+      <button type="button" class="btn btn-sec" style="font-size:11px;padding:5px 9px" onclick="mtEditor(${_mtEdAnio+1})">${_mtEdAnio+1} →</button>
+    </div>
+    <div style="max-height:52vh;overflow:auto">${filas||'<div style="color:var(--gray-400);font-size:12px;padding:10px 0">No hay comerciales conocidos todavía. Cargá una venta con comercial y volvé.</div>'}</div>
+    <div style="display:flex;gap:7px;margin-top:11px">
+      <button class="btn btn-sec" style="flex:1" onclick="cerrarModal()">Cancelar</button>
+      <button class="btn btn-primary" style="flex:1" onclick="mtEdGuardar()">Guardar</button>
+    </div>`;
+  gs('modal').classList.add('show');
+}
+function mtEdCell(i,m,val){ _mtEdDraft[i].meses[m]=Number(val)||0; const t=_mtEdDraft[i].meses.reduce((a,b)=>a+(Number(b)||0),0);
+  const el=gs('mtEdTot'+i); if(el) el.textContent='₲ '+Math.round(t).toLocaleString('es-PY'); }
+function mtEdRepartir(i){
+  const anual=Number(gs('mtEdAnual'+i).value)||0;
+  if(anual<=0){ showToast('Poné la meta anual primero'); return; }
+  _mtEdDraft[i].meses=metaRepartirAnual(anual);
+  mtEdRender();
+  const el=gs('mtEdAnual'+i); if(el) el.value=anual;
+}
+function mtEdSugerir(i){
+  const com=_mtEdDraft[i].comercial;
+  const hasta = _mtEdAnio===new Date().getFullYear() ? String(hoy()).slice(0,7) : ymDe(_mtEdAnio,1);
+  const s=sugerirMetaAnual(getVentas(),com,{hastaYm:hasta,meses:6,crecimiento:0},_finComDe,finGs);
+  const nf=n=>Math.round(Number(n)||0).toLocaleString('es-PY');
+  if(!s.meses_usados){ gs('mtEdHint'+i).innerHTML='<span style="color:#b54708">Sin historial de ventas para sugerir. Cargá la meta a mano (para un comercial nuevo, lo acordado: ₲200 a 250 millones mensuales).</span>'; return; }
+  gs('mtEdAnual'+i).value=s.anual;
+  gs('mtEdHint'+i).innerHTML=`Nivel desestacionalizado de los últimos ${s.meses_usados} mes(es) con venta: <b>₲ ${nf(s.nivel)}</b>/mes → anual <b>₲ ${nf(s.anual)}</b> sin crecimiento. Subí el número si querés exigir más y tocá «Repartir por mes».`;
+}
+function mtEdGuardar(){
+  const act=getMetas(); const ts=Date.now(); const subir=[];
+  _mtEdDraft.forEach(d=>{
+    const tot=d.meses.reduce((a,b)=>a+(Number(b)||0),0);
+    const id=metaId(d.comercial,_mtEdAnio);
+    const k=act.findIndex(f=>f.id===id);
+    if(tot<=0){ if(k>=0){ act.splice(k,1); cloudDelete('meta',id); } return; }   // meta en cero = no hay meta
+    const fila={ id, comercial:d.comercial, anio:_mtEdAnio, meses:d.meses.map(x=>Math.round(Number(x)||0)), ts, pending:true };
+    if(k>=0) act[k]=fila; else act.push(fila);
+    subir.push(fila);
+  });
+  saveMetas(act); cerrarModal(); subir.forEach(f=>cloudPush('meta',f)); renderMetas(); showToast('Metas guardadas');
+}
+
+// ── PDF de una hoja para mandar ────────────────────────────────────────────
+function metasPDF(){
+  const ym=mtYm(), p=ymParse(ym);
+  const mes=rankingMes(getVentas(),getMetas(),ym,_finComDe,finGs);
+  const acum=acumuladoAnio(getVentas(),getMetas(),ym,_finComDe,finGs);
+  if(!mes.length && !acum.length){ showToast('No hay datos para este período'); return; }
+  const nf=n=>'₲ '+Math.round(Number(n)||0).toLocaleString('es-PY');
+  const pc=v=>v==null?'—':Math.round(v*100)+'%';
+  const col=v=>v==null?'#98a2b3':(v>=1?'#067647':(v>=0.8?'#b54708':'#b42318'));
+  const tabla=(arr,tit)=>`<div class="tt">${tit}</div><table><thead><tr><th>#</th><th>Comercial</th><th class="r">Facturado</th><th class="r">Meta</th><th class="r">Falta</th><th class="r">Cumpl.</th></tr></thead><tbody>
+    ${arr.map((f,i)=>`<tr><td>${i+1}</td><td>${esc(_finComLbl(f.comercial))}</td><td class="r">${nf(f.facturado)}</td><td class="r">${f.meta>0?nf(f.meta):'—'}</td><td class="r">${f.falta>0?nf(f.falta):'—'}</td><td class="r" style="color:${col(f.pct)};font-weight:700">${pc(f.pct)}</td></tr>`).join('')}
+    <tr class="tot"><td></td><td>TOTAL</td><td class="r">${nf(arr.reduce((a,f)=>a+f.facturado,0))}</td><td class="r">${nf(arr.reduce((a,f)=>a+f.meta,0))}</td><td class="r"></td><td class="r">${pc(cumplimientoPct(arr.reduce((a,f)=>a+f.facturado,0),arr.reduce((a,f)=>a+f.meta,0)))}</td></tr>
+    </tbody></table>`;
+  const logo=location.origin+location.pathname.replace(/[^/]*$/,'')+'logo.jpg';
+  const w=window.open('','_blank');
+  if(!w){ showToast('El navegador bloqueó la ventana'); return; }
+  w.document.write(`<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Metas ${finMesLbl(ym)}</title><style>
+    @page{size:A4;margin:12mm 10mm}
+    body{font-family:Arial,Helvetica,sans-serif;margin:0;color:#1b2430}
+    .band{background:#1e3f63;color:#fff;padding:11px 14px;display:flex;align-items:center;gap:11px;margin-bottom:12px}
+    .band img{height:34px;background:#fff;padding:3px;border-radius:4px}
+    .band h1{font-size:15px;margin:0}.band div{font-size:11px;opacity:.85}
+    .tt{font-size:11px;font-weight:700;color:#475467;text-transform:uppercase;letter-spacing:.4px;margin:13px 0 5px}
+    table{width:100%;border-collapse:collapse;font-size:11px}
+    th{background:#f2f4f7;text-align:left;padding:5px 7px;border-bottom:1px solid #d0d5dd;font-size:10px;text-transform:uppercase;color:#475467}
+    td{padding:5px 7px;border-bottom:1px solid #eaecf0}
+    .r{text-align:right}.tot td{font-weight:700;background:#f9fafb;border-top:1px solid #d0d5dd}
+    .pie{font-size:9px;color:#98a2b3;margin-top:14px}
+  </style></head><body>
+    <div class="band"><img src="${logo}" alt=""><div><h1>Metas de facturación</h1><div>${esc(finMesLbl(ym))} · emitido ${esc(hoy())}</div></div></div>
+    ${mes.length?tabla(mes,'Del mes · '+finMesLbl(ym)):''}
+    ${acum.length?tabla(acum,'Acumulado '+p.a+' hasta '+finMesLbl(ym)):''}
+    <div class="pie">Montos de facturación con IVA. La meta mensual se reparte según la estacionalidad del negocio, por eso varía mes a mes.</div>
+    <script>window.onload=function(){setTimeout(function(){window.print()},350)}<\/script>
+  </body></html>`);
+  w.document.close();
+}
 function getPrestamos(){ return getArr('bio:prestamos'); }
 function savePrestamos(a){ setArr('bio:prestamos',a); }
 function prestamoRow(p){ return { id:p.id, concepto:p.concepto||'', banco:p.banco||'', proveedor:p.proveedor||'', grupo:p.grupo||'banco', tipo:p.tipo||'unica', monto:Number(p.monto)||0, moneda:p.moneda||'PYG', tc:p.tc||null, fecha:p.fecha||null, cuotas_n:Number(p.cuotas_n)||1, hasta:p.hasta||null, saldo:Number(p.saldo)||0, rolling:!!p.rolling, estado:p.estado||'activo', nota:p.nota||'', por:p.por||'', ts:p.ts||null }; }

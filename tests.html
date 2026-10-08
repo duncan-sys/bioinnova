@@ -54,6 +54,7 @@ function pushPricingCfg(){}
 </script>
 
 <script src="js/costeo.js"></script>
+<script src="js/metas.js"></script>
 
 <script>
 // Se sobreescriben DESPUÉS de cargar costeo.js: las funciones de adentro resuelven
@@ -436,6 +437,159 @@ test('[E2] ventaMargen usa el monto facturado CON IVA', ()=>{
 test('ventaMargen devuelve null si la venta no tiene costo congelado', ()=>{
   eq(ventaMargen({ monto:1000000, costo:null }), null);
 }, 'sin costeo ≠ costo cero');
+
+
+// ════════════════════════════════════════════════════════════════════════════
+grupo('Metas de venta por comercial (js/metas.js)');
+
+// Dobles de las dos funciones que metas.js recibe de index.html.
+const _cmp = v => String(v.comercial||'').trim() || '__SIN__';
+const _gs  = (rec,val) => rec && rec.moneda==='USD' ? Math.round((val||0)*(Number(rec.tc)||0)) : Math.round(val||0);
+
+// Ventas de prueba: Juan factura en los 3 meses, Ana solo en uno, una en USD.
+const VTAS = [
+  { id:'v1', fecha:'2026-06-10', comercial:'Juan',  monto:100000000 },
+  { id:'v2', fecha:'2026-07-05', comercial:'Juan',  monto:200000000 },
+  { id:'v3', fecha:'2026-07-20', comercial:'Ana',   monto: 50000000 },
+  { id:'v4', fecha:'2026-08-15', comercial:'Juan',  monto: 10000, moneda:'USD', tc:7000 }, // = 70.000.000
+  { id:'v5', fecha:'2026-08-28', comercial:'',      monto: 30000000 },                     // sin comercial
+];
+
+test('los índices estacionales suman 12', ()=>{
+  cerca(META_IDX.reduce((a,b)=>a+b,0), 12, 0.0005);
+}, 'si no suman 12 la meta anual repartida no cierra');
+
+test('metaRepartirAnual reparte por estacionalidad y la suma da el total exacto', ()=>{
+  const r = metaRepartirAnual(1200000000);
+  eq(r.length, 12);
+  eq(r.reduce((a,b)=>a+b,0), 1200000000, 'suma');
+  if(!(r[9] > r[10])) throw new Error('octubre (1,327) debe superar a noviembre (0,718)');
+  cerca(r[9]/r[10], 1.3269/0.7180, 0.01, 'proporción oct/nov');
+});
+
+test('metaRepartirAnual tolera total 0 y devuelve 12 ceros', ()=>{
+  const r = metaRepartirAnual(0);
+  eq(r.length, 12); eq(r.reduce((a,b)=>a+b,0), 0);
+});
+
+test('ymSuma retrocede y avanza cruzando el año', ()=>{
+  eq(ymSuma('2026-01', -1), '2025-12');
+  eq(ymSuma('2026-12', 1), '2027-01');
+  eq(ymSuma('2026-03', -3), '2025-12');
+});
+
+test('facturadoMes suma solo el mes y el comercial pedidos', ()=>{
+  eq(facturadoMes(VTAS,'Juan','2026-07',_cmp,_gs), 200000000);
+  eq(facturadoMes(VTAS,'Ana','2026-07',_cmp,_gs), 50000000);
+  eq(facturadoMes(VTAS,'Juan','2026-09',_cmp,_gs), 0);
+});
+
+test('facturadoMes convierte USD con el TC de la propia venta', ()=>{
+  eq(facturadoMes(VTAS,'Juan','2026-08',_cmp,_gs), 70000000);
+}, 'US$ 10.000 × 7.000 = ₲70.000.000');
+
+test('facturadoMes agrupa las ventas sin comercial bajo el centinela', ()=>{
+  eq(facturadoMes(VTAS,'__SIN__','2026-08',_cmp,_gs), 30000000);
+}, 'no se pierden del cuadro');
+
+test('nivelDesest desestacionaliza antes de promediar', ()=>{
+  // jun 100M/0,9471 = 105.585.472 · jul 200M/0,9091 = 219.997.800 · ago 70M/1,2979 = 53.933.277
+  const d = nivelDesest(VTAS,'Juan','2026-09',3,_cmp,_gs);
+  eq(d.meses_usados, 3);
+  cerca(d.nivel, (100000000/0.9471 + 200000000/0.9091 + 70000000/1.2979)/3, 2);
+});
+
+test('nivelDesest ignora los meses sin ninguna venta', ()=>{
+  // Ana solo facturó en julio: el promedio debe ser su julio desestacionalizado, no /3
+  const d = nivelDesest(VTAS,'Ana','2026-09',3,_cmp,_gs);
+  eq(d.meses_usados, 1);
+  cerca(d.nivel, 50000000/0.9091, 2);
+}, 'un mes en cero suele ser que no estaba, no que vendió cero');
+
+test('nivelDesest devuelve 0 sin historial, sin romperse', ()=>{
+  const d = nivelDesest(VTAS,'Nadie','2026-09',6,_cmp,_gs);
+  eq(d.meses_usados, 0); eq(d.nivel, 0);
+}, 'el comercial nuevo arranca con meta cargada a mano');
+
+test('sugerirMetaAnual aplica el crecimiento sobre el nivel desestacionalizado', ()=>{
+  const s0 = sugerirMetaAnual(VTAS,'Juan',{hastaYm:'2026-09',meses:3,crecimiento:0},_cmp,_gs);
+  const s1 = sugerirMetaAnual(VTAS,'Juan',{hastaYm:'2026-09',meses:3,crecimiento:0.10},_cmp,_gs);
+  cerca(s1.anual/s0.anual, 1.10, 0.001);
+  cerca(s0.anual, Math.round(s0.nivel*12), 1);
+});
+
+test('metaDelMes lee la fila anual y tolera la fila ausente', ()=>{
+  const fila = { comercial:'Juan', anio:2027, meses:[1,2,3,4,5,6,7,8,9,10,11,12] };
+  eq(metaDelMes(fila,1), 1); eq(metaDelMes(fila,12), 12);
+  eq(metaDelMes(null,5), 0); eq(metaDelMes({},5), 0);
+});
+
+test('cumplimientoPct da null cuando no hay meta, no 0 ni infinito', ()=>{
+  eq(cumplimientoPct(100,0), null);
+  eq(cumplimientoPct(100,null), null);
+  eq(cumplimientoPct(50,100), 0.5);
+}, 'sin meta no se muestra %, no se inventa un 0%');
+
+const METAS = [
+  { comercial:'Juan', anio:2026, meses:[0,0,0,0,0,0,250000000,0,0,0,0,0] },
+  { comercial:'Ana',  anio:2026, meses:[0,0,0,0,0,0,100000000,0,0,0,0,0] },
+];
+
+test('rankingMes ordena por % de cumplimiento, no por monto', ()=>{
+  const r = rankingMes(VTAS,METAS,'2026-07',_cmp,_gs);
+  // Juan 200/250 = 80% · Ana 50/100 = 50% → Juan primero aunque ambos midan distinto
+  eq(r[0].comercial,'Juan'); cerca(r[0].pct,0.80,0.001); eq(r[0].pos,1);
+  eq(r[1].comercial,'Ana');  cerca(r[1].pct,0.50,0.001);
+});
+
+test('rankingMes pone al final a los que no tienen meta', ()=>{
+  const r = rankingMes(VTAS,METAS,'2026-08',_cmp,_gs);
+  // nadie tiene meta en agosto: ordena por monto (Juan 70M, sin comercial 30M)
+  eq(r[0].comercial,'Juan'); eq(r[0].pct,null);
+  eq(r[1].comercial,'__SIN__');
+}, 'facturar sin meta igual se ve');
+
+test('rankingMes incluye al que tiene meta y no facturó', ()=>{
+  const sinVentas = rankingMes([],METAS,'2026-07',_cmp,_gs);
+  eq(sinVentas.length,2);
+  eq(sinVentas.every(f=>f.facturado===0), true);
+  eq(sinVentas[0].falta>0, true);
+}, 'esconderlo sería justo lo que haría perder credibilidad al cuadro');
+
+test('rankingMes calcula lo que falta y no da negativo al sobrecumplir', ()=>{
+  const sobre = [{ id:'x', fecha:'2026-07-01', comercial:'Ana', monto:300000000 }];
+  const r = rankingMes(sobre,METAS,'2026-07',_cmp,_gs);
+  const ana = r.find(f=>f.comercial==='Ana');
+  eq(ana.falta,0); cerca(ana.pct,3,0.001);
+});
+
+test('acumuladoAnio suma meses y metas hasta el mes pedido', ()=>{
+  const a = acumuladoAnio(VTAS,METAS,'2026-08',_cmp,_gs);
+  const juan = a.find(f=>f.comercial==='Juan');
+  eq(juan.facturado, 100000000+200000000+70000000);
+  eq(juan.meta, 250000000, 'solo julio tiene meta cargada');
+});
+
+test('acumuladoAnio no mezcla años', ()=>{
+  const conOtroAnio = VTAS.concat([{ id:'v9', fecha:'2025-07-10', comercial:'Juan', monto:999000000 }]);
+  const a = acumuladoAnio(conOtroAnio,METAS,'2026-08',_cmp,_gs);
+  eq(a.find(f=>f.comercial==='Juan').facturado, 370000000);
+});
+
+test('proyeccionCierre reparte lo que falta entre los meses que quedan', ()=>{
+  const p = proyeccionCierre(300000000, 1200000000, 9);
+  eq(p.meses_restantes,3); eq(p.falta,900000000); eq(p.por_mes,300000000);
+});
+
+test('proyeccionCierre en diciembre no divide por cero', ()=>{
+  const p = proyeccionCierre(1000,1200,12);
+  eq(p.meses_restantes,0); eq(p.por_mes,200);
+});
+
+test('proyeccionCierre no pide nada si ya se superó la meta', ()=>{
+  const p = proyeccionCierre(1500000000, 1200000000, 6);
+  eq(p.falta,0); eq(p.por_mes,0);
+});
 
 // ── Salida ──────────────────────────────────────────────────────────────────
 document.getElementById('res').innerHTML = OUT.join('') +
