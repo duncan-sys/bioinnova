@@ -563,17 +563,42 @@ test('rankingMes calcula lo que falta y no da negativo al sobrecumplir', ()=>{
   eq(ana.falta,0); cerca(ana.pct,3,0.001);
 });
 
+test('primerMesConMeta encuentra el arranque del programa', ()=>{
+  eq(primerMesConMeta(METAS,2026), 7);
+  eq(primerMesConMeta(METAS,2027), 0, 'sin metas ese anio');
+  eq(primerMesConMeta([],2026), 0);
+});
+
+test('acumuladoAnio arranca en el primer mes con meta, no en enero', ()=>{
+  // METAS solo tiene julio. El acumulado a agosto debe cubrir jul-ago, NO
+  // ene-ago: si no, se comparan 8 meses de venta contra 1 mes de meta y el
+  // cumplimiento sale inflado. Lo reportó el usuario el 2026-10-08.
+  const a = acumuladoAnio(VTAS,METAS,'2026-08',_cmp,_gs);
+  const juan = a.find(f=>f.comercial==='Juan');
+  eq(juan.desde, 7);
+  eq(juan.facturado, 200000000+70000000, 'jul + ago, sin junio');
+  eq(juan.meta, 250000000);
+});
+
+test('acumuladoAnio devuelve vacio si el mes es anterior al arranque', ()=>{
+  eq(acumuladoAnio(VTAS,METAS,'2026-06',_cmp,_gs).length, 0);
+}, 'no hay nada que comparar todavia');
+
+test('acumuladoAnio devuelve vacio si el anio no tiene ninguna meta', ()=>{
+  eq(acumuladoAnio(VTAS,[],'2026-08',_cmp,_gs).length, 0);
+});
+
 test('acumuladoAnio suma meses y metas hasta el mes pedido', ()=>{
   const a = acumuladoAnio(VTAS,METAS,'2026-08',_cmp,_gs);
   const juan = a.find(f=>f.comercial==='Juan');
-  eq(juan.facturado, 100000000+200000000+70000000);
+  eq(juan.facturado, 200000000+70000000, 'desde julio, que es cuando arranca la meta');
   eq(juan.meta, 250000000, 'solo julio tiene meta cargada');
 });
 
 test('acumuladoAnio no mezcla años', ()=>{
   const conOtroAnio = VTAS.concat([{ id:'v9', fecha:'2025-07-10', comercial:'Juan', monto:999000000 }]);
   const a = acumuladoAnio(conOtroAnio,METAS,'2026-08',_cmp,_gs);
-  eq(a.find(f=>f.comercial==='Juan').facturado, 370000000);
+  eq(a.find(f=>f.comercial==='Juan').facturado, 270000000, 'jul+ago de 2026, nada de 2025');
 });
 
 test('proyeccionCierre reparte lo que falta entre los meses que quedan', ()=>{

@@ -946,7 +946,7 @@ const visitasDe   =cid=>getVisitas().filter(v=>v.cliente_id===cid);
 // Versión de la app. SUBIR JUNTO CON `CACHE` en sw.js en cada publicación.
 // Es sólo informativa (se muestra en la cabecera) y sirve para saber de un vistazo
 // si un equipo ya tomó el último cambio o quedó con una copia vieja en caché.
-const APP_VERSION = 124;
+const APP_VERSION = 125;
 try{ document.addEventListener('DOMContentLoaded', ()=>{ const v=document.getElementById('verChip'); if(v) v.textContent='v'+APP_VERSION; }); }catch(e){}
 const SUPABASE_URL = 'https://mnuldrgynighabwtulkf.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_uAH-nT2MczSB8m9F4THmdw_T6u77exI';
@@ -1174,16 +1174,24 @@ function renderMetas(){
 
   const filas = _mtVista==='mes' ? rankingMes(ventas,metas,ym,_finComDe,finGs)
                                  : acumuladoAnio(ventas,metas,ym,_finComDe,finGs);
-  gs('mtRankTit').textContent = _mtVista==='mes' ? 'Tabla de posiciones · '+finMesLbl(ym) : 'Acumulado '+(p?p.a:'')+' hasta '+finMesLbl(ym);
+  const _mDesde = primerMesConMeta(metas, p?p.a:0);
+  const _lblAcum = (!_mDesde || !p || p.m < _mDesde) ? ('Acumulado '+(p?p.a:'')) : ('Acumulado '+MESES_AB[_mDesde-1]+'–'+MESES_AB[p.m-1]+' '+p.a);
+  gs('mtRankTit').textContent = _mtVista==='mes' ? 'Tabla de posiciones · '+finMesLbl(ym) : _lblAcum;
   gs('mtRankSub').textContent = filas.length? filas.length+(filas.length===1?' comercial':' comerciales') : '';
 
   // Tarjeta propia: si el que mira es un comercial del cuadro, su fila va arriba y grande.
   const yo=mtSoyComercial();
   const mia=filas.find(f=>f.comercial===yo);
-  gs('mtMiCard').innerHTML = mia ? _mtMiCardHtml(mia,ym,p) : '';
+  gs('mtMiCard').innerHTML = mia ? _mtMiCardHtml(mia,ym,p,_lblAcum) : '';
 
   gs('mtRank').innerHTML = filas.length ? filas.map((f,i)=>_mtFilaHtml(f,i,f.comercial===yo)).join('')
-    : '<div style="padding:16px;text-align:center;color:var(--gray-400);font-size:13px">Sin ventas ni metas cargadas para este período.</div>';
+    : ('<div style="padding:16px;text-align:center;color:var(--gray-400);font-size:13px">'
+       + (_mtVista==='acum' && _mDesde && p.m < _mDesde
+          ? 'Las metas de '+p.a+' arrancan en '+MESES_AB[_mDesde-1]+'. El acumulado se mide desde ahí.'
+          : (_mtVista==='acum' && !_mDesde
+             ? 'Todavía no hay metas cargadas para '+p.a+'.'
+             : 'Sin ventas ni metas cargadas para este período.'))
+       + '</div>');
 
   // Total del equipo contra la suma de las metas.
   const tm=filas.reduce((a,f)=>a+f.meta,0), tf=filas.reduce((a,f)=>a+f.facturado,0);
@@ -1199,7 +1207,7 @@ function renderMetas(){
 
 function _mtColor(pct){ if(pct==null) return 'var(--gray-400)'; if(pct>=1) return 'var(--green)'; if(pct>=0.8) return '#b54708'; return 'var(--red)'; }
 
-function _mtMiCardHtml(f,ym,p){
+function _mtMiCardHtml(f,ym,p,lblAcum){
   const pct=f.pct, w=pct==null?0:Math.min(100,Math.round(pct*100));
   // Si falta y el mes es el corriente, cuánto por día hábil restante.
   let ritmo='';
@@ -1209,7 +1217,7 @@ function _mtMiCardHtml(f,ym,p){
     if(hab>0) ritmo=`<div style="font-size:11px;color:var(--gray-500);margin-top:5px">Quedan ${hab} día(s) hábil(es): <b>${finGsFmt(Math.round(f.falta/hab))}</b> por día para llegar</div>`;
   }
   return `<div class="card" style="margin-bottom:8px"><div class="card-b" style="padding:13px">
-    <div style="font-size:10px;font-weight:700;color:var(--gray-500)">TU META · ${esc(_mtVista==='mes'?finMesLbl(ym):'acumulado '+p.a)}</div>
+    <div style="font-size:10px;font-weight:700;color:var(--gray-500)">TU META · ${esc(_mtVista==='mes'?finMesLbl(ym):String(lblAcum||'').toLowerCase())}</div>
     <div style="display:flex;align-items:flex-end;gap:10px;margin:6px 0 4px">
       <div style="font-size:26px;font-weight:800;color:${_mtColor(pct)};line-height:1">${pct==null?'—':Math.round(pct*100)+'%'}</div>
       <div style="font-size:12px;color:var(--gray-500);padding-bottom:4px">${finGsFmt(f.facturado)}${f.meta>0?' de '+finGsFmt(f.meta):' (sin meta cargada)'}</div>

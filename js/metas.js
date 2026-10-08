@@ -120,20 +120,37 @@ function rankingMes(ventas, metasFilas, ym, cmp, gs){
   return filas;
 }
 
-// Acumulado del año hasta el mes inclusive, por comercial.
+// Primer mes del año con alguna meta cargada. Es el arranque del programa:
+// acumular desde enero cuando las metas empiezan en octubre compara las ventas
+// de todo el año contra la meta de un mes solo, y el cumplimiento sale inflado.
+// Devuelve 0 si ese año no tiene ninguna meta.
+function primerMesConMeta(metasFilas, anio){
+  let min = 13;
+  (metasFilas || []).forEach(f => {
+    if(Number(f.anio) !== Number(anio)) return;
+    for(let m = 1; m <= 12; m++) if(metaDelMes(f, m) > 0 && m < min) min = m;
+  });
+  return min <= 12 ? min : 0;
+}
+
+// Acumulado DEL PERÍODO CON METAS, hasta el mes inclusive. No arranca en enero:
+// arranca en el primer mes con meta cargada, así ventas y meta cubren el mismo
+// tramo. Si el mes pedido es anterior a ese arranque, no hay nada que comparar.
 function acumuladoAnio(ventas, metasFilas, ym, cmp, gs){
   const p = ymParse(ym); if(!p) return [];
+  const desde = primerMesConMeta(metasFilas, p.a);
+  if(!desde || p.m < desde) return [];
   const nombres = new Set();
-  (ventas || []).forEach(v => { const f = String(v.fecha || '').slice(0, 7); const q = ymParse(f); if(q && q.a === p.a && q.m <= p.m) nombres.add(cmp(v)); });
+  (ventas || []).forEach(v => { const q = ymParse(String(v.fecha || '').slice(0, 7)); if(q && q.a === p.a && q.m >= desde && q.m <= p.m) nombres.add(cmp(v)); });
   (metasFilas || []).forEach(f => { if(Number(f.anio) === p.a) nombres.add(String(f.comercial || '')); });
   return [...nombres].map(c => {
     const fila = (metasFilas || []).find(f => String(f.comercial || '') === c && Number(f.anio) === p.a);
     let meta = 0, fact = 0;
-    for(let m = 1; m <= p.m; m++){
+    for(let m = desde; m <= p.m; m++){
       meta += metaDelMes(fila, m);
       fact += facturadoMes(ventas, c, ymDe(p.a, m), cmp, gs);
     }
-    return { comercial: c, meta, facturado: fact, pct: cumplimientoPct(fact, meta), falta: Math.max(0, meta - fact) };
+    return { comercial: c, meta, facturado: fact, pct: cumplimientoPct(fact, meta), falta: Math.max(0, meta - fact), desde };
   }).sort((a, b) => {
     if(a.pct == null && b.pct == null) return b.facturado - a.facturado;
     if(a.pct == null) return 1; if(b.pct == null) return -1;
@@ -150,5 +167,5 @@ function proyeccionCierre(acum, metaAnual, mesActual){
 }
 
 if(typeof module !== 'undefined' && module.exports){
-  module.exports = { META_IDX, metaIdx, ymParse, ymDe, ymSuma, metaRepartirAnual, facturadoMes, nivelDesest, sugerirMetaAnual, metaDelMes, cumplimientoPct, rankingMes, acumuladoAnio, proyeccionCierre };
+  module.exports = { META_IDX, primerMesConMeta, metaIdx, ymParse, ymDe, ymSuma, metaRepartirAnual, facturadoMes, nivelDesest, sugerirMetaAnual, metaDelMes, cumplimientoPct, rankingMes, acumuladoAnio, proyeccionCierre };
 }
