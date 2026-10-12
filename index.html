@@ -286,6 +286,7 @@ textarea{resize:vertical;min-height:66px}
     </div>
     <div id="prodGarWrap" style="display:none">
       <div style="margin-bottom:10px"><input type="search" id="prodGarBuscar" placeholder="🔎 Buscar producto…" oninput="renderProductosGar()"></div>
+      <button id="btnImpCatGar" class="btn btn-sec btn-block" style="margin-bottom:10px;display:none" onclick="garImportarCatalogo()">📘 Importar del catálogo oficial</button>
       <div class="card"><div class="card-h"><span>Índices de garantía</span><span id="prodGarCount" style="font-weight:500;color:var(--gray-400)"></span></div><div id="prodGarList"></div></div>
     </div>
   </div>
@@ -960,7 +961,7 @@ const visitasDe   =cid=>getVisitas().filter(v=>v.cliente_id===cid);
 // Versión de la app. SUBIR JUNTO CON `CACHE` en sw.js en cada publicación.
 // Es sólo informativa (se muestra en la cabecera) y sirve para saber de un vistazo
 // si un equipo ya tomó el último cambio o quedó con una copia vieja en caché.
-const APP_VERSION = 127;
+const APP_VERSION = 128;
 try{ document.addEventListener('DOMContentLoaded', ()=>{ const v=document.getElementById('verChip'); if(v) v.textContent='v'+APP_VERSION; }); }catch(e){}
 const SUPABASE_URL = 'https://mnuldrgynighabwtulkf.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_uAH-nT2MczSB8m9F4THmdw_T6u77exI';
@@ -2027,6 +2028,7 @@ function evalBlockHtml(ev,i){
       </div>
       <label class="fl">Producto Bioinnova en uso</label>
       <select id="ev${i}_prod" onchange="evalProdChange(${i})">${prodOpts}</select>
+      <div id="ev${i}_gar" style="margin-top:5px">${garLinkHtml(ev.producto)}</div>
       <div class="row2">
         <div><label class="fl">Presentación</label><input type="text" id="ev${i}_pres" value="${esc(ev.presentacion)}" placeholder="—"></div>
         <div><label class="fl">Consumo observado</label><input type="text" id="ev${i}_cons" list="consumoList" value="${esc(ev.consumo)}" placeholder="elegí o escribí…" autocomplete="off"></div>
@@ -2113,7 +2115,8 @@ function evalLoteChange(i){ const sel=gs('ev'+i+'_lote'); const val=sel.value;
   const opt=sel.options[sel.selectedIndex]; if(opt&&opt.dataset.cab){ const a=gs('ev'+i+'_anim'); if(a) a.value=opt.dataset.cab; } }
 function evalProdChange(i){ const sel=gs('ev'+i+'_prod'); const val=sel.value;
   if(val==='__otro'){ sel.selectedIndex=0; const nom=prompt('Nombre del producto:'); if(nom&&nom.trim()){ syncEvals(); _evals[i].producto=nom.trim(); _evals[i].presentacion=''; renderEvals(); } return; }
-  const opt=sel.options[sel.selectedIndex]; if(opt&&opt.dataset.p){ const p=gs('ev'+i+'_pres'); if(p) p.value=opt.dataset.p; } }
+  const opt=sel.options[sel.selectedIndex]; if(opt&&opt.dataset.p){ const p=gs('ev'+i+'_pres'); if(p) p.value=opt.dataset.p; }
+  const gl=gs('ev'+i+'_gar'); if(gl) gl.innerHTML=garLinkHtml(val); }
 function evalKpiLive(i,j){ const cat=gs('ev'+i+'_cat').value; const comp=gs('ev'+i+'_comp')?gs('ev'+i+'_comp').value:''; const d=kpisDe(cat,comp)[j]; if(!d) return; const st=kpiEstado(gs('ev'+i+'_kv'+j).value,d); const el=gs('ev'+i+'_ks'+j); el.className='sem '+st.cls; el.textContent=st.txt; if(cat==='Cría'&&comp==='vacas') evalMermaLive(i); }
 function guardarVisita(imprimir){
   if(!canEdit()){ showToast('Sin permiso'); return; }
@@ -3347,7 +3350,7 @@ function openProductos(){ if(!(puedeVer('formulas')||puedeVer('inventario'))){ s
 function prodSetTab(t){ _prodTab=t; const cat=t==='cat', inv=t==='inv', gar=t==='gar';
   gs('prodCatWrap').style.display=cat?'':'none'; gs('prodInvWrap').style.display=inv?'':'none'; if(gs('prodGarWrap')) gs('prodGarWrap').style.display=gar?'':'none';
   gs('prodTabCat').className='btn '+(cat?'btn-primary':'btn-sec'); gs('prodTabInv').className='btn '+(inv?'btn-primary':'btn-sec'); if(gs('prodTabGar')) gs('prodTabGar').className='btn '+(gar?'btn-primary':'btn-sec');
-  if(cat){ const b=gs('btnNuevoProducto'); if(b) b.style.display=puedeEditarFormula()?'':'none'; const bd=gs('btnDesglosarNuc'); if(bd) bd.style.display=puedeEditarFormula()?'':'none'; const bl=gs('btnLimpiarOv'); if(bl) bl.style.display=esGerente()?'':'none'; renderProductosCat(); } else if(inv) renderProductosInv(); else renderProductosGar();
+  if(cat){ const b=gs('btnNuevoProducto'); if(b) b.style.display=puedeEditarFormula()?'':'none'; const bd=gs('btnDesglosarNuc'); if(bd) bd.style.display=puedeEditarFormula()?'':'none'; const bl=gs('btnLimpiarOv'); if(bl) bl.style.display=esGerente()?'':'none'; renderProductosCat(); } else if(inv) renderProductosInv(); else { const bg=gs('btnImpCatGar'); if(bg) bg.style.display=esGerente()?'':'none'; renderProductosGar(); }
 }
 function renderProductosCat(){ const q=(gs('prodBuscar').value||'').trim().toLowerCase(); let ls=precioList(); if(q) ls=ls.filter(p=>((p.n||'')+' '+(p.c||'')).toLowerCase().includes(q)); if(gs('prodCount')) gs('prodCount').textContent=ls.length+' productos';
   gs('prodList').innerHTML=ls.map(p=>{ const key=precioKey(p); const st=ptStock(key); const fx=tieneFormula(p);
@@ -3518,10 +3521,204 @@ function ptRemoveFromOT(id){ getPtMovs().filter(m=>m.ot_id===id).forEach(m=>{ if
 // ══ ÍNDICES DE GARANTÍA (análisis garantizado en formato BioInnova · datos estructurados · imprimible · adjuntable) ══
 const GAR_NUT=['Proteína bruta','Extracto etéreo (grasa)','Fibra bruta','Humedad','Cenizas / Minerales','Calcio','Fósforo','Sodio','Magnesio','Potasio','Materia orgánica','Nitrógeno no proteico (equiv. PB)','Energía metabolizable'];
 const GAR_UNID=['%','g/kg','ppm','mg/kg','Mcal/kg','UI/kg'];
+// ── Niveles de garantía del catálogo oficial (Catálogo BioInnova 08-2026) ──
+// Transcripción de las 22 fichas del PDF. `k` es el código del producto en
+// precioList(); null = sin vincular, el gerente lo asigna desde la ficha.
+// La composición va como [nutriente, valor, unidad] y el importador separa
+// el "Min"/"Max" que algunas fichas traen pegado al nombre.
+const CAT_GAR_FUENTE = 'Catálogo BioInnova 08-2026';
+const CAT_GAR = [
+ {k:'BIOSAL03', nom:'NUTRI', linea:'Mineral', peso:'30 kg',
+  ben:'Elevada eficiencia de la mineralización y alto valor biológico.',
+  des:'Producto listo para la suplementación mineral de bovinos de carne en régimen de cría y recría. Formulación con minerales quelatados.',
+  uso:'Ofrecer a voluntad en bateas cubiertas a los animales. Consumo promedio estimado de 100 g/UA/día. UA-450 kg.',
+  comp:[['Calcio','190','Gr'],['Fósforo','80','Gr'],['Sodio','100','Gr'],['Magnesio','5','Gr'],['Azufre','10','Gr'],['Hierro','400','Mg'],['Cobre','1000','Mg'],['Manganeso','1000','Mg'],['Zinc','4020','Mg'],['Iodo','75','Mg'],['Cobalto','40','Mg'],['Selenio','25','Mg'],['Flúor','800','Mg']]},
+
+ {k:'BIOSAL02', nom:'CRÍA', linea:'Mineral', peso:'30 kg',
+  ben:'Alta eficiencia de la mineralización y alto valor biológico. Mejora la performance reproductiva de machos y hembras.',
+  des:'Producto listo para la suplementación mineral de animales durante la etapa de lactancia y cría. Suplemento mineral para bovinos de carne y leche listo para su uso.',
+  uso:'Ofrecer a voluntad en bateas cubiertas a las vacas de cría por un período de dos meses antes, y hasta el final del servicio. Consumo promedio estimado de 100 g/UA/día. UA-450 kg.',
+  comp:[['Calcio','180','Gr'],['Fósforo','90','Gr'],['Sodio','100','Gr'],['Magnesio','5','Gr'],['Azufre','10','Gr'],['Hierro','520','Mg'],['Cobre','1450','Mg'],['Manganeso','2160','Mg'],['Zinc','5320','Mg'],['Iodo','97','Mg'],['Cobalto','52','Mg'],['Selenio','32','Mg'],['Flúor','900','Mg']]},
+
+ {k:'BIOSAL04', nom:'RECRÍA', linea:'Mineral', peso:'30 kg',
+  ben:'Ideal para cubrir los requerimientos minerales de la categoría de recría, la cual se encuentra en pleno crecimiento y desarrollo.',
+  des:'Producto listo para la suplementación mineral para bovinos de carne en régimen de recría o engorda. Formulación con minerales quelatados.',
+  uso:'Ofrecer a voluntad en bateas cubiertas a los animales. Consumo promedio estimado de 100 g/UA/día. UA=450 kg.',
+  comp:[['Calcio','195','Gr'],['Fósforo','65','Gr'],['Sodio','100','Gr'],['Magnesio','5','Gr'],['Azufre','10','Gr'],['Hierro','288','Mg'],['Cobre','799','Mg'],['Manganeso','1174','Mg'],['Zinc','2920','Mg'],['Iodo','54','Mg'],['Cobalto','28,5','Mg'],['Selenio','18','Mg'],['Flúor','650','Mg']]},
+
+ {k:'BIOSAL05', nom:'ENGORDA', linea:'Mineral', peso:'30 kg',
+  ben:'Proporciona un aporte completo de macro y micro minerales. Mayor absorción de minerales.',
+  des:'Producto listo para la suplementación mineral de bovinos de carne en régimen de engorda y/o terminación. Formulación con minerales quelatados.',
+  uso:'Ofrecer a voluntad en bateas cubiertas a los animales. Consumo promedio estimado de 80 g/UA/día. UA=450 kg.',
+  comp:[['Calcio','195','Gr'],['Fósforo','40','Gr'],['Sodio','125','Gr'],['Magnesio','5','Gr'],['Azufre','10','Gr'],['Hierro','225','Mg'],['Cobre','620','Mg'],['Manganeso','900','Mg'],['Zinc','2260','Mg'],['Iodo','40','Mg'],['Cobalto','22','Mg'],['Selenio','14','Mg'],['Flúor','400','Mg']]},
+
+ {k:'BIOSAL01', nom:'REPRODUCCIÓN', linea:'Mineral', peso:'30 kg',
+  ben:'Alta eficiencia de la mineralización y alto valor biológico. Mejora la performance reproductiva de machos y hembras.',
+  des:'Producto listo para la suplementación mineral de animales durante la etapa de lactancia y cría. Enriquecido con vitaminas A, D, E y formulado con minerales quelatados.',
+  uso:'Ofrecer a voluntad en bateas cubiertas a las vacas de cría por un período de dos meses antes, y hasta el final del servicio. Consumo promedio estimado de 100 g/UA/día. UA-450 kg.',
+  comp:[['Calcio','158','Gr'],['Fósforo','100','Gr'],['Sodio','100','Gr'],['Magnesio','15','Gr'],['Azufre','10','Gr'],['Vitamina A','100000','Ui'],['Vitamina D','10000','Ui'],['Vitamina E','1000','Ui'],['Hierro','480','Mg'],['Cobre','1340','Mg'],['Manganeso','2010','Mg'],['Zinc','4920','Mg'],['Iodo','90','Mg'],['Cobalto','45','Mg'],['Cromo','14','Mg'],['Selenio','30','Mg'],['Flúor','1000','Mg']]},
+
+ {k:'PRO001', nom:'AGUAS 0,1%', linea:'Proteica Energética', peso:'30 kg',
+  ben:'Elevada eficiencia de la mineralización, alto valor biológico, mejora el balance de proteína y energía de los pastos verdes, promoviendo mayor ganancia de peso.',
+  des:'Producto listo para la suplementación mineral, proteica y energética de bovinos de carne a partir de los 4 meses de edad, en época estival. Posee mejorador de desempeño, micro minerales quelatados y vitaminas ADE.',
+  uso:'Ofrecer a voluntad en bateas cubiertas y/o comederos que eviten la acumulación de agua. Consumo esperado 100-150 g/100 kg de peso corporal. La primera semana debe mezclarse con suplemento mineral 1-1 para la adaptación. Es tóxico para no rumiante.',
+  comp:[['NDT','40,1','%'],['PB','20','%'],['Calcio','34','Gr'],['Fósforo','20','Gr'],['Sodio','49','Gr'],['Magnesio','0,28','Gr'],['Azufre','0,4','Gr'],['Hierro','289','Mg'],['Cromo','1,4','Mg'],['Cobre','170','Mg'],['Manganeso','507','Mg'],['Zinc','560','Mg'],['Cobalto','11','Mg'],['Selenio','3,3','Gr'],['Iodo','10,4','Mg'],['NNP','49','%'],['Monencina sódica','300','Mg'],['Vit A','26700','KUI/kg'],['Vit D','5340','KUI/kg'],['Vit E','267','UI/kg']]},
+
+ {k:'PRO002', nom:'AGUAS 0,3% EXTRAS', linea:'Proteica Energética', peso:'30 kg',
+  ben:'Elevada eficiencia de la mineralización, alto valor biológico, mejora el balance de proteína y energía de los pastos verdes promoviendo mayor ganancia de peso.',
+  des:'Producto listo para la suplementación mineral y proteica de bovinos de carne a partir de los 4 meses de edad, en época de pasto verde. Posee mejorador de desempeño, micro minerales quelatados, potenciador de rendimiento y vitaminas A, D y E.',
+  uso:'1,2 kg/día hasta 400 kg de peso vivo; 1,5 kg/día para más de 450 kg; 2 kg para más de 500 kg. Mínimo 1,2 y máximo 3 kg/cabeza/día.',
+  comp:[['NDT','57','%'],['PB','20','%'],['Calcio','14','Gr'],['Fósforo','10','Gr'],['Sodio','31','Gr'],['Magnesio','0,18','Gr'],['Azufre','0,28','Gr'],['Hierro','115,8','Mg'],['Cromo','0,58','Mg'],['Cobre','67,8','Mg'],['Manganeso','202,9','Mg'],['Zinc','224,2','Mg'],['Cobalto','4,1','Mg'],['Selenio','1,3','Gr'],['Iodo','4,1','Mg'],['NNP','44,6','%'],['Monencina sódica','120','Mg'],['Vit A','10680','KUI/kg'],['Vit D','2136','KUI/kg'],['Vit E','106,8','UI/kg']]},
+
+ {k:'PRO003', nom:'AGUAS 0,1% CHACO', linea:'Proteica Energética', peso:'30 kg',
+  ben:'Elevada eficiencia de la mineralización, alto valor biológico, mejora el balance de proteína y energía de los pastos verdes, promoviendo mayor ganancia de peso.',
+  des:'Producto listo para la suplementación mineral, proteica y energética de bovinos de carne a partir de los 4 meses de edad, en época estival. Posee mejorador de desempeño, micro minerales quelatados y vitaminas ADE.',
+  uso:'Ofrecer a voluntad en bateas cubiertas y/o comederos que eviten la acumulación de agua. Consumo esperado 100-150 g/100 kg de peso corporal. La primera semana debe mezclarse con suplemento mineral 1-1. Es tóxico para no rumiante.',
+  comp:[['Proteína Cruda','169,3',''],['Calcio','28,2','g'],['Fósforo','9,3','g'],['NDT','519,2','g'],['Sodio','43,7','g'],['Manganeso','401,6','mg'],['Zinc','672,7','mg'],['Selenio','5,3','mg'],['NNP (Eq. Proteína)','34,9','g'],['Magnesio','40,1','g'],['Monensina','194,6','mg'],['Vit A','29194,2','UI'],['Vit D3','4671,1','UI'],['Vit E','40,9','UI'],['Cobre','135,4','mg'],['Azufre','6,0','mg']]},
+
+ {k:'PRO004', nom:'AGUAS 0,3% CHACO', linea:'Proteica Energética', peso:'30 kg',
+  ben:'Elevada eficiencia de la mineralización, alto valor biológico, mejora el balance de proteína y energía de los pastos verdes promoviendo mayor ganancia de peso.',
+  des:'Producto listo para la suplementación mineral y proteica de bovinos de carne a partir de los 4 meses de edad, en época de pasto verde. Posee mejorador de desempeño y potenciador de rendimiento, con vitaminas A, D y E.',
+  uso:'1,2 kg/día hasta 400 kg de peso vivo; 1,5 kg/día para más de 450 kg; 2 kg para más de 500 kg. Mínimo 1,2 y máximo 3 kg/cabeza/día.',
+  comp:[['NDT','57','%'],['PB','15,5','%'],['Calcio','31','Gr'],['Fósforo','10','Gr'],['Sodio','37','Gr'],['Magnesio','5,2','Gr'],['Azufre','15','Gr'],['Hierro','359,6','Mg'],['Cromo','1','Mg'],['Cobre','127,1','Mg'],['Manganeso','585,5','Mg'],['Zinc','863,1','Mg'],['Cobalto','2,1','Mg'],['Selenio','5,1','Gr'],['Iodo','10,7','Mg'],['Monencina sódica','221,3','Mg'],['Vit A','76969','KUI/kg'],['Vit D','23090','KUI/kg'],['Vit E','481','UI/kg']]},
+
+ {k:'PRO005', nom:'SECAS 0,1%', linea:'Proteica', peso:'30 kg',
+  ben:'Elevada eficiencia de la mineralización, alto valor biológico, aumenta el consumo de materia seca. Mejora la ganancia de peso en pastos degradados por las épocas frías y secas y la digestibilidad de la materia seca.',
+  des:'Producto listo para la suplementación mineral y proteica de bovinos de carne a partir de los 4 meses de edad, en época de seca. Posee mejorador de desempeño, micro minerales quelatados, urea y urea protegida, potenciador de rendimiento y vitaminas A, D y E.',
+  uso:'Ofrecer a voluntad en bateas cubiertas y/o comederos que eviten la acumulación de agua. Consumo esperado 100-150 g/100 kg de peso corporal. Contiene urea: requiere etapa de adaptación, mezclando 1-1 con suplemento mineral la primera semana. Es tóxico para no rumiante.',
+  comp:[['NDT','30','%'],['PB','30','%'],['Calcio','39','Gr'],['Fósforo','20','Gr'],['Sodio','66','Gr'],['Magnesio','0,29','Gr'],['Azufre','0,66','Gr'],['Hierro','338','Mg'],['Cromo','1,7','Mg'],['Cobre','197','Mg'],['Manganeso','591','Mg'],['Zinc','654','Mg'],['Cobalto','12,1','Mg'],['Selenio','3,8','Gr'],['Iodo','12,1','Mg'],['NNP','74','%'],['Monencina sódica','350','Mg'],['Vit A','31150','KUI/kg'],['Vit D','6230','KUI/kg'],['Vit E','311,5','UI/kg']]},
+
+ {k:'PRO006', nom:'SECAS 0,3% EXTRAS', linea:'Proteica', peso:'30 kg',
+  ben:'Elevada eficiencia de la mineralización, alto valor biológico, mejora el balance de proteína ayudando a una mejor digestión de los pastos secos y promoviendo mayor ganancia de peso.',
+  des:'Producto listo para la suplementación mineral y proteica de bovinos de carne a partir de los 4 meses de edad. Posee mejorador de desempeño, micro minerales quelatados, urea y urea protegida, potenciador de rendimiento y vitaminas A, D y E.',
+  uso:'1,2 kg/día hasta 400 kg de peso vivo; 1,5 kg/día para más de 450 kg; 2 kg para más de 500 kg. Mínimo 1,2 y máximo 3 kg/cabeza/día. Contiene urea: requiere período de adaptación.',
+  comp:[['NDT','53,8','%'],['PB','25,3','%'],['Calcio','14','Gr'],['Fósforo','10','Gr'],['Sodio','35','Gr'],['Magnesio','0,16','Gr'],['Azufre','0,43','Gr'],['Hierro','115,8','Mg'],['Cromo','0,58','Mg'],['Cobre','67,8','Mg'],['Manganeso','202,9','Mg'],['Zinc','224,2','Mg'],['Cobalto','4,1','Mg'],['Selenio','1,3','Gr'],['Iodo','4,1','Mg'],['NNP','59,3','%'],['Monencina sódica','120','Mg'],['Vit A','10680','KUI/kg'],['Vit D','2136','KUI/kg'],['Vit E','106,8','UI/kg']]},
+
+ {k:'PRO007', nom:'SECAS 0,1% CHACO', linea:'Proteica', peso:'30 kg',
+  ben:'Elevada eficiencia de la mineralización, alto valor biológico, aumenta el consumo de materia seca. Preparado para ganancias de peso en zonas de alta concentración de sodio (Chaco).',
+  des:'Producto listo para la suplementación mineral y proteica de bovinos de carne a partir de los 4 meses de edad, en época de seca. Posee mejorador de desempeño, micro minerales quelatados, urea y urea protegida, potenciador de rendimiento y vitaminas A, D y E.',
+  uso:'Ofrecer a voluntad en bateas cubiertas y/o comederos que eviten la acumulación de agua. Consumo esperado 100-150 g/100 kg de peso corporal. Contiene urea: requiere etapa de adaptación. Es tóxico para no rumiante.',
+  comp:[['NDT','53','%'],['PB','26,3','%'],['Calcio','31','Gr'],['Fósforo','10','Gr'],['Sodio','36','Gr'],['Magnesio','5,1','Gr'],['Azufre','15','Gr'],['Hierro','348','Mg'],['Cromo','1','Mg'],['Cobre','127,1','Mg'],['Manganeso','587,3','Mg'],['Zinc','865,4','Mg'],['Cobalto','2,1','Mg'],['Selenio','5,1','Gr'],['Iodo','10,7','Mg'],['NNP','61','Mg'],['Monencina sódica','222,3','Mg'],['Vit A','77323','KUI/kg'],['Vit D','23197','KUI/kg'],['Vit E','483,3','UI/kg']]},
+
+ {k:'PRO008', nom:'SECAS 0,3% CHACO', linea:'Proteica', peso:'30 kg',
+  ben:'Elevada eficiencia de la mineralización, alto valor biológico, aumenta el consumo de materia seca. Preparado para ganancias de peso en zonas de alta concentración de sodio (Chaco).',
+  des:'Producto listo para la suplementación mineral y proteica de bovinos de carne a partir de los 4 meses de edad, en época de seca. Posee mejorador de desempeño, micro minerales quelatados, urea y urea protegida, potenciador de rendimiento y vitaminas A, D y E.',
+  uso:'Ofrecer a voluntad en bateas cubiertas y/o comederos que eviten la acumulación de agua. Consumo esperado 3 g por kg de peso corporal. Contiene urea: requiere etapa de adaptación. Es tóxico para no rumiante.',
+  comp:[['Proteína Cruda','219,9',''],['Calcio','21,1','g'],['Fósforo','9,1','g'],['NDT','577','g'],['Sodio','30,5','g'],['Manganeso','302,6','mg'],['Zinc','486,7','mg'],['Selenio','3,8','mg'],['NNP','54,9','g'],['Magnesio','29,3','g'],['Biotina','0,0','mg'],['Monensina','138,1','mg'],['Vit A','20708,6','UI'],['Vit D3','3313,4','UI'],['Vit E','34,5','UI'],['Fibra Bruta','8,0','g'],['Cromo','0,8','mg']]},
+
+ {k:'PRO009', nom:'CREEP FEEDING', linea:'Proteica', peso:'30 kg',
+  ben:'Suplemento mineral y vitamínico destinado a terneros de corte en fase de lactancia, pronto para uso.',
+  des:'Formulado con minerales quelatados y vitaminas A, D y E; posee levadura y potenciador de crecimiento. Promueve mayor ganancia de peso al destete (aumento de 15 a 30 kg o más). Aporte vitamínico que ayuda a la marmorización en la fase inicial. Proteínas verdaderas altamente metabolizables asociadas a aminoácidos y aditivo anticoccidial.',
+  uso:'Ofrecer al ternero a voluntad desde el nacimiento hasta el destete, en comederos protegidos (creep feeding) donde sólo acceden los terneros. Consumo medio 300 g/100 kg de peso vivo; límite 170-300 g/cabeza/día. Comederos tapados y cerca de los saleros de la madre; al menos 5 cm de comedero por cabeza.',
+  comp:[['NDT','62,8','%'],['PB','20,3','%'],['Calcio','14','Gr'],['Fósforo','0,68','Gr'],['Sodio','12','Gr'],['Magnesio','0,22','Gr'],['Azufre','0,17','Gr'],['Hierro','115,8','Mg'],['Cromo','0,58','Mg'],['Cobre','67,8','Mg'],['Manganeso','202,9','Mg'],['Zinc','224,2','Mg'],['Cobalto','4,1','Mg'],['Selenio','1,3','Gr'],['Iodo','4,1','Mg'],['Monencina sódica','120','Mg'],['Vit A','10680','KUI/kg'],['Vit D','2136','KUI/kg'],['Vit E','106,8','UI/kg']]},
+
+ {k:'BAL001', nom:'TERMINACIÓN 4', linea:'Balanceados', peso:'40 kg',
+  ben:'Dietas ricas nutricionalmente para el aporte productivo de animales con alto potencial genético, con animales más sanos y dietas más seguras.',
+  des:'Ración de bovinos de carne. Recomendado para animales sobre pastura o confinados para ganancia de peso.',
+  uso:'Para animales en régimen de semi confinamiento o confinamiento, con fuentes de pastos u otros voluminosos. Utilizado en fase de terminación.',
+  comp:[['NDT','67,69','%'],['PB','14','%'],['Calcio','0,49','Gr'],['Fósforo','0,52','Gr'],['Sodio','0,54','Gr'],['Magnesio','0,1','Gr'],['Azufre','0,16','Gr'],['Hierro','38,63','Mg'],['Cromo','0,19','Mg'],['Cobre','22,61','Mg'],['Manganeso','67,64','Mg'],['Zinc','74,76','Mg'],['Cobalto','1,39','Mg'],['Selenio','0,45','Gr'],['Iodo','1,39','Mg'],['NNP','39,95','%'],['Monencina sódica','40','Mg'],['Vit A','3560','KUI/kg'],['Vit D','712','KUI/kg'],['Vit E','35','UI/kg']]},
+
+ {k:null, nom:'REPRODUCTOR CAMPO', linea:'Balanceados', peso:'40 kg',
+  ben:'Dietas ricas nutricionalmente para el aporte productivo de animales con alto potencial genético.',
+  des:'Ración de bovinos de carne. Recomendado para animales en reproducción a campo (toros, vacas, vaquillas reproductoras). Usar entre 1-2% de peso vivo según instrucciones del nutricionista.',
+  uso:'Para animales en régimen de semi confinamiento o confinamiento, con fuentes de pastos u otros voluminosos. Utilizado en fase de crecimiento y reproducción.',
+  comp:[['NDT','68,1','%'],['PB','16','%'],['Calcio','0,48','Gr'],['Fósforo','0,51','Gr'],['Sodio','0,54','Gr'],['Magnesio','0,1','Gr'],['Azufre','0,15','Gr'],['Hierro','38,63','Mg'],['Cromo','0,19','Mg'],['Cobre','22,61','Mg'],['Manganeso','67,64','Mg'],['Zinc','74,76','Mg'],['Cobalto','1,39','Mg'],['Selenio','0,45','Gr'],['Iodo','1,39','Mg'],['NNP','39,95','%'],['Monencina sódica','40','Mg'],['Vit A','3560','KUI/kg'],['Vit D','712','KUI/kg'],['Vit E','35','UI/kg']]},
+
+ {k:null, nom:'REPRODUCTOR CABAÑA', linea:'Balanceados', peso:'40 kg',
+  ben:'Dietas ricas nutricionalmente para el aporte productivo de animales con alto potencial genético.',
+  des:'Ración de bovinos de carne. Recomendado para animales en producción de alto valor genético. Usar entre 1-2% de peso vivo según instrucciones del nutricionista.',
+  uso:'Para animales con alto valor genético, con fuentes de voluminoso. Utilizado en fase reproductiva, crecimiento y desarrollo.',
+  comp:[['NDT','68,88','%'],['PB','18','%'],['Calcio','0,53','Gr'],['Fósforo','0,51','Gr'],['Sodio','0,55','Gr'],['Magnesio','0,14','Gr'],['Azufre','0,21','Gr'],['Hierro','38,63','Mg'],['Cromo','0,19','Mg'],['Cobre','22,61','Mg'],['Manganeso','67,64','Mg'],['Zinc','74,76','Mg'],['Cobalto','1,39','Mg'],['Selenio','0,44','Gr'],['Iodo','1,39','Mg'],['NNP','17,2','%'],['Monencina sódica','40','Mg'],['Vit A','3560','KUI/kg'],['Vit D','712','KUI/kg'],['Vit E','35','UI/kg']]},
+
+ {k:'BAL003', nom:'DESMAMANTE CAMPO', linea:'Balanceados', peso:'40 kg',
+  ben:'Dietas ricas nutricionalmente para el aporte productivo de animales con alto potencial genético.',
+  des:'Ración de bovinos de carne. Recomendado para animales en producción de alto valor genético. Usar entre 1-2% de peso vivo según instrucciones del nutricionista.',
+  uso:'Para animales con alto valor genético, con fuentes de voluminoso. Utilizado en fase reproductiva, crecimiento y desarrollo. Para desmamantes destetados a campo con régimen en pastura.',
+  comp:[['NDT','67,8','%'],['PB','18','%'],['Calcio','0,5','Gr'],['Fósforo','0,53','Gr'],['Sodio','0,54','Gr'],['Magnesio','0,13','Gr'],['Azufre','0,21','Gr'],['Hierro','38,6','Mg'],['Cromo','0,19','Mg'],['Cobre','22,6','Mg'],['Manganeso','67,6','Mg'],['Zinc','74,7','Mg'],['Cobalto','1,3','Mg'],['Selenio','0,45','Gr'],['Iodo','1,4','Mg'],['NNP','15,7','%'],['Monencina sódica','40','Mg'],['Vit A','3560','KUI/kg'],['Vit D','712','KUI/kg'],['Vit E','35,6','UI/kg']]},
+
+ {k:'BAL002', nom:'DESMAMANTE PRECOZ', linea:'Balanceados', peso:'40 kg',
+  ben:'Dietas ricas nutricionalmente para el aporte productivo de animales con alto potencial genético.',
+  des:'Ración de bovinos de carne. Recomendado para animales en reproducción de alto valor genético. Usar entre 1-2% de peso vivo según instrucciones del nutricionista.',
+  uso:'Para animales con alto valor genético, con fuentes de voluminoso. Utilizado en fase reproductiva, crecimiento y desarrollo. Para desmamantes destetados a campo con régimen en pastura.',
+  comp:[['NDT','69,04','%'],['PB','22','%'],['Calcio','0,58','Gr'],['Fósforo','0,49','Gr'],['Sodio','0,55','Gr'],['Magnesio','0,17','Gr'],['Azufre','0,15','Gr'],['Hierro','38,63','Mg'],['Cromo','0,19','Mg'],['Cobre','22,61','Mg'],['Manganeso','67,64','Mg'],['Zinc','74,76','Mg'],['Cobalto','1,39','Mg'],['Selenio','0,45','Gr'],['Iodo','1,39','Mg'],['Monencina sódica','40','Mg'],['Vit A','3560','KUI/kg'],['Vit D','712','KUI/kg'],['Vit E','35,6','UI/kg']]},
+
+ {k:null, nom:'CONFIPESO 4', linea:'Núcleo', peso:'25 kg',
+  ben:'',
+  des:'Núcleo de minerales, con mejorador de desempeño y vitaminas, destinado a la formulación de raciones concentradas para bovinos de corte en crecimiento y engorde. Mejora la eficiencia alimentaria y el ambiente ruminal. El cromo quelatado es un importante factor anti-stress, sobre todo en los primeros 30 días del confinamiento.',
+  uso:'40 kg de CONFIPESO 4 por cada 1.000 kg de ración concentrada, provista junto con una fuente de voluminoso. En dieta total, 200 a 250 g/animal/día. Para dietas especiales consultar al técnico BioInnova.',
+  comp:[['Fósforo Max','30','Gr'],['Calcio Max','140','Gr'],['Sodio','38','Gr'],['Magnesio','108','Gr'],['Azufre','20','Gr'],['Cobalto','225','Gr'],['Cobre','675','Mg'],['Iodo','225','Mg'],['Manganeso','2.020','Mg'],['Selenio','27','Mg'],['Zinc','3.370','Mg'],['Hierro','450','Mg'],['Monensina','1.000','Mg'],['Cromo','5,5','Mg'],['Vit A','150.000','Ui'],['Vit D','24.000','Ui'],['Vit E','210','Ui']]},
+
+ {k:'COFO10', nom:'CONFIPESO 10', linea:'Núcleo', peso:'40 kg',
+  ben:'',
+  des:'Mejorador de la eficiencia alimentaria: mejor aprovechamiento de los alimentos y mejoría del ambiente ruminal. Cromo quelatado como factor anti-stress. 95% de proteína bruta, nivel adecuado para formulaciones de confinamiento, con mayor fuente de proteína degradable en el rumen.',
+  uso:'10% CONFIPESO 10 + 90% de maíz (u otra fuente energética), junto con una fuente de voluminoso. En dieta total, 400 a 500 g/animal/día.',
+  comp:[['Humedad Max','130','Gr'],['PB Min','950','Gr'],['Extracto etéreo Max','10','Gr'],['Materia mineral Max','350','Gr'],['Materia fibrosa Max','100','Gr'],['Calcio Min','60','Gr'],['Calcio Max','70','Gr'],['Fósforo Min','12','Gr'],['FDA Max','50','Gr'],['NNP Max','84,4','Gr'],['Monensina','400','Mg'],['Potasio','24','Gr'],['Vitamina A','50000','Ui'],['Vitamina D','8000','Ui'],['Vitamina E','70','Ui']]},
+
+ {k:'COFO40', nom:'CONFIPESO 40', linea:'Núcleo', peso:'40 kg',
+  ben:'',
+  des:'Mejorador de la eficiencia alimentaria. Levaduras que mejoran la producción ruminal, el consumo de materia seca y el pH ruminal. Cromo quelatado como factor anti-stress. 40% de proteína bruta de origen vegetal de alta calidad.',
+  uso:'20% CONFIPESO 40 + 80% de maíz (u otra fuente energética), junto con una fuente de voluminoso. En dieta total, 800 a 1.200 g/animal/día.',
+  comp:[['Humedad','130','Gr'],['PB Min','400','Gr'],['Extracto etéreo Max','20','Gr'],['Materia mineral Max','180','Gr'],['Materia fibrosa Max','150','Gr'],['Calcio Min','25','Gr'],['Calcio Max','32','Gr'],['Fósforo Min','9','Gr'],['FDA Max','100','Gr'],['NNP Max','230','Gr'],['Monensina','200','Mg'],['Saccharomyces cerevisiae','4x10¹⁰','UFC'],['Vitamina A','25000','Ui'],['Vitamina D','4000','Ui'],['Vitamina E','35','Ui']]}
+];
+
+// Separa el "Min"/"Max" que algunas fichas traen pegado al nombre del nutriente
+// y lo lleva a la columna mín/máx que ya usa el editor de garantías.
+function catGarComp(filas){
+  return (filas||[]).map(([nut, valor, unidad])=>{
+    let n=String(nut||'').trim(), tipo='—';
+    const m=n.match(/\s+(Min|M[aá]x)\.?$/i);
+    if(m){ n=n.slice(0, m.index).trim(); tipo=/^min/i.test(m[1])?'mín':'máx'; }
+    return { nut:n, tipo, valor:String(valor||'').trim(), unidad:String(unidad||'').trim() };
+  });
+}
+
+// Importa el catálogo a las garantías ya existentes. No pisa lo cargado a mano:
+// si el producto ya tiene garantía, la saltea y lo informa.
+function garImportarCatalogo(){
+  if(!esGerente()){ showToast('Solo el gerente'); return; }
+  const vinculados = CAT_GAR.filter(c=>c.k);
+  const keys = {}; precioList().forEach(p=>{ keys[precioKey(p)]=p; });
+  const nuevos=[], saltados=[], sinProducto=[];
+  vinculados.forEach(c=>{
+    const p = keys[c.k];
+    if(!p){ sinProducto.push(c.nom + ' (' + c.k + ')'); return; }
+    if(garTieneDatos(garantiaDe(c.k))){ saltados.push(p.n); return; }
+    nuevos.push({
+      id:'GA-'+c.k, prod_key:c.k, prod_nom:p.n,
+      registro:'', especie:'Bovinos — consumo bovino, uso veterinario',
+      composicion: catGarComp(c.comp),
+      ingredientes:'',
+      indicaciones: [c.ben, c.des].filter(Boolean).join('\n\n'),
+      dosis: c.uso||'',
+      ts:new Date().toISOString(), pending:true
+    });
+  });
+  if(!nuevos.length){
+    showToast(saltados.length ? 'Ya estaban todas cargadas' : 'No hay nada para importar');
+    return;
+  }
+  const quedan = getGarantias().filter(g=>!nuevos.some(n=>n.prod_key===g.prod_key));
+  saveGarantias([...nuevos, ...quedan]);
+  if(typeof cloudPush==='function') nuevos.forEach(r=>{ try{ cloudPush('garantia', r); }catch(e){} });
+  renderProductosGar();
+  const sinVincular = CAT_GAR.filter(c=>!c.k).map(c=>c.nom);
+  let msg = '✓ ' + nuevos.length + ' garantías importadas del catálogo';
+  if(saltados.length) msg += '\n\n' + saltados.length + ' ya tenían datos y no se tocaron:\n· ' + saltados.join('\n· ');
+  if(sinProducto.length) msg += '\n\nNo encontré el producto de:\n· ' + sinProducto.join('\n· ');
+  if(sinVincular.length) msg += '\n\nSin vincular (asignalas a mano con ＋ Cargar):\n· ' + sinVincular.join('\n· ');
+  alert(msg);
+}
 function getGarantias(){ return getArr('bio:garantias'); }
 function saveGarantias(a){ setArr('bio:garantias',a); }
 function garantiaDe(key){ return getGarantias().find(g=>g.prod_key===key); }
 function garTieneDatos(g){ return !!(g && ((g.composicion&&g.composicion.length) || g.ingredientes || g.indicaciones || g.dosis)); }
+// Busca el producto del catálogo de precios por nombre y devuelve su clave
+// sólo si tiene garantía cargada. Se usa en el formulario de visita.
+function garKeyDeNombre(nom){ const t=String(nom||'').trim().toLowerCase(); if(!t) return null;
+  let p=null; try{ p=precioList().find(x=>String(x.n||'').trim().toLowerCase()===t); }catch(e){}
+  if(!p) return null; const k=precioKey(p); return garTieneDatos(garantiaDe(k))?k:null; }
+function garLinkHtml(nom){ const k=garKeyDeNombre(nom); if(!k) return '';
+  return `<span onclick="garVer('${encodeURIComponent(k)}')" style="cursor:pointer;color:var(--green-d);font-size:12px;font-weight:600">📘 Ver niveles de garantía</span>`; }
 function garRow(g){ return { id:g.id, prod_key:g.prod_key||'', prod_nom:g.prod_nom||'', data:{ registro:g.registro||'', especie:g.especie||'', composicion:g.composicion||[], ingredientes:g.ingredientes||'', indicaciones:g.indicaciones||'', dosis:g.dosis||'' }, ts:g.ts||null }; }
 function rowGar(r){ let d=r.data; if(typeof d==='string'){ try{ d=JSON.parse(d); }catch{ d={}; } } d=d||{}; return { id:r.id, prod_key:r.prod_key||'', prod_nom:r.prod_nom||'', registro:d.registro||'', especie:d.especie||'', composicion:Array.isArray(d.composicion)?d.composicion:[], ingredientes:d.ingredientes||'', indicaciones:d.indicaciones||'', dosis:d.dosis||'', ts:r.ts, pending:false }; }
 function renderProductosGar(){ const q=(gs('prodGarBuscar').value||'').trim().toLowerCase(); let ls=precioList(); if(q) ls=ls.filter(p=>((p.n||'')+' '+(p.c||'')).toLowerCase().includes(q)); if(gs('prodGarCount')) gs('prodGarCount').textContent=ls.length+' productos';
