@@ -48,10 +48,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Ar
 .btn-block{width:100%;display:block}
 .btn-amber{background:var(--amber);color:#fff}
 /* Home tiles */
-.tiles{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-.tile{background:#fff;border-radius:16px;padding:18px 14px;text-align:center;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,.06);border:1px solid var(--gray-200);transition:transform .12s,box-shadow .12s}
+.tiles{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.tile{background:#fff;border-radius:14px;padding:13px 10px;text-align:center;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,.06);border:1px solid var(--gray-200);transition:transform .12s,box-shadow .12s}
 .tile:active{transform:scale(.97)}
-.tile .ico{font-size:30px;margin-bottom:8px}
+.tile .ico{font-size:25px;margin-bottom:5px;line-height:1}
 .tile .tlab{font-size:14px;font-weight:700;color:var(--gray-800)}
 .tile .tsub{font-size:11px;color:var(--gray-500);margin-top:2px}
 .tile.wide{grid-column:1/-1}
@@ -149,28 +149,32 @@ textarea{resize:vertical;min-height:66px}
       <div class="stat"><div class="sv" id="stVisitas">0</div><div class="sl">Visitas</div></div>
       <div class="stat"><div class="sv" id="stMes">0</div><div class="sl">Este mes</div></div>
     </div>
-    <div class="tiles">
-      <div class="tile wide" id="tileVisita" onclick="nuevaVisita()" style="background:linear-gradient(135deg,var(--green),var(--green-d));color:#fff;border:none">
-        <div class="ico">📋</div><div class="tlab" style="color:#fff">Nueva visita técnica</div><div class="tsub" style="color:rgba(255,255,255,.85)">Cargar KPIs y generar informe</div>
-      </div>
-      <div class="tile wide" id="tileVisitaCom" onclick="nuevaVisitaComercial()" style="background:linear-gradient(135deg,#2e5b8a,#1e3f63);color:#fff;border:none">
-        <div class="ico">🤝</div><div class="tlab" style="color:#fff">Nueva visita comercial</div><div class="tsub" style="color:rgba(255,255,255,.85)">Prospección y relevamiento</div>
-      </div>
+    <div class="sect-t" id="hdrComercial">Comercial</div>
+    <div class="tiles" id="grpComercial">
       <div class="tile" id="tileClientes" onclick="openClientes()"><div class="ico">🏡</div><div class="tlab">Clientes</div><div class="tsub">y estancias</div></div>
-      <div class="tile" id="tileAgenda" onclick="openAgenda()" style="display:none"><div class="ico">📅</div><div class="tlab">Agenda</div><div class="tsub">plan semanal</div></div>
-      <div class="tile" id="tileHistorial" onclick="openHistorial()"><div class="ico">🗂️</div><div class="tlab">Historial</div><div class="tsub">de visitas</div></div>
-      <div class="tile" id="tileOT" onclick="openOTList()" style="display:none"><div class="ico">🏭</div><div class="tlab">Órdenes de Trabajo</div><div class="tsub">producción</div></div>
-      <div class="tile" id="tileProductos" onclick="openProductos()" style="display:none"><div class="ico">🏷️</div><div class="tlab">Productos</div><div class="tsub">catálogo e inventario PT</div></div>
-      <div class="tile" id="tileFormulas" onclick="openFormulas()" style="display:none"><div class="ico">🧪</div><div class="tlab">Formulaciones</div><div class="tsub">recetas</div></div>
-      <div class="tile" id="tileInv" onclick="openInv()" style="display:none"><div class="ico">📦</div><div class="tlab">Inventario</div><div class="tsub">insumos y materia prima</div></div>
-      <div class="tile" id="tileFinanzas" onclick="openFinanzas()" style="display:none"><div class="ico">📊</div><div class="tlab">Finanzas</div><div class="tsub">ventas, cobros, pagos y flujo</div></div>
-      <div class="tile" id="tileCaja" onclick="openCaja()" style="display:none"><div class="ico">💵</div><div class="tlab">Caja chica</div><div class="tsub">efectivo de planta</div></div>
-      <div class="tile" id="tileViat" onclick="openViaticos()" style="display:none"><div class="ico">🧾</div><div class="tlab">Viáticos</div><div class="tsub">rendición de comerciales</div></div>
+      <div class="tile" id="tileHistorial" onclick="openHistorial()"><div class="ico">📋</div><div class="tlab">Visitas</div><div class="tsub">cargar y consultar</div></div>
       <div class="tile" id="tileCrm" onclick="openCrm()" style="display:none"><div class="ico">🤝</div><div class="tlab">CRM</div><div class="tsub">seguimiento de clientes</div></div>
+      <div class="tile" id="tileAgenda" onclick="openAgenda()" style="display:none"><div class="ico">📅</div><div class="tlab">Agenda</div><div class="tsub">plan semanal</div></div>
       <div class="tile" id="tileCotiz" onclick="openCotiz()" style="display:none"><div class="ico">🧮</div><div class="tlab">Cotizaciones</div><div class="tsub">precios y pedidos</div></div>
       <div class="tile" id="tileMetas" onclick="openMetas()" style="display:none"><div class="ico">🎯</div><div class="tlab">Metas de venta</div><div class="tsub">avance del equipo</div></div>
+      <div class="tile" id="tileViat" onclick="openViaticos()" style="display:none"><div class="ico">🧾</div><div class="tlab">Viáticos</div><div class="tsub">rendición de comerciales</div></div>
+    </div>
+
+    <div class="sect-t" id="hdrProduccion">Producción</div>
+    <div class="tiles" id="grpProduccion">
+      <div class="tile" id="tileOT" onclick="openOTList()" style="display:none"><div class="ico">🏭</div><div class="tlab">Órdenes de Trabajo</div><div class="tsub">producción</div></div>
+      <div class="tile" id="tileProductos" onclick="openProductos()" style="display:none"><div class="ico">🏷️</div><div class="tlab">Productos</div><div class="tsub">catálogo y fórmulas</div></div>
+      <div class="tile" id="tileInv" onclick="openInv()" style="display:none"><div class="ico">📦</div><div class="tlab">Inventario</div><div class="tsub">insumos y materia prima</div></div>
+      <div class="tile" id="tileFormulas" onclick="openFormulas()" style="display:none"><div class="ico">🧪</div><div class="tlab">Formulaciones</div><div class="tsub">recetas</div></div>
+    </div>
+
+    <div class="sect-t" id="hdrAdmin">Administración</div>
+    <div class="tiles" id="grpAdmin">
+      <div class="tile" id="tileFinanzas" onclick="openFinanzas()" style="display:none"><div class="ico">📊</div><div class="tlab">Finanzas</div><div class="tsub">ventas, cobros, pagos y flujo</div></div>
+      <div class="tile" id="tileCaja" onclick="openCaja()" style="display:none"><div class="ico">💵</div><div class="tlab">Caja chica</div><div class="tsub">efectivo de planta</div></div>
       <div class="tile" id="tileUsuarios" onclick="openUsuarios()" style="display:none"><div class="ico">👥</div><div class="tlab">Usuarios</div><div class="tsub">accesos y roles</div></div>
     </div>
+
     <div class="sect-t">Últimas visitas</div>
     <div class="card"><div id="homeUltimas"></div></div>
   </div>
@@ -324,7 +328,10 @@ textarea{resize:vertical;min-height:66px}
     <div class="card"><div class="card-b" id="cliInfo"></div></div>
     <div class="card"><div class="card-b" id="cliCrm"></div></div>
     <div class="card"><div class="card-h"><span>🏡 Estancias</span><span id="estBtnAgregar" style="color:var(--green);cursor:pointer;font-weight:600" onclick="estanciaModal()">＋ Agregar</span></div><div id="estList"></div></div>
-    <button class="btn btn-primary btn-block" id="btnVisitaCliente" style="margin-bottom:10px" onclick="nuevaVisitaCliente()">📋 Nueva visita a este cliente</button>
+    <div id="cliAccVisita" style="display:flex;gap:8px;margin-bottom:10px">
+      <button class="btn btn-primary" style="flex:1" id="btnVisitaCliente" onclick="nuevaVisitaCliente()">📋 Visita técnica</button>
+      <button class="btn" style="flex:1;background:#1e3f63;color:#fff;border-color:#1e3f63" id="btnVisitaComCliente" onclick="nuevaVisitaComercialCliente(curCliente)">🤝 Visita comercial</button>
+    </div>
     <div class="card"><div class="card-h"><span>Visitas</span><span id="cliVisCount" style="font-weight:500;color:var(--gray-400)"></span></div><div id="cliVisList"></div></div>
   </div>
 
@@ -486,6 +493,13 @@ textarea{resize:vertical;min-height:66px}
 
   <!-- HISTORIAL -->
   <div class="screen" id="sHistorial">
+    <div id="histAcciones">
+      <div class="sect-t" style="margin-top:0">Cargar una visita</div>
+      <div style="display:flex;gap:8px;margin-bottom:14px">
+        <button class="btn btn-primary" style="flex:1" onclick="nuevaVisita()">📋 Técnica</button>
+        <button class="btn" style="flex:1;background:#1e3f63;color:#fff;border-color:#1e3f63" onclick="nuevaVisitaComercial()">🤝 Comercial</button>
+      </div>
+    </div>
     <div style="display:flex;gap:8px;margin-bottom:8px">
       <select id="hFiltroTipo" onchange="renderHistorial()" style="flex:1"><option value="">Todas</option><option value="tecnica">Técnicas</option><option value="comercial">Comerciales</option></select>
       <select id="hFiltroTec" onchange="renderHistorial()" style="flex:1"></select>
@@ -946,7 +960,7 @@ const visitasDe   =cid=>getVisitas().filter(v=>v.cliente_id===cid);
 // Versión de la app. SUBIR JUNTO CON `CACHE` en sw.js en cada publicación.
 // Es sólo informativa (se muestra en la cabecera) y sirve para saber de un vistazo
 // si un equipo ya tomó el último cambio o quedó con una copia vieja en caché.
-const APP_VERSION = 126;
+const APP_VERSION = 127;
 try{ document.addEventListener('DOMContentLoaded', ()=>{ const v=document.getElementById('verChip'); if(v) v.textContent='v'+APP_VERSION; }); }catch(e){}
 const SUPABASE_URL = 'https://mnuldrgynighabwtulkf.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_uAH-nT2MczSB8m9F4THmdw_T6u77exI';
@@ -1076,10 +1090,17 @@ async function cambiarPass(){
     cerrarModal(); showToast('✓ Contraseña actualizada');
   }catch(e){ btn.disabled=false; btn.textContent='Cambiar'; fail(e.message||'Error al cambiar la contraseña'); }
 }
+// Esconde el título y la grilla de un grupo cuando ninguno de sus tiles quedó
+// visible: a Planta no le puede quedar el rótulo "Comercial" sobre un hueco.
+function grupoVisible(hdrId, grpId){
+  const g=gs(grpId), h=gs(hdrId); if(!g||!h) return;
+  const hay=[...g.children].some(t=>t.style.display!=='none');
+  h.style.display = hay?'':'none';
+  g.style.display = hay?'':'none';
+}
 function applyRoleUI(){
   const showEl=(id,show)=>{ const el=gs(id); if(el) el.style.display=show?'':'none'; };
-  showEl('tileVisita', puedeVer('visita') && canEdit());
-  showEl('tileVisitaCom', puedeVer('visita') && canEdit());
+  showEl('histAcciones', puedeVer('visita') && canEdit());
   showEl('tileClientes', puedeVer('clientes'));
   showEl('tileHistorial', puedeVer('historial'));
   showEl('tileAgenda', puedeVer('agenda'));
@@ -1095,6 +1116,9 @@ function applyRoleUI(){
   showEl('tileCaja', puedeVer('caja'));
   showEl('tileUsuarios', puedeVer('usuarios'));
   showEl('btnNuevoCliente', puedeVer('clientes') && canEdit());
+  grupoVisible('hdrComercial','grpComercial');
+  grupoVisible('hdrProduccion','grpProduccion');
+  grupoVisible('hdrAdmin','grpAdmin');
 }
 
 // ══════════════════════════════════════════════════════════
@@ -1652,7 +1676,7 @@ function reopenScreen(id){ _navBacking=true; try{ switch(id){
 function navBack(){ const prev=_nav.pop(); reopenScreen(prev||'sHome'); }
 function goHome(){ curCliente=null; editVisitaId=null; _nav=[]; showScreen('sHome','BioInnova','Visitas técnicas a campo',false); renderHome(); applyRoleUI(); }
 function openClientes(){ if(!puedeVer('clientes')){ showToast('Sin permiso'); return; } showScreen('sClientes','Clientes','Fichas y estancias',true); renderClientes(); }
-function openHistorial(){ if(!puedeVer('historial')){ showToast('Sin permiso'); return; } showScreen('sHistorial','Historial','Todas las visitas',true);
+function openHistorial(){ if(!puedeVer('historial')){ showToast('Sin permiso'); return; } showScreen('sHistorial','Visitas','Cargar una nueva o ver el historial',true);
   gs('hFiltroCat').innerHTML='<option value="">Todas las categorías</option>'+CATEGORIAS.map(c=>`<option>${c}</option>`).join('');
   const tecs=[...new Set(getVisitas().map(v=>v.tecnico||'Sin técnico'))].sort((a,b)=>a.localeCompare(b));
   gs('hFiltroTec').innerHTML='<option value="">Todos los técnicos</option>'+tecs.map(t=>`<option>${esc(t)}</option>`).join('');
@@ -1668,7 +1692,7 @@ function renderHome(){
   gs('stMes').textContent=vi.filter(v=>String(v.fecha||'').startsWith(mes)).length;
   const cont=gs('homeUltimas');
   const ult=vi.slice().sort((a,b)=>String(b.ts||'').localeCompare(String(a.ts||''))).slice(0,5);
-  cont.innerHTML = ult.length? ult.map(v=>visitaLi(v)).join('') : '<div class="empty">Todavía no hay visitas cargadas.<br>Tocá <b>Nueva visita técnica</b> para empezar.</div>';
+  cont.innerHTML = ult.length? ult.map(v=>visitaLi(v)).join('') : '<div class="empty">Todavía no hay visitas cargadas.<br>Entrá a <b>Visitas</b> y cargá la primera.</div>';
 }
 function visitaLi(v){
   const c=clienteById(v.cliente_id);
@@ -1832,7 +1856,7 @@ function abrirCliente(id){
   showScreen('sCliente',c.nombre,'Ficha del cliente',true);
   const ed=canEdit();
   gs('estBtnAgregar').style.display=ed?'':'none';
-  gs('btnVisitaCliente').style.display=ed?'':'none';
+  gs('cliAccVisita').style.display=ed?'flex':'none';
   gs('cliInfo').innerHTML=`<div style="display:flex;justify-content:space-between;align-items:start"><div><div style="font-size:16px;font-weight:700">${esc(c.nombre)}</div>
     <div style="font-size:12px;color:var(--gray-600);margin-top:3px">${c.codigo?'🏷️ '+esc(c.codigo)+(c.ruc?' · ':'<br>'):''}${c.ruc?'🧾 RUC '+esc(c.ruc)+'<br>':''}${c.contacto?'👤 '+esc(c.contacto)+'<br>':''}${c.tel?'📞 '+esc(c.tel)+'  ':''}${c.email?'✉ '+esc(c.email):''}${c.direccion?'<br>🏠 '+esc(c.direccion):''}${c.ubicacion?'<br>📍 '+esc(c.ubicacion):''}</div>
     ${c.obs?'<div style="font-size:12px;color:var(--gray-500);margin-top:5px">'+esc(c.obs)+'</div>':''}</div>
