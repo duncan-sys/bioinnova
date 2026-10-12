@@ -961,7 +961,7 @@ const visitasDe   =cid=>getVisitas().filter(v=>v.cliente_id===cid);
 // Versión de la app. SUBIR JUNTO CON `CACHE` en sw.js en cada publicación.
 // Es sólo informativa (se muestra en la cabecera) y sirve para saber de un vistazo
 // si un equipo ya tomó el último cambio o quedó con una copia vieja en caché.
-const APP_VERSION = 128;
+const APP_VERSION = 129;
 try{ document.addEventListener('DOMContentLoaded', ()=>{ const v=document.getElementById('verChip'); if(v) v.textContent='v'+APP_VERSION; }); }catch(e){}
 const SUPABASE_URL = 'https://mnuldrgynighabwtulkf.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_uAH-nT2MczSB8m9F4THmdw_T6u77exI';
@@ -3618,13 +3618,13 @@ const CAT_GAR = [
   uso:'Para animales en régimen de semi confinamiento o confinamiento, con fuentes de pastos u otros voluminosos. Utilizado en fase de terminación.',
   comp:[['NDT','67,69','%'],['PB','14','%'],['Calcio','0,49','Gr'],['Fósforo','0,52','Gr'],['Sodio','0,54','Gr'],['Magnesio','0,1','Gr'],['Azufre','0,16','Gr'],['Hierro','38,63','Mg'],['Cromo','0,19','Mg'],['Cobre','22,61','Mg'],['Manganeso','67,64','Mg'],['Zinc','74,76','Mg'],['Cobalto','1,39','Mg'],['Selenio','0,45','Gr'],['Iodo','1,39','Mg'],['NNP','39,95','%'],['Monencina sódica','40','Mg'],['Vit A','3560','KUI/kg'],['Vit D','712','KUI/kg'],['Vit E','35','UI/kg']]},
 
- {k:null, nom:'REPRODUCTOR CAMPO', linea:'Balanceados', peso:'40 kg',
+ {k:'BAL008', nom:'REPRODUCTOR CAMPO', linea:'Balanceados', peso:'40 kg',
   ben:'Dietas ricas nutricionalmente para el aporte productivo de animales con alto potencial genético.',
   des:'Ración de bovinos de carne. Recomendado para animales en reproducción a campo (toros, vacas, vaquillas reproductoras). Usar entre 1-2% de peso vivo según instrucciones del nutricionista.',
   uso:'Para animales en régimen de semi confinamiento o confinamiento, con fuentes de pastos u otros voluminosos. Utilizado en fase de crecimiento y reproducción.',
   comp:[['NDT','68,1','%'],['PB','16','%'],['Calcio','0,48','Gr'],['Fósforo','0,51','Gr'],['Sodio','0,54','Gr'],['Magnesio','0,1','Gr'],['Azufre','0,15','Gr'],['Hierro','38,63','Mg'],['Cromo','0,19','Mg'],['Cobre','22,61','Mg'],['Manganeso','67,64','Mg'],['Zinc','74,76','Mg'],['Cobalto','1,39','Mg'],['Selenio','0,45','Gr'],['Iodo','1,39','Mg'],['NNP','39,95','%'],['Monencina sódica','40','Mg'],['Vit A','3560','KUI/kg'],['Vit D','712','KUI/kg'],['Vit E','35','UI/kg']]},
 
- {k:null, nom:'REPRODUCTOR CABAÑA', linea:'Balanceados', peso:'40 kg',
+ {k:'BAL009', nom:'REPRODUCTOR CABAÑA', linea:'Balanceados', peso:'40 kg',
   ben:'Dietas ricas nutricionalmente para el aporte productivo de animales con alto potencial genético.',
   des:'Ración de bovinos de carne. Recomendado para animales en producción de alto valor genético. Usar entre 1-2% de peso vivo según instrucciones del nutricionista.',
   uso:'Para animales con alto valor genético, con fuentes de voluminoso. Utilizado en fase reproductiva, crecimiento y desarrollo.',
