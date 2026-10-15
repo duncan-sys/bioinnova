@@ -291,8 +291,15 @@ function cmVrRender(){
         ${[7,15,30].map(d=>`<button type="button" onclick="cmVrDias(${d})" style="border:1.5px solid var(--gray-200);background:#fff;border-radius:14px;padding:6px 10px;font-size:12px;font-weight:600;font-family:inherit;cursor:pointer">+${d} días</button>`).join('')}
         <input type="date" id="vrFechaProx" value="${_vr.fechaProx||''}" onchange="_vr.fechaProx=this.value" style="flex:1;min-width:130px">
       </div>`:''}
+    <div style="border:1.5px dashed var(--gray-200);border-radius:10px;padding:9px 10px;margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer" onclick="cmVrKeep();_vr.infOpen=!_vr.infOpen;cmVrRender()"><span style="font-size:13px;font-weight:700;color:#1e3f63">📄 Informe para el cliente <span style="font-weight:400;color:var(--gray-400);font-size:11px">(opcional, 1 página)</span></span><span style="color:var(--gray-400)">${_vr.infOpen?'▲':'▼'}</span></div>
+      ${_vr.infOpen?`<div style="font-size:11px;color:var(--gray-500);margin:4px 0 6px">Esto SÍ lo lee el cliente. La nota de arriba es interna y no va en el informe.</div>
+        <label class="fl">Qué vimos en la visita</label><textarea id="vrInfVimos" placeholder="ej: el lote de recría está en buen estado; el consumo de sal está por debajo de lo recomendado…" oninput="_vr.infVimos=this.value">${esc(_vr.infVimos||'')}</textarea>
+        <label class="fl">Nuestra recomendación</label><textarea id="vrInfReco" placeholder="ej: aumentar el consumo a 80 g/animal/día; revisar comederos…" oninput="_vr.infReco=this.value">${esc(_vr.infReco||'')}</textarea>`:''}
+    </div>
     <div id="vrGps" style="font-size:11px;color:var(--gray-400);margin-bottom:8px">${cmVrGpsTxt()}</div>
-    <button class="btn btn-primary btn-block" style="font-size:16px;padding:13px" onclick="cmVrGuardar()">✓ Guardar</button>
+    <button class="btn btn-primary btn-block" style="font-size:16px;padding:13px" onclick="cmVrGuardar(false)">✓ Guardar</button>
+    <button class="btn btn-block" style="margin-top:8px;background:#1e3f63;color:#fff;border-color:#1e3f63" onclick="cmVrGuardar(true)">📄 Guardar y generar informe para el cliente</button>
   </div></div>
   <div style="font-size:11px;color:var(--gray-400);text-align:center;margin:-2px 0 12px">¿Necesitás el informe técnico con lotes y KPIs? <span style="color:var(--green);cursor:pointer;font-weight:600" onclick="nuevaVisita()">Visita técnica completa</span></div>`;
   if(!c) cmVrFiltrar();
@@ -301,7 +308,7 @@ function cmVrFiltrar(){
   const inp=gs('vrBuscar'); const q=inp?inp.value:''; _vr.q=q; const box=gs('vrLista'); if(!box) return;
   const ops=cmVrClientesOpts(q);
   box.innerHTML = ops.map(c=>`<div class="li" style="padding:8px 10px" onclick="_vr.cliente_id='${c.id}';_vr.prospecto='';cmVrRender()"><div class="li-t" style="font-size:13px">${esc(c.nombre)}</div>${c.comercial?`<div class="li-s">${esc(c.comercial)}</div>`:''}</div>`).join('')
-    + (q.trim()?`<div class="li" style="padding:8px 10px;color:var(--green)" onclick="_vr.prospecto=gs('vrBuscar').value.trim();cmVrProspectoMsg()"><div class="li-t" style="font-size:13px">➕ Prospecto nuevo: <b>${esc(q.trim())}</b></div></div>`:'')
+    + (q.trim()?`<div class="li" style="padding:8px 10px;color:var(--green)" onclick="cmVrKeep();cmNuevoCliente(gs('vrBuscar').value.trim(),'vr')"><div class="li-t" style="font-size:13px">➕ No está en la lista: cargar <b>${esc(q.trim())}</b> como cliente nuevo</div></div>`:'')
     + (_vr.prospecto?`<div style="font-size:12px;color:var(--green);padding:6px 2px">Se va a crear el prospecto <b>${esc(_vr.prospecto)}</b> asignado a vos.</div>`:'');
 }
 function cmVrProspectoMsg(){ cmVrFiltrar(); }
@@ -309,15 +316,16 @@ function cmVrMedio(k){ _vr.medio=k; cmVrKeep(); cmVrRender(); }
 function cmVrRes(k){ _vr.resultado=k; if(!_vr.prox){ _vr.prox = k==='pide_cotiz'?'llamar':(k==='sin_interes'?'ninguno':'visitar'); if(_vr.prox!=='ninguno') _vr.fechaProx=cmAddDias(hoy(), k==='pide_cotiz'?7:15); } cmVrKeep(); cmVrRender(); }
 function cmVrProx(k){ _vr.prox=k; if(k==='ninguno') _vr.fechaProx=''; else if(!_vr.fechaProx) _vr.fechaProx=cmAddDias(hoy(),15); cmVrKeep(); cmVrRender(); }
 function cmVrDias(d){ _vr.fechaProx=cmAddDias(hoy(),d); const f=gs('vrFechaProx'); if(f) f.value=_vr.fechaProx; }
-function cmVrKeep(){ const n=gs('vrNota'); if(n) _vr.nota=n.value; const b=gs('vrBuscar'); if(b) _vr.q=b.value; }
+function cmVrKeep(){ const n=gs('vrNota'); if(n) _vr.nota=n.value; const iv=gs('vrInfVimos'); if(iv) _vr.infVimos=iv.value; const ir=gs('vrInfReco'); if(ir) _vr.infReco=ir.value; const b=gs('vrBuscar'); if(b) _vr.q=b.value; }
 function cmVrGpsTxt(){ const g=_vr.gps; if(g==null) return '📍 Buscando ubicación…'; if(g===false) return '📍 Sin ubicación (no es obligatoria)'; return '📍 Ubicación registrada (±'+Math.round(g.acc||0)+' m)'; }
 function cmVrGps(){
   if(!navigator.geolocation){ _vr.gps=false; return; }
   try{ navigator.geolocation.getCurrentPosition(p=>{ _vr.gps={ lat:+p.coords.latitude.toFixed(6), lng:+p.coords.longitude.toFixed(6), acc:p.coords.accuracy }; const el=gs('vrGps'); if(el) el.textContent=cmVrGpsTxt(); },
     ()=>{ _vr.gps=false; const el=gs('vrGps'); if(el) el.textContent=cmVrGpsTxt(); }, { timeout:9000, maximumAge:300000, enableHighAccuracy:false }); }catch(e){ _vr.gps=false; }
 }
-function cmVrGuardar(){
-  cmVrKeep();
+function cmVrGuardar(imprimir){
+  cmVrKeep(); const iv=gs('vrInfVimos'), ir=gs('vrInfReco'); if(iv) _vr.infVimos=iv.value; if(ir) _vr.infReco=ir.value;
+  if(imprimir && !String(_vr.infVimos||'').trim() && !String(_vr.infReco||'').trim()){ _vr.infOpen=true; cmVrRender(); showToast('Completá qué vieron y/o la recomendación para el cliente'); return; }
   const yo=cmYo(); if(!yo){ showToast('No se reconoce tu nombre de usuario'); return; }
   if(!_vr.cliente_id && !_vr.prospecto){ showToast('Elegí el cliente (o tocá "Prospecto nuevo")'); return; }
   if(!_vr.resultado){ showToast('Marcá qué pasó'); return; }
@@ -335,6 +343,7 @@ function cmVrGuardar(){
   if(items.length) com.cotiz={ items, cond:(_vr.cond||'').trim(), estado:'pendiente', pedida:ahora };
   if(_vr.resultado==='pedido') com.pedido={ monto:Number(_vr.monto)||null };
   if(_vr.gps) com.gps=_vr.gps;
+  if(String(_vr.infVimos||'').trim()||String(_vr.infReco||'').trim()) com.informe={ vimos:String(_vr.infVimos||'').trim(), reco:String(_vr.infReco||'').trim() };
   const v={ id:'VR-'+Date.now(), tipo:'rapida', cliente_id:c.id, estancia_id:'', fecha:f, tecnico:yo, evaluaciones:[], comercial:com, diagnostico:'', recomendacion:'', proxima:(_vr.prox!=='ninguno'?_vr.fechaProx:''), ts:ahora, pending:true };
   // CRM: el seguimiento queda en la ficha y el próximo contacto se reemplaza
   c.seguimientos=c.seguimientos||[];
@@ -352,6 +361,7 @@ function cmVrGuardar(){
   if(pl){ pl.estado='hecha'; pl.ts=ahora; pl.pending=true; saveAgenda(ag); cloudPush('agenda',pl); }
   showToast(items.length?'✓ Guardada · pedido de cotización enviado a gerencia':'✓ Visita guardada');
   _vr={};
+  if(imprimir) cmInformePDF(v.id);
   if(cmBloqueado()) cmIrBloqueo(); else goHome();
 }
 
@@ -374,6 +384,8 @@ function cmVerVisita(v){
     ${com.pedido&&com.pedido.monto?`<div style="font-size:12px;margin-top:6px">Monto aprox.: <b>${finGsFmt(com.pedido.monto)}</b></div>`:''}
     ${cot}
     <div style="font-size:12px;margin-top:8px">Próximo paso: <b>${esc(cmProxLbl(com.prox_tipo))}</b>${v.proxima?' · '+fmtFecha(v.proxima):''}</div>
+    ${com.informe?`<div class="sect-t">Informe para el cliente</div>${com.informe.vimos?'<div style="font-size:12px;white-space:pre-wrap"><b>Qué vimos:</b> '+esc(com.informe.vimos)+'</div>':''}${com.informe.reco?'<div style="font-size:12px;white-space:pre-wrap;margin-top:3px"><b>Recomendación:</b> '+esc(com.informe.reco)+'</div>':''}`:''}
+    <button class="btn btn-block" style="margin-top:12px;background:#1e3f63;color:#fff;border-color:#1e3f63" onclick="cmInformePDF('${v.id}')">📄 Informe para el cliente (PDF)</button>
     ${com.gps?`<div style="font-size:11px;margin-top:4px"><a href="https://maps.google.com/?q=${com.gps.lat},${com.gps.lng}" target="_blank" rel="noopener">📍 Ver ubicación</a></div>`:''}
     ${canEdit()&&(esGerente()||cmMismo(v.tecnico,cmYo()))?`<button class="btn btn-sec btn-block" style="margin-top:12px;color:var(--red)" onclick="borrarVisita('${v.id}')">Borrar</button>`:''}
     <button class="btn btn-ghost btn-block" style="margin-top:8px" onclick="cerrarModal()">Cerrar</button>`;
@@ -458,7 +470,7 @@ function cmRenderPlan(){
 }
 function cmPsListaHtml(ops,q){
   return ops.map(c=>`<div class="li" style="padding:8px 10px" onclick="cmPsAdd('${c.id}')"><div class="li-t" style="font-size:13px">${esc(c.nombre)}</div><span style="color:var(--green);font-weight:700">＋</span></div>`).join('')
-    + (q.trim()?`<div class="li" style="padding:8px 10px;color:var(--green)" onclick="cmPsAdd('',gs('psBuscar').value.trim())"><div class="li-t" style="font-size:13px">➕ Agregar <b>${esc(q.trim())}</b> como prospecto</div></div>`:'');
+    + (q.trim()?`<div class="li" style="padding:8px 10px;color:var(--green)" onclick="cmNuevoCliente(gs('psBuscar').value.trim(),'ps')"><div class="li-t" style="font-size:13px">➕ No está en la lista: cargar <b>${esc(q.trim())}</b> como cliente nuevo</div></div>`:'');
 }
 function cmPsLista(){ const box=gs('psLista'); if(!box) return; const yo=cmYo(); const en=new Set(cmPlanSemana(getAgenda(),yo,hoy()).map(a=>a.cliente_id).filter(Boolean)); box.innerHTML=cmPsListaHtml(_ps.q.trim()?cmVrClientesOpts(_ps.q).filter(c=>!en.has(c.id)).slice(0,12):[],_ps.q); }
 function cmPsDia(d){ _ps.dia=d; cmRenderPlan(); }
@@ -691,11 +703,108 @@ function cmMinGuardar(){
 }
 
 // ══════════════════════════════════════════════════════════
+//  CLIENTE NUEVO desde la visita o la agenda
+//  Abre la ficha de alta normal con el nombre ya escrito; al guardar vuelve
+//  a donde estaba con el cliente elegido y asignado al comercial.
+// ══════════════════════════════════════════════════════════
+let _cmNuevoCli=null;
+function cmNuevoCliente(nombre, origen){
+  if(!canEdit()){ showToast('Sin permiso'); return; }
+  clienteModal(); const n=gs('mNombre'); if(n){ n.value=nombre||''; }
+  _cmNuevoCli={ origen, antes:new Set(getClientes().map(c=>c.id)) };   // después de abrir: clienteModal no cierra el modal
+}
+function cmTrasNuevoCliente(p){
+  const nuevo=getClientes().find(c=>!p.antes.has(c.id)); if(!nuevo) return;
+  const cl=getClientes(); const c=cl.find(x=>x.id===nuevo.id);
+  if(!String(c.comercial||'').trim()) c.comercial=cmYo();
+  if(!c.estado) c.estado='Prospecto';
+  c.ts=new Date().toISOString(); c.pending=true; saveClientes(cl); cloudPush('clientes',c);
+  if(p.origen==='vr'){ _vr.cliente_id=c.id; _vr.prospecto=''; _vr.q=''; showScreen('sVisitaRapida','Registrar visita','En 20 segundos',true); cmVrRender(); }
+  else if(p.origen==='ps'){ showScreen('sPlanSemana','Mi semana','Planificá a quién vas a ver',!cmBloqueado()); cmPsAdd(c.id); }
+}
+
+// ══════════════════════════════════════════════════════════
+//  INFORME PARA EL CLIENTE (1 página)
+//  Sólo lo que el comercial escribió PARA el cliente: nunca la nota interna,
+//  la ubicación ni las etiquetas internas del resultado.
+// ══════════════════════════════════════════════════════════
+const CM_MOTIVO_CLIENTE = { presentacion:'Presentación de productos', seguimiento:'Visita de seguimiento', pide_cotiz:'Relevamiento de necesidades',
+  pedido:'Confirmación de pedido', reclamo:'Atención de consulta', cobranza:'Gestión administrativa', sin_interes:'Visita comercial' };
+function cmProxCliente(com, fecha){
+  if(!fecha || com.prox_tipo==='ninguno') return '';
+  const f=fmtFecha(fecha);
+  if(com.prox_tipo==='llamar') return 'Nos comunicaremos con usted el '+f+'.';
+  if(com.prox_tipo==='enviar') return 'Le haremos llegar la información conversada; próximo contacto el '+f+'.';
+  return 'Próxima visita prevista: '+f+'.';
+}
+function cmInformePDF(id){
+  const v=getVisitas().find(x=>x.id===id); if(!v){ showToast('Visita no encontrada'); return; }
+  const c=clienteById(v.cliente_id)||{}; const com=v.comercial||{}; const inf=com.informe||{};
+  const nom=c.nombre||'—'; const presencial=(com.medio||'Visita')==='Visita';
+  const items=(com.cotiz&&com.cotiz.items)||[];
+  const prox=cmProxCliente(com, v.proxima);
+  const w=window.open('','_blank'); if(!w){ showToast('Permití las ventanas emergentes'); return; }
+  const fname='Informe-visita-'+String(nom).replace(/[^\w\-]+/g,'_')+'-'+String(v.fecha||'')+'.pdf';
+  const base=location.origin+location.pathname.replace(/[^/]*$/,'');
+  const bloque=(t,b)=>b?`<h2>${t}</h2><div class="txt">${esc(b)}</div>`:'';
+  w.document.write(`<html><head><meta charset="utf-8"><title>Informe de visita — ${esc(nom)}</title><style>
+    *{box-sizing:border-box} body{font-family:Arial,Helvetica,sans-serif;color:#1a202c;margin:0;font-size:12.5px}
+    .wrap{max-width:760px;margin:0 auto;padding:24px}
+    .top{display:flex;justify-content:space-between;align-items:center;border-bottom:3px solid #0a6640;padding-bottom:10px;margin-bottom:14px}
+    .top img{height:48px} .tit{text-align:right} .tit b{display:block;font-size:17px;color:#0a6640;letter-spacing:.5px} .tit span{font-size:11px;color:#718096}
+    table.d{width:100%;border-collapse:collapse;margin-bottom:6px} table.d td{padding:4px 6px} .k{color:#718096;font-size:11px;width:110px} .v{font-weight:600}
+    h2{font-size:12.5px;color:#0a6640;text-transform:uppercase;letter-spacing:.4px;margin:16px 0 6px;border-bottom:1px solid #c6e3d4;padding-bottom:3px}
+    .txt{white-space:pre-wrap;line-height:1.5;background:#f6fbf8;border-left:3px solid #0a6640;padding:9px 12px;border-radius:6px}
+    table.p{width:100%;border-collapse:collapse} table.p td,table.p th{border:1px solid #c6e3d4;padding:6px 8px;text-align:left} table.p th{background:#eaf5ef;font-size:11px}
+    .prox{margin-top:14px;padding:10px 12px;border:1.5px solid #0a6640;border-radius:8px;font-weight:600;color:#0a6640}
+    .firma{margin-top:26px;font-size:12px} .firma b{display:block;font-size:13px}
+    .foot{margin-top:22px;border-top:1px solid #cbd5e0;padding-top:8px;color:#718096;font-size:10.5px;text-align:center}
+    @media print{.wrap{padding:12mm} .noprint{display:none}}
+  </style></head><body><div class="wrap"><div id="pg">
+    <div class="top"><img src="${base}logo.jpg" alt="BioInnova"><div class="tit"><b>${presencial?'INFORME DE VISITA':'RESUMEN DE CONTACTO'}</b><span>${fmtFecha(v.fecha)}</span></div></div>
+    <table class="d"><tr><td class="k">Cliente</td><td class="v">${esc(nom)}</td><td class="k">Fecha</td><td class="v">${fmtFecha(v.fecha)}</td></tr>
+      <tr><td class="k">${presencial?'Visitado por':'Atendido por'}</td><td class="v">${esc(v.tecnico||'—')}</td><td class="k">Motivo</td><td class="v">${esc(CM_MOTIVO_CLIENTE[com.resultado]||'Visita comercial')}</td></tr>
+      ${c.contacto?`<tr><td class="k">Contacto</td><td class="v" colspan="3">${esc(c.contacto)}</td></tr>`:''}</table>
+    ${bloque(presencial?'Qué vimos en la visita':'Qué conversamos',inf.vimos)}
+    ${bloque('Nuestra recomendación',inf.reco)}
+    ${items.length?`<h2>Productos de interés</h2><table class="p"><thead><tr><th>Producto</th><th style="width:140px">Cantidad aprox.</th></tr></thead><tbody>${items.map(i=>`<tr><td>${esc(i.producto)}</td><td>${i.kg?Number(i.kg).toLocaleString('es-PY')+' kg':'—'}</td></tr>`).join('')}</tbody></table>
+      ${com.cotiz&&com.cotiz.estado==='pendiente'?'<div style="font-size:11.5px;color:#4a5568;margin-top:5px">Le enviaremos la cotización a la brevedad.</div>':''}`:''}
+    ${prox?`<div class="prox">${esc(prox)}</div>`:''}
+    <div class="firma">Atentamente,<b>${esc(v.tecnico||'')}</b>Bioinnova S.A.</div>
+    <div class="foot">Bioinnova S.A.  ·  Nutrición de bovinos de corte</div>
+  </div>
+    <div class="noprint" style="display:flex;gap:8px;justify-content:center;margin-top:18px">
+      <button onclick="guardarPDF(this)" style="background:#0a6640;color:#fff;border:none;padding:10px 20px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">📄 Guardar PDF</button>
+      <button onclick="window.print()" style="background:#1e3f63;color:#fff;border:none;padding:10px 20px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">🖨️ Imprimir</button>
+      <button onclick="window.close()" style="background:#e2e8f0;color:#334155;border:none;padding:10px 20px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">← Volver</button>
+    </div>
+  </div>
+  <script src="${base}html2pdf.bundle.min.js"><\/script>
+  <script>
+  var PDF_NAME=${JSON.stringify(fname)};
+  function guardarPDF(btn){ if(typeof html2pdf==='undefined'){ alert('No se pudo cargar el generador de PDF. Verificá tu conexión.'); return; }
+    var t=btn?btn.textContent:''; if(btn){ btn.textContent='Generando…'; btn.disabled=true; }
+    var opt={ margin:8, filename:PDF_NAME, image:{type:'jpeg',quality:0.95}, html2canvas:{scale:2,useCORS:true,backgroundColor:'#ffffff'}, jsPDF:{unit:'mm',format:'a4',orientation:'portrait'} };
+    var done=function(){ if(btn){ btn.textContent=t; btn.disabled=false; } };
+    html2pdf().set(opt).from(document.getElementById('pg')).save().then(done).catch(function(){ done(); alert('No se pudo generar el PDF.'); });
+  }
+  <\/script></body></html>`);
+  w.document.close();
+}
+
+// ══════════════════════════════════════════════════════════
 //  ENGANCHES
 // ══════════════════════════════════════════════════════════
 (function cmEnganchar(){
   if(typeof showScreen!=='function') return;
   cmInyectar();
+  // Alta de cliente desde la visita/agenda: después de guardar, volver con el cliente elegido.
+  const _gc=guardarCliente;
+  guardarCliente=function(id){ const p=_cmNuevoCli; _cmNuevoCli=null; const r=_gc(id);
+    if(p && !id){ if(getClientes().some(c=>!p.antes.has(c.id))) cmTrasNuevoCliente(p); else _cmNuevoCli=p; }   // si no guardó (falta el nombre) sigue esperando
+    return r; };
+  const _cm=cerrarModal;
+  cerrarModal=function(){ _cmNuevoCli=null; return _cm(); };
   const _show=showScreen;
   // Pendientes primero: un comercial con seguimientos vencidos sólo puede ver esas dos pantallas.
   showScreen=function(id,titulo,sub,back){
