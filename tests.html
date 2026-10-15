@@ -55,6 +55,7 @@ function pushPricingCfg(){}
 
 <script src="js/costeo.js"></script>
 <script src="js/metas.js"></script>
+<script src="js/comercial.js"></script>
 
 <script>
 // Se sobreescriben DESPUÉS de cargar costeo.js: las funciones de adentro resuelven
@@ -630,6 +631,43 @@ test('proyeccionCierre no pide nada si ya se superó la meta', ()=>{
   const p = proyeccionCierre(1500000000, 1200000000, 6);
   eq(p.falta,0); eq(p.por_mes,0);
 });
+
+// ── Seguimiento comercial (js/comercial.js) ─────────────────────────────
+grupo('Seguimiento comercial');
+test('cmNorm/cmMismo ignoran acentos, mayúsculas y espacios', ()=>{
+  eq(cmMismo('Nathalia  Samudio','nathalia samudio'),true); eq(cmMismo('Belén','BELEN'),true); eq(cmMismo('',''),false); eq(cmMismo('Pedro','Pedra'),false);
+});
+test('cmSemana va de lunes a domingo (miércoles 14/10/2026)', ()=>{ const s=cmSemana('2026-10-14'); eq(s.desde,'2026-10-12'); eq(s.hasta,'2026-10-18'); });
+test('cmSemana con un domingo pertenece a la semana que termina ese día', ()=>{ const s=cmSemana('2026-10-18'); eq(s.desde,'2026-10-12'); });
+const VIS=[
+  {id:'a',tipo:'rapida',tecnico:'Pedro',fecha:'2026-10-13',cliente_id:'C1',comercial:{medio:'Visita',resultado:'seguimiento'}},
+  {id:'b',tipo:'rapida',tecnico:'pedro',fecha:'2026-10-14',cliente_id:'C2',comercial:{medio:'Llamada',resultado:'pide_cotiz',cotiz:{items:[{producto:'X',kg:100}],estado:'pendiente'}}},
+  {id:'c',tipo:'tecnica',tecnico:'Pedro',fecha:'2026-10-15',cliente_id:'C1'},
+  {id:'d',tipo:'comercial',tecnico:'Pedro',fecha:'2026-10-05',cliente_id:'C3'},
+  {id:'e',tipo:'rapida',tecnico:'Francisco',fecha:'2026-10-14',cliente_id:'C4',comercial:{medio:'Visita'}}
+];
+test('Las llamadas NO cuentan para el mínimo de visitas; las técnicas sí', ()=>{ eq(cmVisitasSemana(VIS,'Pedro','2026-10-16'),2); eq(cmVisitasSemana(VIS,'Francisco','2026-10-16'),1); });
+test('cmMinimo: el propio del comercial gana sobre el general', ()=>{ const cfg={min_semana:10,por:{'Nathalia Samudio':5}}; eq(cmMinimo(cfg,'nathalia samudio'),5); eq(cmMinimo(cfg,'Pedro'),10); eq(cmMinimo({},'Pedro'),CM_MIN_DEFAULT); });
+const CLI=[
+  {id:'C1',nombre:'Uno',comercial:'Pedro',prox_fecha:'2026-10-10',seguimientos:[]},
+  {id:'C2',nombre:'Dos',comercial:'Pedro',prox_fecha:'2026-10-16',seguimientos:[]},
+  {id:'C3',nombre:'Tres',comercial:'Pedro',prox_fecha:'2026-10-20',seguimientos:[{fecha:'2026-10-01',por:'Pedro'}]},
+  {id:'C4',nombre:'Cuatro',comercial:'Francisco',prox_fecha:'2026-10-01',seguimientos:[]},
+  {id:'C5',nombre:'Cinco',comercial:'Pedro',prox_fecha:'',seguimientos:[]}
+];
+test('cmPendientes: sólo los del comercial con fecha vencida u hoy, el más viejo primero', ()=>{ const p=cmPendientes(CLI,'Pedro','2026-10-16'); eq(p.length,2); eq(p[0].id,'C1'); eq(p[1].id,'C2'); });
+test('cmSinContacto: cliente nunca contactado aparece; uno visitado ayer no', ()=>{ const s=cmSinContacto(CLI,VIS,'Pedro','2026-10-16',30).map(x=>x.c.id); eq(s.includes('C5'),true); eq(s.includes('C1'),false); });
+test('cmVentasSinVisita: venta con visita previa del mismo comercial no se marca', ()=>{
+  const V=[{id:'v1',fecha:'2026-10-16',cliente_id:'C1',comercial:'Pedro'},{id:'v2',fecha:'2026-10-16',cliente_id:'C5',comercial:'Pedro'},{id:'v3',fecha:'2026-10-16',cliente_id:'C1',comercial:'Francisco'},{id:'v4',fecha:'2026-10-16',cliente_id:'',comercial:'Pedro'}];
+  const r=cmVentasSinVisita(V,VIS,CLI,'2026-10-01',30).map(x=>x.id); eq(r.join(','),'v2,v3');
+});
+test('cmVentasSinVisita: un seguimiento del CRM del comercial también cuenta como contacto', ()=>{
+  const r=cmVentasSinVisita([{id:'v5',fecha:'2026-10-10',cliente_id:'C3',comercial:'Pedro'}],[],CLI,'2026-10-01',30); eq(r.length,0);
+});
+test('cmSolicitudes devuelve sólo las rápidas con pedido de cotización', ()=>{ const s=cmSolicitudes(VIS); eq(s.length,1); eq(s[0].id,'b'); });
+const AG=[{id:'g1',comercial:'Pedro',fecha:'2026-10-12'},{id:'g2',comercial:'pedro',fecha:'2026-10-17'},{id:'g3',comercial:'Pedro',fecha:'2026-10-19'},{id:'g4',comercial:'Francisco',fecha:'2026-10-13'}];
+test('cmPlanSemana cuenta sólo la semana en curso y del comercial', ()=>{ eq(cmPlanSemana(AG,'Pedro','2026-10-14').length,2); });
+test('cmPlanFalta: con mínimo 8 y 2 planificados faltan 6; nunca negativo', ()=>{ eq(cmPlanFalta(AG,'Pedro','2026-10-14',8),6); eq(cmPlanFalta(AG,'Pedro','2026-10-14',1),0); });
 
 // ── Salida ──────────────────────────────────────────────────────────────────
 document.getElementById('res').innerHTML = OUT.join('') +

@@ -961,7 +961,7 @@ const visitasDe   =cid=>getVisitas().filter(v=>v.cliente_id===cid);
 // Versión de la app. SUBIR JUNTO CON `CACHE` en sw.js en cada publicación.
 // Es sólo informativa (se muestra en la cabecera) y sirve para saber de un vistazo
 // si un equipo ya tomó el último cambio o quedó con una copia vieja en caché.
-const APP_VERSION = 130;
+const APP_VERSION = 131;
 try{ document.addEventListener('DOMContentLoaded', ()=>{ const v=document.getElementById('verChip'); if(v) v.textContent='v'+APP_VERSION; }); }catch(e){}
 const SUPABASE_URL = 'https://mnuldrgynighabwtulkf.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_uAH-nT2MczSB8m9F4THmdw_T6u77exI';
@@ -1013,8 +1013,9 @@ const sb = {
 const ROLES = { gerente:{label:'Gerente',editar:true}, tecnico:{label:'Comercial',editar:true}, supervisor:{label:'Supervisor de planta',editar:true}, planta:{label:'Planta',editar:false}, asesor:{label:'Asesor Técnico Externo',editar:false}, lectura:{label:'Solo lectura',editar:false} };
 // Qué módulos ve cada rol. Editar acá para ajustar accesos.
 const ROL_MODULOS = {
-  gerente:    ['visita','clientes','historial','crm','viaticos','cotizaciones','metas','ot','formulas','inventario','caja','usuarios','agenda','finanzas'],
-  tecnico:    ['visita','clientes','historial','crm','viaticos','cotizaciones','metas','agenda'],
+  gerente:    ['visita','clientes','historial','crm','viaticos','cotizaciones','metas','tablerocom','ot','formulas','inventario','caja','usuarios','agenda','finanzas'],
+  // Los comerciales NO cotizan: piden la cotización a gerencia desde la visita rápida.
+  tecnico:    ['visita','clientes','historial','crm','viaticos','metas','agenda'],
   supervisor: ['ot','formulas','inventario','caja'],
   planta:     ['inventario','caja'],
   asesor:     ['formulas'],
@@ -1023,7 +1024,7 @@ const ROL_MODULOS = {
 function puedeVer(mod){ if(!currentRol) return true; if(currentAccesos&&Object.prototype.hasOwnProperty.call(currentAccesos,mod)) return !!currentAccesos[mod]; return (ROL_MODULOS[currentRol]||[]).includes(mod); }
 // Acceso efectivo de un usuario dado (rol + overrides) — para el cuadro de Usuarios
 function accesoEfectivo(rol, accesos, mod){ if(accesos&&Object.prototype.hasOwnProperty.call(accesos,mod)) return !!accesos[mod]; return (ROL_MODULOS[rol]||[]).includes(mod); }
-const MODULOS_LBL=[['visita','Visitas'],['clientes','Clientes'],['historial','Historial'],['crm','CRM'],['viaticos','Viáticos'],['cotizaciones','Cotizaciones'],['metas','Metas de venta'],['agenda','Agenda'],['ot','OT'],['formulas','Formulaciones'],['inventario','Inventario'],['caja','Caja chica'],['finanzas','Finanzas'],['usuarios','Usuarios']];
+const MODULOS_LBL=[['visita','Visitas'],['clientes','Clientes'],['historial','Historial'],['crm','CRM'],['viaticos','Viáticos'],['cotizaciones','Cotizaciones'],['metas','Metas de venta'],['tablerocom','Tablero comercial'],['agenda','Agenda'],['ot','OT'],['formulas','Formulaciones'],['inventario','Inventario'],['caja','Caja chica'],['finanzas','Finanzas'],['usuarios','Usuarios']];
 function esPlanta(){ return puedeVer('ot'); }   // compat (usado por funciones de OT)
 let currentUser=null, currentRol=null, currentAccesos=null;   // accesos = overrides por-usuario {mod:true|false}
 function rolLabel(r){ return (ROLES[r]&&ROLES[r].label)||r; }
@@ -1227,6 +1228,13 @@ function renderMetas(){
         <div style="flex:1;min-width:110px"><div style="font-size:10px;color:var(--gray-400)">Meta</div><div style="font-weight:700;font-size:15px">${tm>0?finGsFmt(tm):'—'}</div>${tm>0?`<div style="font-size:10px;color:var(--gray-400)">neto ${finGsFmt(mtNeto(tm))}</div>`:''}</div>
         <div style="flex:1;min-width:110px"><div style="font-size:10px;color:var(--gray-400)">Cumplimiento</div><div style="font-weight:700;font-size:15px;color:${_mtColor(pct)}">${pct==null?'—':Math.round(pct*100)+'%'}</div>${tm>tf?`<div style="font-size:10px;color:var(--gray-400)">faltan ${finGsFmt(tm-tf)}</div>`:''}</div>
       </div></div>` : '';
+
+  // Cada comercial ve sólo lo suyo: sin ranking, sin montos de otros, sin el PDF del equipo.
+  const priv=!esGerente();
+  const rc=gs('mtRank')&&gs('mtRank').closest('.card'); if(rc) rc.style.display=priv?'none':'';
+  if(gs('mtBtnPDF')) gs('mtBtnPDF').style.display=priv?'none':'';
+  if(priv){ gs('mtEquipo').innerHTML='';
+    if(!mia) gs('mtMiCard').innerHTML='<div class="card"><div class="card-b" style="font-size:13px;color:var(--gray-500)">No tenés meta cargada para este período.</div></div>'; }
 }
 
 function _mtColor(pct){ if(pct==null) return 'var(--gray-400)'; if(pct>=1) return 'var(--green)'; if(pct>=0.8) return '#b54708'; return 'var(--red)'; }
@@ -1607,7 +1615,7 @@ async function verificarEsquema(){
   }
   return falta;
 }
-async function cloudPullAll(){ if(!AUTH_ON) return; await cloudPull('clientes'); await cloudPull('estancias'); await cloudPull('visitas'); await cloudPull('ot'); await cloudPull('mov'); await cloudPull('caja'); await cloudPull('viat'); await cloudPull('insumo'); await cloudPull('precio'); await cloudPull('cotiz'); await cloudPull('insprec'); await cloudPull('formula'); await cloudPull('ptmov'); await cloudPull('garantia'); await cloudPull('agenda'); await cloudPull('venta'); await cloudPull('compra'); await cloudPull('sueldo'); await cloudPull('cheque'); await cloudPull('prestamo'); await pullFinCaja(); await pullFinProy(); await pullPricingCfg(); refreshVista(); }
+async function cloudPullAll(){ if(!AUTH_ON) return; await cloudPull('clientes'); await cloudPull('estancias'); await cloudPull('visitas'); await cloudPull('ot'); await cloudPull('mov'); await cloudPull('caja'); await cloudPull('viat'); await cloudPull('insumo'); await cloudPull('precio'); await cloudPull('cotiz'); await cloudPull('insprec'); await cloudPull('formula'); await cloudPull('ptmov'); await cloudPull('garantia'); await cloudPull('agenda'); await cloudPull('venta'); await cloudPull('compra'); await cloudPull('sueldo'); await cloudPull('cheque'); await cloudPull('prestamo'); await cloudPull('meta'); if(typeof pullComCfg==='function') await pullComCfg(); await pullFinCaja(); await pullFinProy(); await pullPricingCfg(); refreshVista(); }
 function refreshVista(){ const act=document.querySelector('.screen.active'); if(!act) return;
   if(act.id==='sHome') renderHome(); else if(act.id==='sClientes') renderClientes();
   else if(act.id==='sCliente'&&curCliente) abrirCliente(curCliente); else if(act.id==='sHistorial') renderHistorial();
@@ -1696,6 +1704,7 @@ function renderHome(){
   cont.innerHTML = ult.length? ult.map(v=>visitaLi(v)).join('') : '<div class="empty">Todavía no hay visitas cargadas.<br>Entrá a <b>Visitas</b> y cargá la primera.</div>';
 }
 function visitaLi(v){
+  if(v.tipo==='rapida' && typeof cmVisitaLi==='function') return cmVisitaLi(v);
   const c=clienteById(v.cliente_id);
   if(v.tipo==='comercial'){ const com=v.comercial||{}; const nom=(c&&c.nombre)||com.prospecto||'—';
     const cabs=(com.hacienda||[]).reduce((a,h)=>a+(Number(h.cabezas)||0),0);
@@ -2158,6 +2167,7 @@ function guardarVisita(imprimir){
 function verVisita(id){
   const v=getVisitas().find(x=>x.id===id); if(!v) return;
   if(v.tipo==='comercial'){ verVisitaComercial(v); return; }
+  if(v.tipo==='rapida' && typeof cmVerVisita==='function'){ cmVerVisita(v); return; }
   const c=clienteById(v.cliente_id), e=estanciaById(v.estancia_id);
   const bloques=visitaEvals(v).map(ev=>{
     const filas=(ev.kpis||[]).map(k=>`<tr><td>${esc(k.k)}</td><td style="text-align:center">${k.valor||'—'} ${esc(unidadCorta(k.u))}</td><td style="text-align:center">${semHtmlMini(k.estado)}</td></tr>`).join('');
@@ -5203,5 +5213,8 @@ rebuildFormulas();   // mezcla las fórmulas propias guardadas con las de fábri
 applyAuth();
 if(!navigator.onLine) pintarConexion();
 </script>
+<!-- Seguimiento comercial: va DESPUÉS del script principal porque envuelve showScreen/applyRoleUI -->
+<script src="js/comercial.js"></script>
+<script>try{ applyRoleUI(); if(document.querySelector('.screen.active')&&document.querySelector('.screen.active').id==='sHome') goHome(); }catch(e){}</script>
 </body>
 </html>
