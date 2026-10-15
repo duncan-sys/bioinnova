@@ -669,6 +669,57 @@ const AG=[{id:'g1',comercial:'Pedro',fecha:'2026-10-12'},{id:'g2',comercial:'ped
 test('cmPlanSemana cuenta sólo la semana en curso y del comercial', ()=>{ eq(cmPlanSemana(AG,'Pedro','2026-10-14').length,2); });
 test('cmPlanFalta: con mínimo 8 y 2 planificados faltan 6; nunca negativo', ()=>{ eq(cmPlanFalta(AG,'Pedro','2026-10-14',8),6); eq(cmPlanFalta(AG,'Pedro','2026-10-14',1),0); });
 
+// ── Desempeño semanal y cierre (js/comercial.js) ─────────────────────────
+grupo('Desempeño comercial');
+const DD={
+  agenda:[
+    {id:'a1',comercial:'Pedro',fecha:'2026-10-19',titulo:'Uno',cliente_id:'K1',nota:'Visita · sin día',estado:'pendiente'},
+    {id:'a2',comercial:'Pedro',fecha:'2026-10-20',titulo:'Dos',cliente_id:'K2',nota:'Llamada',estado:'pendiente'},
+    {id:'a3',comercial:'Pedro',fecha:'2026-10-19',titulo:'Prospecto Nuevo',cliente_id:'',nota:'Visita · sin día',estado:'pendiente'},
+    {id:'a4',comercial:'Pedro',fecha:'2026-10-19',titulo:'Tres',cliente_id:'K3',nota:'Visita',estado:'pendiente'},
+    {id:'a5',comercial:'Pedro',fecha:'2026-10-19',titulo:'Cuatro',cliente_id:'K4',nota:'Visita',estado:'pendiente'}
+  ],
+  clientes:[
+    {id:'K1',nombre:'Uno',seguimientos:[{fecha:'2026-10-20',tipo:'Visita',por:'Pedro',visita_id:'v1'}]},
+    {id:'K2',nombre:'Dos',seguimientos:[{fecha:'2026-10-21',tipo:'Llamada',por:'Pedro'}]},
+    {id:'K3',nombre:'Tres',seguimientos:[{fecha:'2026-10-22',tipo:'Nota',por:'Pedro',reprog:true}]},
+    {id:'K4',nombre:'Cuatro',seguimientos:[]},
+    {id:'K5',nombre:'Prospecto Nuevo',seguimientos:[]},
+    {id:'K6',nombre:'Fuera',seguimientos:[]}
+  ],
+  visitas:[
+    {id:'v1',tipo:'rapida',tecnico:'Pedro',fecha:'2026-10-20',cliente_id:'K1',comercial:{medio:'Visita',resultado:'pide_cotiz',cotiz:{estado:'cotizada'}}},
+    {id:'v2',tipo:'rapida',tecnico:'Pedro',fecha:'2026-10-22',cliente_id:'K5',comercial:{medio:'Visita',resultado:'pedido'}},
+    {id:'v3',tipo:'rapida',tecnico:'Pedro',fecha:'2026-10-23',cliente_id:'K6',comercial:{medio:'WhatsApp',resultado:'seguimiento'}},
+    {id:'v4',tipo:'rapida',tecnico:'Pedro',fecha:'2026-10-12',cliente_id:'K4',comercial:{medio:'Visita'}}
+  ],
+  ventas:[{id:'f1',fecha:'2026-10-23',cliente_id:'K5',comercial:'Pedro',monto:20000000},{id:'f2',fecha:'2026-10-23',cliente_id:'K4',comercial:'Francisco',monto:5000000}]
+};
+test('cmContactos no cuenta dos veces la visita rápida (que también deja seguimiento) y saltea notas', ()=>{
+  const c=cmContactos(DD.visitas,DD.clientes,'Pedro','2026-10-19','2026-10-25'); eq(c.length,4);   // v1, v2, v3 + llamada a K2
+});
+test('cmDesempeno: agenda cumplida = agendados contactados / agendados', ()=>{
+  const p=cmDesempeno(DD,'Pedro','2026-10-19'); eq(p.t.agendados,5); eq(p.t.agendaContactados,3); cerca(p.t.pctAgenda,0.6,0.001);
+});
+test('El prospecto agendado sólo por nombre se cruza con el cliente creado después', ()=>{
+  const f=cmDesempeno(DD,'Pedro','2026-10-19').filas.find(x=>x.agenda.id==='a3'); eq(f.cliente_id,'K5'); eq(f.contactado,true); eq(f.venta,20000000);
+});
+test('Embudo: contactados 4, cotización pedida 1 y presentada 1, 1 venta de un contactado', ()=>{
+  const t=cmDesempeno(DD,'Pedro','2026-10-19').t; eq(t.contactados,4); eq(t.cotSol,1); eq(t.cotPres,1); eq(t.ventasClientes,1); eq(t.ventasMonto,20000000); cerca(t.pctVenta,0.25,0.001);
+});
+test('Fuera de agenda: el cliente contactado sin agendar se cuenta aparte', ()=>{ eq(cmDesempeno(DD,'Pedro','2026-10-19').t.fuera,1); });
+test('Una visita de la semana anterior no cuenta para esta semana', ()=>{
+  const f=cmDesempeno(DD,'Pedro','2026-10-19').filas.find(x=>x.agenda.id==='a5'); eq(f.contactado,false);
+});
+test('cmCierreFalta: el lunes siguiente pide cerrar los agendados sin contacto', ()=>{
+  const r=cmCierreFalta(DD,'Pedro','2026-10-26','2026-10-19').map(f=>f.agenda.id).sort().join(','); eq(r,'a4,a5');
+});
+test('cmCierreFalta: pasados o con motivo ya no se piden', ()=>{
+  const d2=JSON.parse(JSON.stringify(DD)); d2.agenda.find(a=>a.id==='a4').estado='pasada'; d2.agenda.find(a=>a.id==='a5').estado='no_contactado';
+  eq(cmCierreFalta(d2,'Pedro','2026-10-26','2026-10-19').length,0);
+});
+test('cmCierreFalta no exige cerrar semanas anteriores al arranque de la exigencia', ()=>{ eq(cmCierreFalta(DD,'Pedro','2026-10-26','2026-10-26').length,0); });
+
 // ── Salida ──────────────────────────────────────────────────────────────────
 document.getElementById('res').innerHTML = OUT.join('') +
   '<div id="tot" class="'+(no?'rojo':'verde')+'">'+

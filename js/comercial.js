@@ -99,6 +99,67 @@ function cmPlanSemana(agenda, nombre, hoyIso){ const s=cmSemana(hoyIso);
 // Cuántos contactos faltan planificar para llegar al mínimo de la semana.
 function cmPlanFalta(agenda, nombre, hoyIso, minimo){ return Math.max(0, (minimo||CM_MIN_DEFAULT) - cmPlanSemana(agenda,nombre,hoyIso).length); }
 
+// ── DESEMPEÑO: agenda → contacto → cotización → venta ──
+const CM_SIN_DIA = ' · sin día';          // marca en la nota de la agenda: "esta semana", sin día fijo
+const CM_COT_PRES = ['cotizada','enviada'];
+function cmEsSinDia(a){ return String((a&&a.nota)||'').indexOf(CM_SIN_DIA)>=0; }
+// Todos los contactos del comercial en el rango, sin contar dos veces el mismo:
+// las visitas (rápidas, técnicas, comerciales) + los seguimientos del CRM cargados a mano.
+// La visita rápida también escribe un seguimiento, pero ese lleva visita_id y se saltea.
+function cmContactos(visitas, clientes, nombre, desde, hasta){
+  const out=[];
+  (visitas||[]).forEach(v=>{ if(!cmDeComercial(v,nombre) || !(v.fecha>=desde && v.fecha<=hasta)) return;
+    const com=v.comercial||{}; const medio=v.tipo==='rapida'?(com.medio||'Visita'):'Visita';
+    out.push({ cliente_id:v.cliente_id||'', fecha:v.fecha, presencial:medio==='Visita', medio,
+      resultado: v.tipo==='rapida'?(com.resultado||''):(v.tipo==='comercial'?'presentacion':'seguimiento'),
+      cotiz:(v.tipo==='rapida'&&com.cotiz)?com.cotiz:null }); });
+  (clientes||[]).forEach(c=>(c.seguimientos||[]).forEach(s=>{
+    if(s.visita_id || s.reprog || !cmMismo(s.por,nombre) || !(s.fecha>=desde && s.fecha<=hasta)) return;
+    const t=s.tipo||'Nota'; if(t==='Nota') return;
+    out.push({ cliente_id:c.id, fecha:s.fecha, presencial:(t==='Visita'||t==='Reunión'), medio:t, resultado:'', cotiz:null }); }));
+  return out;
+}
+// d = { agenda, visitas, clientes, ventas }. Rango por defecto: la semana que arranca en `desde`.
+function cmDesempeno(d, nombre, desde, hasta){
+  hasta = hasta || cmAddDias(desde,6);
+  const cl=d.clientes||[]; const cli={}; cl.forEach(c=>cli[c.id]=c);
+  const monto=v=>(typeof finGs==='function'?finGs(v,v.monto):Math.round(Number(v.monto)||0));
+  const plan=(d.agenda||[]).filter(a=>cmMismo(a.comercial,nombre) && a.fecha>=desde && a.fecha<=hasta);
+  const cont=cmContactos(d.visitas,cl,nombre,desde,hasta);
+  const ventas=(d.ventas||[]).filter(v=>cmMismo(v.comercial,nombre) && v.fecha>=desde && v.fecha<=hasta);
+  // Un renglón por cliente agendado: por id, o por nombre si se agendó como prospecto y después se creó.
+  const resolver=a=>{ if(a.cliente_id) return a.cliente_id; const c=cl.find(x=>cmMismo(x.nombre,a.titulo)); return c?c.id:''; };
+  const filas=[], vistos=new Set();
+  plan.forEach(a=>{ const cid=resolver(a); const key=cid||('n:'+cmNorm(a.titulo)); if(vistos.has(key)) return; vistos.add(key);
+    const cs=cid?cont.filter(x=>x.cliente_id===cid):[]; const cot=cs.filter(x=>x.cotiz).pop();
+    const vts=cid?ventas.filter(v=>v.cliente_id===cid):[];
+    filas.push({ agenda:a, cliente_id:cid, nombre:(cid&&cli[cid])?cli[cid].nombre:a.titulo,
+      visitas:cs.filter(x=>x.presencial).length, remotos:cs.filter(x=>!x.presencial).length,
+      cotiz:cot?cot.cotiz.estado:'', pedido:cs.some(x=>x.resultado==='pedido'), venta:vts.reduce((s,v)=>s+monto(v),0),
+      contactado:cs.length>0 }); });
+  const enPlan=new Set(filas.map(f=>f.cliente_id).filter(Boolean));
+  const cliCont=new Set(cont.map(x=>x.cliente_id).filter(Boolean));
+  const sol=cont.filter(x=>x.cotiz);
+  const cliSol=new Set(sol.map(x=>x.cliente_id)), cliPres=new Set(sol.filter(x=>CM_COT_PRES.includes(x.cotiz.estado)).map(x=>x.cliente_id));
+  const cliVen=new Set(ventas.map(v=>v.cliente_id).filter(Boolean));
+  const fuera=[...cliCont].filter(id=>!enPlan.has(id));
+  const pct=(a,b)=>b>0?a/b:null;
+  const t={ agendados:filas.length, agendaContactados:filas.filter(f=>f.contactado).length,
+    fuera:fuera.length, contactados:cliCont.size, visitas:cont.filter(x=>x.presencial).length, remotos:cont.filter(x=>!x.presencial).length,
+    cotSol:cliSol.size, cotPres:cliPres.size, pedidos:new Set(cont.filter(x=>x.resultado==='pedido').map(x=>x.cliente_id)).size,
+    ventasClientes:cliVen.size, ventasMonto:ventas.reduce((s,v)=>s+monto(v),0),
+    ventasContactados:[...cliVen].filter(id=>cliCont.has(id)).length };
+  t.pctAgenda=pct(t.agendaContactados,t.agendados); t.pctCotSol=pct(t.cotSol,t.contactados);
+  t.pctCotPres=pct(t.cotPres,t.cotSol); t.pctVenta=pct(t.ventasContactados,t.contactados);
+  return { desde, hasta, filas, fuera, t };
+}
+// Agendados de la semana anterior sin contacto y sin cerrar (ni pasados ni con motivo).
+function cmCierreFalta(d, nombre, hoyIso, exigirDesde){
+  const prev=cmAddDias(cmSemana(hoyIso).desde,-7);
+  if(exigirDesde && prev<cmSemana(exigirDesde).desde) return [];
+  return cmDesempeno(d,nombre,prev).filas.filter(f=>!f.contactado && f.agenda.estado!=='pasada' && f.agenda.estado!=='no_contactado' && f.agenda.estado!=='hecha');
+}
+
 // ── estado / configuración compartida (bio_config id='comercial') ──
 function getComCfg(){ try{ return JSON.parse(localStorage.getItem('bio:comcfg'))||{}; }catch{ return {}; } }
 function setComCfg(d){ localStorage.setItem('bio:comcfg', JSON.stringify(d||{})); }
@@ -112,9 +173,13 @@ function cmMisPendientes(){ return cmPendientes(getClientes(), cmYo(), hoy()); }
 function cmMiPlanFalta(){ const yo=cmYo(); return cmPlanFalta(getAgenda(), yo, hoy(), cmMinimo(getComCfg(),yo)); }
 // Qué tiene que resolver antes de usar la app: primero los vencidos, después planificar la semana.
 function cmExigirDesde(){ return getComCfg().exigir_desde || CM_EXIGIR_DESDE; }
-function cmBloqueo(){ if(!cmEsComercial() || !cmYo()) return ''; if(hoy() < cmExigirDesde()) return ''; if(cmMisPendientes().length) return 'pendientes'; if(cmMiPlanFalta()>0) return 'plan'; return ''; }
+function cmDatos(){ return { agenda:getAgenda(), visitas:getVisitas(), clientes:getClientes(), ventas:getVentas() }; }
+function cmMiCierreFalta(){ return cmCierreFalta(cmDatos(), cmYo(), hoy(), cmExigirDesde()); }
+// Orden: seguimientos vencidos → cerrar la semana anterior → planificar la semana.
+function cmBloqueo(){ if(!cmEsComercial() || !cmYo()) return ''; if(hoy() < cmExigirDesde()) return '';
+  if(cmMisPendientes().length) return 'pendientes'; if(cmMiCierreFalta().length) return 'cierre'; if(cmMiPlanFalta()>0) return 'plan'; return ''; }
 function cmBloqueado(){ return !!cmBloqueo(); }
-function cmIrBloqueo(){ if(cmBloqueo()==='plan') openPlanSemana(); else openPendientes(); }
+function cmIrBloqueo(){ const b=cmBloqueo(); if(b==='plan') openPlanSemana(); else if(b==='cierre') openCierre(); else openPendientes(); }
 
 // ══════════════════════════════════════════════════════════
 //  PANTALLAS (se inyectan al cargar)
@@ -126,6 +191,8 @@ function cmInyectar(){
   mk('sVisitaRapida','<div id="vrBody"></div>');
   mk('sPendientes','<div id="pdBody"></div>');
   mk('sPlanSemana','<div id="psBody"></div>');
+  mk('sCierre','<div id="ciBody"></div>');
+  mk('sComDet','<div id="cdBody"></div>');
   mk('sMiTablero','<div id="mtbBody"></div>');
   mk('sTabCom','<div id="tcBody"></div>');
   // Botón grande arriba del inicio + tiles nuevos en el grupo Comercial
@@ -358,11 +425,13 @@ function cmReprogGuardar(id){
 // ══════════════════════════════════════════════════════════
 let _ps={ dia:'', medio:'Visita', q:'' };
 function openPlanSemana(){ _ps={ dia:'', medio:'Visita', q:'' }; showScreen('sPlanSemana','Mi semana','Planificá a quién vas a ver',!cmBloqueado()); cmRenderPlan(); }
-function cmDiasSemana(){ const s=cmSemana(hoy()); const n=['Lun','Mar','Mié','Jue','Vie','Sáb']; return n.map((x,i)=>[cmAddDias(s.desde,i),x]); }
+function cmDiasSemana(){ const s=cmSemana(hoy()); const n=['Lun','Mar','Mié','Jue','Vie','Sáb']; return [['sem','Sin día']].concat(n.map((x,i)=>[cmAddDias(s.desde,i),x])); }
+function cmDiaLbl(a){ if(cmEsSinDia(a)) return 'Sin día'; const n=['Dom','Lun','Mar','Mié','Jue','Vie','Sáb']; const d=new Date(a.fecha+'T00:00:00'); return n[d.getDay()]+' '+fmtFecha(a.fecha).slice(0,5); }
 function cmRenderPlan(){
   const yo=cmYo(), h=hoy(), min=cmMinimo(getComCfg(),yo);
   const plan=cmPlanSemana(getAgenda(),yo,h); const falta=Math.max(0,min-plan.length);
-  const dias=cmDiasSemana(); if(!_ps.dia) _ps.dia=(dias.find(d=>d[0]>=h)||dias[dias.length-1])[0];
+  const dias=cmDiasSemana(); if(!_ps.dia) _ps.dia='sem';
+  const perf=cmDesempeno(cmDatos(),yo,cmSemana(h).desde); const contTit=new Set(perf.filas.filter(f=>f.contactado).map(f=>f.agenda.id));
   const enPlan=new Set(plan.map(a=>a.cliente_id).filter(Boolean));
   const sm=cmSemana(h);
   const sug=[]; const ya=new Set();
@@ -371,7 +440,8 @@ function cmRenderPlan(){
   const q=_ps.q||''; const ops=q.trim()?cmVrClientesOpts(q).filter(c=>!enPlan.has(c.id)).slice(0,12):[];
   gs('psBody').innerHTML=`
     <div class="card" style="border-left:4px solid ${falta?'var(--red)':'var(--green)'}"><div class="card-b" style="font-size:13px">
-      ${falta?`Cargá a quién vas a visitar o contactar esta semana: te faltan <b>${falta}</b> de ${min}. Alcanza con el nombre y el día.`:`✔ Semana planificada: ${plan.length} contacto${plan.length!==1?'s':''}.`}
+      ${falta?`Cargá a quién vas a visitar o contactar esta semana: te faltan <b>${falta}</b> de ${min}. Alcanza con los nombres; si querés, ponele el día.`:`✔ Semana planificada: ${plan.length} contacto${plan.length!==1?'s':''}.`}
+      <div style="font-size:11px;color:var(--gray-500);margin-top:4px">Lo que agendás se mide: al cerrar la semana se ve a cuántos contactaste, qué cotizaste y qué vendiste.</div>
     </div></div>
     <div class="card"><div class="card-b">
       <label class="fl">Día</label>${cmChips('dia',dias,_ps.dia,'cmPsDia')}
@@ -382,7 +452,7 @@ function cmRenderPlan(){
     </div></div>
     ${sug.length?`<div class="card"><div class="card-h"><span>Sugeridos · tocá para agregar</span></div><div>${sug.map(x=>`<div class="li" onclick="cmPsAdd('${x.c.id}')"><div style="min-width:0"><div class="li-t" style="font-size:13px">${esc(x.c.nombre)}</div><div class="li-s">${esc(x.por)}</div></div><span style="color:var(--green);font-weight:700">＋</span></div>`).join('')}</div></div>`:''}
     <div class="card"><div class="card-h"><span>Mi semana · ${fmtFecha(sm.desde)} – ${fmtFecha(sm.hasta)}</span><span style="color:var(--gray-400);font-weight:500">${plan.length}</span></div><div>
-      ${plan.map(a=>`<div class="li" style="cursor:default"><div style="min-width:0"><div class="li-t" style="font-size:13px">${a.estado==='hecha'?'✅ ':''}${esc(a.titulo)}</div><div class="li-s">${esc((dias.find(d=>d[0]===a.fecha)||[0,fmtFecha(a.fecha)])[1])} · ${esc(a.nota||'Visita')}</div></div>${a.estado!=='hecha'?`<span style="color:var(--red);cursor:pointer;font-size:16px;padding:0 4px" onclick="cmPsQuitar('${a.id}')">✕</span>`:''}</div>`).join('')||'<div style="padding:10px 12px;font-size:12px;color:var(--gray-400)">Todavía no cargaste nada.</div>'}
+      ${plan.map(a=>{ const ok=contTit.has(a.id)||a.estado==='hecha'; return `<div class="li" style="cursor:default"><div style="min-width:0"><div class="li-t" style="font-size:13px">${ok?'✅ ':''}${esc(a.titulo)}</div><div class="li-s">${esc(cmDiaLbl(a))} · ${esc(String(a.nota||'Visita').replace(CM_SIN_DIA,''))}</div></div>${!ok?`<span style="color:var(--red);cursor:pointer;font-size:16px;padding:0 4px" onclick="cmPsQuitar('${a.id}')">✕</span>`:''}</div>`; }).join('')||'<div style="padding:10px 12px;font-size:12px;color:var(--gray-400)">Todavía no cargaste nada.</div>'}
     </div></div>
     ${falta?'':'<button class="btn btn-primary btn-block" onclick="goHome()">Listo</button>'}`;
 }
@@ -395,11 +465,106 @@ function cmPsDia(d){ _ps.dia=d; cmRenderPlan(); }
 function cmPsMedio(m){ _ps.medio=m; cmRenderPlan(); }
 function cmPsAdd(cid, nombre){
   const yo=cmYo(); const c=cid?clienteById(cid):null; const tit=c?c.nombre:String(nombre||'').trim(); if(!tit){ showToast('Escribí un nombre'); return; }
-  const a={ id:'AG-'+Date.now(), fecha:_ps.dia||hoy(), hora:'', tipo:'comercial', titulo:tit, lugar:'', cliente_id:cid||'', estancia_id:'', comercial:yo, nota:_ps.medio, estado:'pendiente', ts:new Date().toISOString(), pending:true };
+  const sinDia=(!_ps.dia || _ps.dia==='sem');
+  const a={ id:'AG-'+Date.now()+'-'+Math.random().toString(36).slice(2,6), fecha:sinDia?cmSemana(hoy()).desde:_ps.dia, hora:'', tipo:'comercial', titulo:tit, lugar:'', cliente_id:cid||'', estancia_id:'', comercial:yo, nota:_ps.medio+(sinDia?CM_SIN_DIA:''), estado:'pendiente', ts:new Date().toISOString(), pending:true };
   saveAgenda([a, ...getAgenda()]); cloudPush('agenda',a);
   _ps.q=''; cmRenderPlan(); showToast('✓ '+tit+' agregado');
 }
 function cmPsQuitar(id){ const ag=getAgenda(); const a=ag.find(x=>x.id===id); if(!a) return; saveAgenda(ag.filter(x=>x.id!==id)); if(typeof cloudDelete==='function') cloudDelete('agenda',id); cmRenderPlan(); }
+
+// ══════════════════════════════════════════════════════════
+//  CIERRE DE SEMANA (obligatorio)
+//  Cada agendado de la semana pasada que no se contactó: o se pasa a esta
+//  semana, o se explica por qué. No se puede agendar nombres y olvidarse.
+// ══════════════════════════════════════════════════════════
+function openCierre(){ showScreen('sCierre','Cierre de la semana','Lo que quedó sin contactar',!cmBloqueado()); cmRenderCierre(); }
+function cmRenderCierre(){
+  const yo=cmYo(); const lst=cmMiCierreFalta(); const prev=cmAddDias(cmSemana(hoy()).desde,-7);
+  const p=cmDesempeno(cmDatos(),yo,prev);
+  gs('ciBody').innerHTML=`
+    <div class="card" style="border-left:4px solid ${lst.length?'var(--red)':'var(--green)'}"><div class="card-b" style="font-size:13px">
+      Semana del ${fmtFecha(prev)} al ${fmtFecha(cmAddDias(prev,6))}: contactaste <b>${p.t.agendaContactados} de ${p.t.agendados}</b> agendados${p.t.pctAgenda!=null?' ('+Math.round(p.t.pctAgenda*100)+'%)':''}.
+      ${lst.length?`<div style="margin-top:4px">Para seguir, resolvé los ${lst.length} que quedaron sin contacto: pasalos a esta semana o explicá por qué.</div>`:'<div style="margin-top:4px;color:var(--green)">✔ Semana cerrada.</div>'}
+    </div></div>
+    ${lst.map(f=>`<div class="card"><div class="card-b">
+      <div style="font-weight:700;font-size:14px">${esc(f.nombre)}</div>
+      <div style="font-size:11px;color:var(--gray-500);margin-bottom:6px">${esc(cmDiaLbl(f.agenda))} · ${esc(String(f.agenda.nota||'Visita').replace(CM_SIN_DIA,''))}</div>
+      <button class="btn btn-primary btn-block" style="padding:9px" onclick="cmCierrePasar('${f.agenda.id}')">→ Pasar a esta semana</button>
+      <div style="display:flex;gap:6px;margin-top:6px"><input id="ci_${f.agenda.id}" placeholder="…o el motivo: ej. el cliente viajó, camino cortado" autocomplete="off" style="flex:1;min-width:0"><button class="btn btn-sec" style="flex:0 0 auto;padding:8px 12px" onclick="cmCierreMotivo('${f.agenda.id}')">Guardar</button></div>
+    </div></div>`).join('')}
+    ${lst.length?'':'<button class="btn btn-primary btn-block" onclick="cmTrasCierre()">Seguir</button>'}`;
+}
+function cmCierrePasar(id){
+  const ag=getAgenda(); const a=ag.find(x=>x.id===id); if(!a) return; const ahora=new Date().toISOString();
+  a.estado='pasada'; a.ts=ahora; a.pending=true;
+  const medio=String(a.nota||'Visita').replace(CM_SIN_DIA,'').split(' · ')[0]||'Visita';
+  const n={ id:'AG-'+Date.now()+'-'+Math.random().toString(36).slice(2,6), fecha:cmSemana(hoy()).desde, hora:'', tipo:'comercial', titulo:a.titulo, lugar:'', cliente_id:a.cliente_id||'', estancia_id:'', comercial:a.comercial, nota:medio+CM_SIN_DIA, estado:'pendiente', ts:ahora, pending:true };
+  saveAgenda([n, ...ag]); cloudPush('agenda',a); cloudPush('agenda',n);
+  showToast('✓ '+a.titulo+' pasa a esta semana'); cmTrasCierre();
+}
+function cmCierreMotivo(id){
+  const m=((gs('ci_'+id)||{}).value||'').trim(); if(m.length<10){ showToast('Escribí el motivo (una frase corta)'); return; }
+  const ag=getAgenda(); const a=ag.find(x=>x.id===id); if(!a) return;
+  a.estado='no_contactado'; a.nota=String(a.nota||'')+' · No contactado: '+m; a.ts=new Date().toISOString(); a.pending=true;
+  saveAgenda(ag); cloudPush('agenda',a); showToast('✓ Guardado'); cmTrasCierre();
+}
+function cmTrasCierre(){ if(cmMiCierreFalta().length) cmRenderCierre(); else if(cmBloqueado()) cmIrBloqueo(); else goHome(); }
+
+// ══════════════════════════════════════════════════════════
+//  DESEMPEÑO (mismo bloque para el comercial y para gerencia)
+// ══════════════════════════════════════════════════════════
+let _cmPf={ nombre:'', desde:'', dest:'' };
+function cmPct(x){ return x==null?'—':Math.round(x*100)+'%'; }
+function cmPctCol(x,ok,mid){ if(x==null) return 'var(--gray-400)'; return x>=ok?'var(--green)':(x>=mid?'#b54708':'var(--red)'); }
+function cmPerfNav(delta){ _cmPf.desde=cmAddDias(_cmPf.desde,7*delta); const lim=cmSemana(hoy()).desde; if(_cmPf.desde>lim) _cmPf.desde=lim; cmPerfPintar(); }
+function cmPerfPintar(){ const el=gs(_cmPf.dest); if(el) el.innerHTML=cmPerfHtml(_cmPf.nombre,_cmPf.desde); }
+function cmEmbudo(t, titulo){
+  const paso=(lbl,n,sub,pct,col)=>`<div style="flex:1;min-width:92px;text-align:center;padding:8px 4px;border-radius:10px;background:var(--gray-100)"><div style="font-size:10px;color:var(--gray-500);font-weight:700">${lbl}</div><div style="font-size:20px;font-weight:800">${n}</div>${pct?`<div style="font-size:11px;font-weight:700;color:${col}">${pct}</div>`:''}${sub?`<div style="font-size:10px;color:var(--gray-400)">${sub}</div>`:''}</div>`;
+  const fl='<div style="align-self:center;color:var(--gray-400);font-weight:700">›</div>';
+  return `<div style="font-size:11px;font-weight:700;color:var(--gray-600);margin:2px 0 6px">${titulo}</div>
+    <div style="display:flex;gap:5px;flex-wrap:wrap">
+      ${paso('CONTACTADOS',t.contactados,t.visitas+' visita'+(t.visitas!==1?'s':'')+' · '+t.remotos+' llam./WA','','')}${fl}
+      ${paso('COTIZACIÓN PEDIDA',t.cotSol,'clientes',cmPct(t.pctCotSol)+' de contactados',cmPctCol(t.pctCotSol,0.3,0.15))}${fl}
+      ${paso('COTIZACIÓN PRESENTADA',t.cotPres,'por gerencia',cmPct(t.pctCotPres)+' de pedidas',cmPctCol(t.pctCotPres,0.9,0.6))}${fl}
+      ${paso('VENTAS CERRADAS',t.ventasClientes,finGsFmt(t.ventasMonto),cmPct(t.pctVenta)+' de contactados',cmPctCol(t.pctVenta,0.2,0.1))}
+    </div>`;
+}
+function cmPerfHtml(nombre, desde){
+  const d=cmDatos(); const p=cmDesempeno(d,nombre,desde); const t=p.t; const lun=cmSemana(hoy()).desde; const actual=desde===lun;
+  const hist=[]; for(let i=0;i<8;i++) hist.push(cmDesempeno(d,nombre,cmAddDias(lun,-7*i)));
+  const p8=cmDesempeno(d,nombre,cmAddDias(lun,-49),cmAddDias(lun,6));
+  const motivo=a=>String(a.nota||'').split('No contactado: ').slice(1).pop()||'';
+  const fila=f=>{ const st=f.agenda.estado;
+    const est=f.contactado?'<span style="color:var(--green);font-weight:700">✔</span>'
+      :(st==='pasada'?'<span style="color:#b54708">→ pasado</span>'
+      :(st==='no_contactado'?'<span style="color:var(--red)">✘ motivo</span>'
+      :(actual?'<span style="color:var(--gray-400)">pend.</span>':'<span style="color:var(--red);font-weight:700">✘</span>')));
+    return `<tr style="border-top:1px solid var(--gray-100)"><td style="padding:6px 8px">${esc(f.nombre)}${st==='no_contactado'?`<div style="font-size:10px;color:var(--gray-500)">${esc(motivo(f.agenda))}</div>`:''}</td><td style="text-align:center">${f.visitas||''}</td><td style="text-align:center">${f.remotos||''}</td><td style="text-align:center">${f.cotiz?esc(f.cotiz):''}</td><td style="text-align:right;padding-right:8px">${f.venta?finGsFmt(f.venta):(f.pedido?'pedido':'')}</td><td style="text-align:center">${est}</td></tr>`; };
+  return `
+  <div class="card"><div class="card-b">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+      <button class="btn btn-sec" style="flex:0 0 40px;padding:5px" onclick="cmPerfNav(-1)">‹</button>
+      <div style="flex:1;text-align:center;font-weight:700;font-size:13px">${actual?'Esta semana':'Semana'} · ${fmtFecha(desde)} – ${fmtFecha(p.hasta)}</div>
+      <button class="btn btn-sec" style="flex:0 0 40px;padding:5px;${actual?'visibility:hidden':''}" onclick="cmPerfNav(1)">›</button>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+      ${cmKpi(actual?'AGENDA (EN CURSO)':'AGENDA CUMPLIDA',cmPct(t.pctAgenda),t.agendaContactados+' de '+t.agendados+' agendados',actual?'var(--gray-700)':cmPctCol(t.pctAgenda,0.8,0.5))}
+      ${cmKpi('FUERA DE AGENDA',t.fuera,'contactados sin agendar','var(--gray-700)')}
+      ${cmKpi('PEDIDOS INFORMADOS',t.pedidos,'clientes','var(--gray-700)')}
+    </div>
+    ${cmEmbudo(t,'Qué se logró con los clientes de la semana')}
+  </div></div>
+  <div class="card"><div class="card-h"><span>Cliente por cliente (agendados)</span><span style="color:var(--gray-400);font-weight:500">${p.filas.length}</span></div><div style="overflow-x:auto">
+    <table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="background:var(--gray-100);color:var(--gray-500);font-size:10px"><th style="text-align:left;padding:6px 8px">Cliente</th><th>Visitas</th><th>Llam./WA</th><th>Cotiz.</th><th style="text-align:right;padding-right:8px">Venta</th><th>Contacto</th></tr></thead>
+    <tbody>${p.filas.map(fila).join('')||'<tr><td colspan="6" style="padding:10px;color:var(--gray-400)">No hubo agenda esa semana.</td></tr>'}</tbody></table></div></div>
+  <div class="card"><div class="card-h"><span>Últimas 8 semanas</span></div><div class="card-b">
+    ${cmEmbudo(p8.t,'Acumulado de las 8 semanas (clientes distintos)')}
+    <div style="overflow-x:auto;margin-top:10px"><table style="width:100%;border-collapse:collapse;font-size:11.5px"><thead><tr style="background:var(--gray-100);color:var(--gray-500);font-size:10px"><th style="text-align:left;padding:5px 6px">Semana</th><th>Agenda</th><th>Contact.</th><th>Visitas</th><th>Cot. ped./pres.</th><th style="text-align:right;padding-right:6px">Ventas</th></tr></thead>
+    <tbody>${hist.map(h=>`<tr style="border-top:1px solid var(--gray-100);text-align:center"><td style="text-align:left;padding:5px 6px">${fmtFecha(h.desde).slice(0,5)}</td><td style="font-weight:700;color:${h.desde===lun?'var(--gray-500)':cmPctCol(h.t.pctAgenda,0.8,0.5)}">${h.t.agendados?cmPct(h.t.pctAgenda)+(h.desde===lun?' <span style="font-weight:400;font-size:10px">en curso</span>':''):'—'}</td><td>${h.t.contactados}</td><td>${h.t.visitas}</td><td>${h.t.cotSol}/${h.t.cotPres}</td><td style="text-align:right;padding-right:6px">${h.t.ventasClientes?h.t.ventasClientes+' · '+finGsFmt(h.t.ventasMonto):'—'}</td></tr>`).join('')}</tbody></table></div>
+    <div style="font-size:10.5px;color:var(--gray-400);margin-top:6px">Ventas = facturas cargadas a su nombre en la semana. Cotización presentada = la que gerencia marcó como cotizada o enviada.</div>
+  </div></div>`;
+}
+function openComDet(nombre){ _cmPf={ nombre, desde:cmSemana(hoy()).desde, dest:'cdBody' }; showScreen('sComDet',nombre,'Desempeño comercial',true); cmPerfPintar(); }
 
 // ══════════════════════════════════════════════════════════
 //  MI TABLERO (comercial: sólo lo suyo)
@@ -424,7 +589,8 @@ function cmRenderMiTablero(){
       ${cmKpi('SEGUIMIENTOS VENCIDOS',pend.length,'',pend.length?'var(--red)':'var(--green)')}
       ${cmKpi('VENTAS DEL MES',finGsFmt(tot),'neto '+finGsFmt(mtNeto(tot)),'var(--gray-800)')}
     </div>
-    ${(()=>{ const pl=cmPlanSemana(getAgenda(),yo,h); const hechas=pl.filter(a=>a.estado==='hecha').length; return `<div class="card" style="cursor:pointer" onclick="openPlanSemana()"><div class="card-h"><span>📅 Mi agenda de la semana</span><span style="color:var(--green);font-weight:600;font-size:12px">editar ›</span></div><div class="card-b" style="font-size:13px">${pl.length} planificado${pl.length!==1?'s':''} · <b>${hechas}</b> hecho${hechas!==1?'s':''}${pl.filter(a=>a.estado!=='hecha').slice(0,4).map(a=>'<div style="font-size:12px;color:var(--gray-600)">· '+esc(a.titulo)+' ('+fmtFecha(a.fecha)+')</div>').join('')}</div></div>`; })()}
+    <div style="display:flex;justify-content:space-between;align-items:center;margin:4px 2px 6px"><b style="font-size:13px">📅 Mi agenda y lo que logré</b><span style="color:var(--green);cursor:pointer;font-weight:600;font-size:12px" onclick="openPlanSemana()">editar agenda ›</span></div>
+    <div id="mtbPerf"></div>
     ${metaHtml||'<div class="card"><div class="card-b" style="font-size:12px;color:var(--gray-500)">Todavía no tenés meta cargada para este mes.</div></div>'}
     <div class="card"><div class="card-h"><span>Resultados de mis visitas · ${esc(typeof finMesLbl==='function'?finMesLbl(ym):ym)}</span></div><div class="card-b">
       ${Object.keys(res).length?CM_RESULTADOS.filter(r=>res[r[0]]).map(r=>`<div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0"><span>${esc(r[1])}</span><b>${res[r[0]]}</b></div>`).join(''):'<div style="font-size:12px;color:var(--gray-400)">Sin visitas este mes.</div>'}
@@ -438,6 +604,7 @@ function cmRenderMiTablero(){
     <div class="card"><div class="card-h"><span>Mis clientes sin contacto hace +${CM_DIAS_SIN_CONTACTO} días</span><span style="color:var(--gray-400);font-weight:500">${sinC.length}</span></div><div>
       ${sinC.slice(0,15).map(x=>`<div class="li" onclick="openVisitaRapida('${x.c.id}')"><div style="min-width:0"><div class="li-t" style="font-size:13px">${esc(x.c.nombre)}</div><div class="li-s">${x.ult?'último contacto '+fmtFecha(x.ult):'nunca contactado'}</div></div><div class="li-chev">›</div></div>`).join('')||'<div style="padding:10px 12px;font-size:12px;color:var(--green)">✔ Todos contactados.</div>'}
     </div></div>`;
+  _cmPf={ nombre:yo, desde:cmSemana(h).desde, dest:'mtbPerf' }; cmPerfPintar();
 }
 
 // ══════════════════════════════════════════════════════════
@@ -456,8 +623,9 @@ function cmRenderTabCom(){
   let filasMeta=[]; try{ filasMeta=rankingMes(getVentas(),getMetas(),ym,_finComDe,finGs); }catch(e){}
   const rows=coms.map(n=>{ const sem=cmVisitasSemana(vis,n,h), min=cmMinimo(cfg,n), pend=cmPendientes(cl,n,h).length, rep=cmReprogramaciones(cl,n,hace30);
     const cont=cmVisitasEnRango(vis,n,ini,h,false).length; const fm=filasMeta.find(f=>cmMismo(f.comercial,n));
-    const pl=cmPlanSemana(getAgenda(),n,h); const plH=pl.filter(a=>a.estado==='hecha').length;
-    return { n, sem, min, pend, rep, cont, fm, pl:pl.length, plH }; });
+    const d=cmDatos(), lun=cmSemana(h).desde;
+    const ps=cmDesempeno(d,n,lun), p8=cmDesempeno(d,n,cmAddDias(lun,-49),cmAddDias(lun,6)), pa=cmDesempeno(d,n,cmAddDias(lun,-7));
+    return { n, sem, min, pend, rep, cont, fm, ps:ps.t, p8:p8.t, pa:pa.t }; });
   const sol=cmSolicitudes(vis).filter(v=>v.comercial.cotiz.estado==='pendiente');
   const ped=vis.filter(v=>v.tipo==='rapida' && (v.comercial||{}).resultado==='pedido' && v.fecha>=cmAddDias(h,-14));
   const svv=cmVentasSinVisita(getVentas(),vis,cl,cmAddDias(h,-60));
@@ -465,16 +633,18 @@ function cmRenderTabCom(){
   gs('tcBody').innerHTML=`
     <div class="card"><div class="card-h"><span>Equipo · semana actual</span><span style="color:var(--green);cursor:pointer;font-size:12px;font-weight:600" onclick="cmMinModal()">⚙ Mínimos</span></div><div style="overflow-x:auto">
       <table style="width:100%;border-collapse:collapse;font-size:12px">
-        <thead><tr style="background:var(--gray-100);color:var(--gray-500);font-size:10px;text-align:right"><th style="text-align:left;padding:6px 8px">Comercial</th><th style="padding:6px">Agenda (hechas/plan)</th><th style="padding:6px">Visitas sem.</th><th style="padding:6px">Vencidos</th><th style="padding:6px">Reprog. 30d</th><th style="padding:6px">Contactos mes</th><th style="padding:6px 8px">Venta vs meta</th></tr></thead>
+        <thead><tr style="background:var(--gray-100);color:var(--gray-500);font-size:10px;text-align:right"><th style="text-align:left;padding:6px 8px">Comercial</th><th style="padding:6px">Agenda sem. pasada</th><th style="padding:6px">Agenda esta sem.</th><th style="padding:6px">Visitas sem.</th><th style="padding:6px">Vencidos</th><th style="padding:6px">Reprog. 30d</th><th style="padding:6px">8 sem: contact. › cotiz. ped./pres. › ventas</th><th style="padding:6px 8px">Venta vs meta</th></tr></thead>
         <tbody>${rows.map(r=>`<tr style="border-top:1px solid var(--gray-100);text-align:right">
-          <td style="text-align:left;padding:7px 8px;font-weight:600">${esc(r.n)}</td>
-          <td style="padding:6px;color:${r.pl>=r.min?'var(--gray-700)':'var(--red)'}">${r.plH}/${r.pl}${r.pl<r.min?' ⚠':''}</td>
+          <td style="text-align:left;padding:7px 8px;font-weight:600"><span style="color:var(--green);cursor:pointer;text-decoration:underline" onclick="openComDet('${esc(r.n).replace(/'/g,"\\'")}')">${esc(r.n)}</span></td>
+          <td style="padding:6px;font-weight:700;color:${cmPctCol(r.pa.pctAgenda,0.8,0.5)}">${r.pa.agendados?cmPct(r.pa.pctAgenda)+' <span style="font-weight:400;color:var(--gray-400)">('+r.pa.agendaContactados+'/'+r.pa.agendados+')</span>':'—'}</td>
+          <td style="padding:6px;color:${r.ps.agendados>=r.min?'var(--gray-700)':'var(--red)'}">${r.ps.agendaContactados}/${r.ps.agendados}${r.ps.agendados<r.min?' ⚠':''}</td>
           <td style="padding:6px;font-weight:700;color:${sc(r.sem>=r.min,r.sem>=Math.ceil(r.min*0.6))}">${r.sem}/${r.min}</td>
           <td style="padding:6px;font-weight:700;color:${r.pend?'var(--red)':'var(--green)'}">${r.pend}</td>
           <td style="padding:6px;color:${r.rep>3?'#b54708':'var(--gray-600)'}">${r.rep}</td>
-          <td style="padding:6px">${r.cont}</td>
-          <td style="padding:6px 8px">${r.fm&&r.fm.meta>0?`<b style="color:${_mtColor(r.fm.pct)}">${Math.round((r.fm.pct||0)*100)}%</b>`:'—'}</td></tr>`).join('')||'<tr><td colspan="7" style="padding:10px;color:var(--gray-400)">Sin comerciales.</td></tr>'}</tbody>
-      </table></div></div>
+          <td style="padding:6px;white-space:nowrap">${r.p8.contactados} › ${r.p8.cotSol}/${r.p8.cotPres} › <b>${r.p8.ventasClientes}</b> <span style="color:var(--gray-400)">(${cmPct(r.p8.pctVenta)})</span></td>
+          <td style="padding:6px 8px">${r.fm&&r.fm.meta>0?`<b style="color:${_mtColor(r.fm.pct)}">${Math.round((r.fm.pct||0)*100)}%</b>`:'—'}</td></tr>`).join('')||'<tr><td colspan="8" style="padding:10px;color:var(--gray-400)">Sin comerciales.</td></tr>'}</tbody>
+      </table></div>
+      <div style="padding:6px 12px 9px;font-size:10.5px;color:var(--gray-400)">Tocá un nombre para ver su desempeño semana por semana y cliente por cliente.</div></div>
     <div class="card"><div class="card-h"><span>📨 Pedidos de cotización pendientes</span><span style="color:var(--gray-400);font-weight:500">${sol.length}</span></div><div>
       ${sol.map(v=>{ const c=clienteById(v.cliente_id), ct=v.comercial.cotiz; const d=cmDiffDias(v.fecha,h);
         return `<div style="padding:9px 12px;border-top:1px solid var(--gray-100)">
@@ -530,8 +700,9 @@ function cmMinGuardar(){
   // Pendientes primero: un comercial con seguimientos vencidos sólo puede ver esas dos pantallas.
   showScreen=function(id,titulo,sub,back){
     const bq=cmBloqueo();
-    if(bq && id!=='sPendientes' && id!=='sVisitaRapida' && id!=='sPlanSemana'){
+    if(bq && id!=='sPendientes' && id!=='sVisitaRapida' && id!=='sPlanSemana' && id!=='sCierre'){
       if(bq==='plan'){ _show('sPlanSemana','Mi semana','Planificá a quién vas a ver',false); cmRenderPlan(); }
+      else if(bq==='cierre'){ _show('sCierre','Cierre de la semana','Lo que quedó sin contactar',false); cmRenderCierre(); }
       else { _show('sPendientes','Seguimientos vencidos','Resolvelos para seguir',false); cmRenderPendientes(); }
       return; }
     return _show(id,titulo,sub,back);
@@ -548,11 +719,13 @@ function cmMinGuardar(){
   refreshVista=function(){ const act=document.querySelector('.screen.active');
     if(act && act.id==='sPendientes') return cmRenderPendientes();
     if(act && act.id==='sPlanSemana') return cmRenderPlan();
+    if(act && act.id==='sCierre') return cmRenderCierre();
+    if(act && act.id==='sComDet') return cmPerfPintar();
     if(act && act.id==='sMiTablero') return cmRenderMiTablero();
     if(act && act.id==='sTabCom') return cmRenderTabCom();
     if(act && act.id==='sHome') cmHomeTop();
     if(act && act.id==='sVisitaRapida') return;   // no pisar lo que se está escribiendo
     return _refresh(); };
   const _reopen=reopenScreen;
-  reopenScreen=function(id){ if(id==='sMiTablero') return openMiTablero(); if(id==='sTabCom') return openTabCom(); if(id==='sPendientes') return openPendientes(); if(id==='sPlanSemana') return openPlanSemana(); if(id==='sVisitaRapida') return goHome(); return _reopen(id); };
+  reopenScreen=function(id){ if(id==='sMiTablero') return openMiTablero(); if(id==='sTabCom') return openTabCom(); if(id==='sPendientes') return openPendientes(); if(id==='sPlanSemana') return openPlanSemana(); if(id==='sCierre') return openCierre(); if(id==='sComDet') return openTabCom(); if(id==='sVisitaRapida') return goHome(); return _reopen(id); };
 })();
