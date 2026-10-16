@@ -961,7 +961,7 @@ const visitasDe   =cid=>getVisitas().filter(v=>v.cliente_id===cid);
 // Versión de la app. SUBIR JUNTO CON `CACHE` en sw.js en cada publicación.
 // Es sólo informativa (se muestra en la cabecera) y sirve para saber de un vistazo
 // si un equipo ya tomó el último cambio o quedó con una copia vieja en caché.
-const APP_VERSION = 138;
+const APP_VERSION = 139;
 try{ document.addEventListener('DOMContentLoaded', ()=>{ const v=document.getElementById('verChip'); if(v) v.textContent='v'+APP_VERSION; }); }catch(e){}
 const SUPABASE_URL = 'https://mnuldrgynighabwtulkf.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_uAH-nT2MczSB8m9F4THmdw_T6u77exI';
@@ -1615,7 +1615,7 @@ async function verificarEsquema(){
   }
   return falta;
 }
-async function cloudPullAll(){ if(!AUTH_ON) return; await cloudPull('clientes'); await cloudPull('estancias'); await cloudPull('visitas'); await cloudPull('ot'); await cloudPull('mov'); await cloudPull('caja'); await cloudPull('viat'); await cloudPull('insumo'); await cloudPull('precio'); await cloudPull('cotiz'); await cloudPull('insprec'); await cloudPull('formula'); await cloudPull('ptmov'); await cloudPull('garantia'); await cloudPull('agenda'); await cloudPull('venta'); await cloudPull('compra'); await cloudPull('sueldo'); await cloudPull('cheque'); await cloudPull('prestamo'); await cloudPull('meta'); if(typeof pullComCfg==='function') await pullComCfg(); if(typeof pullDirReal==='function') await pullDirReal(); await pullFinCaja(); await pullFinProy(); await pullPricingCfg(); refreshVista(); }
+async function cloudPullAll(){ if(!AUTH_ON) return; await cloudPull('clientes'); await cloudPull('estancias'); await cloudPull('visitas'); await cloudPull('ot'); await cloudPull('mov'); await cloudPull('caja'); await cloudPull('viat'); await cloudPull('insumo'); await cloudPull('precio'); await cloudPull('cotiz'); await cloudPull('insprec'); await cloudPull('formula'); await cloudPull('ptmov'); await cloudPull('garantia'); await cloudPull('agenda'); await cloudPull('venta'); await cloudPull('compra'); await cloudPull('sueldo'); await cloudPull('cheque'); await cloudPull('prestamo'); await cloudPull('meta'); if(typeof pullComCfg==='function') await pullComCfg(); if(typeof pullDirReal==='function') await pullDirReal(); await pullFinCaja(); await pullFinProy(); await pullPricingCfg(); _garSincronizadas=true; try{ garCorregirNCL004(); }catch(e){} refreshVista(); }
 function refreshVista(){ const act=document.querySelector('.screen.active'); if(!act) return;
   if(act.id==='sHome') renderHome(); else if(act.id==='sClientes') renderClientes();
   else if(act.id==='sCliente'&&curCliente) abrirCliente(curCliente); else if(act.id==='sHistorial') renderHistorial();
@@ -3362,7 +3362,7 @@ function prodSetTab(t){ _prodTab=t; const cat=t==='cat', inv=t==='inv', gar=t===
   gs('prodTabCat').className='btn '+(cat?'btn-primary':'btn-sec'); gs('prodTabInv').className='btn '+(inv?'btn-primary':'btn-sec'); if(gs('prodTabGar')) gs('prodTabGar').className='btn '+(gar?'btn-primary':'btn-sec');
   if(cat){ const b=gs('btnNuevoProducto'); if(b) b.style.display=puedeEditarFormula()?'':'none'; const bd=gs('btnDesglosarNuc'); if(bd) bd.style.display=puedeEditarFormula()?'':'none'; const bl=gs('btnLimpiarOv'); if(bl) bl.style.display=esGerente()?'':'none'; renderProductosCat(); } else if(inv) renderProductosInv(); else { const bg=gs('btnImpCatGar'); if(bg) bg.style.display=esGerente()?'':'none'; renderProductosGar(); }
 }
-function renderProductosCat(){ const q=(gs('prodBuscar').value||'').trim().toLowerCase(); let ls=precioList(); if(q) ls=ls.filter(p=>((p.n||'')+' '+(p.c||'')).toLowerCase().includes(q)); if(gs('prodCount')) gs('prodCount').textContent=ls.length+' productos';
+function renderProductosCat(){ try{ garCorregirNCL004(); }catch(e){} const q=(gs('prodBuscar').value||'').trim().toLowerCase(); let ls=precioList(); if(q) ls=ls.filter(p=>((p.n||'')+' '+(p.c||'')).toLowerCase().includes(q)); if(gs('prodCount')) gs('prodCount').textContent=ls.length+' productos';
   gs('prodList').innerHTML=ls.map(p=>{ const key=precioKey(p); const st=ptStock(key); const fx=tieneFormula(p);
     const gk=garantiaDe(key); const gok=garTieneDatos(gk);
     return `<div class="li" onclick="productoEditor('${encodeURIComponent(key)}')"><div style="min-width:0"><div class="li-t">${esc(p.n)} ${fx?'<span style="font-size:10px;color:var(--green)">fórmula</span>':'<span style="font-size:10px;color:var(--gray-400)">sin fórmula</span>'}</div><div class="li-s">${p.c?esc(p.c)+' · ':''}${p.kg||prodKgBolsa(p)}kg · Contado ${gsFmt(p.p0)}/kg</div></div><div style="display:flex;align-items:center;gap:8px;flex-shrink:0"><button onclick="event.stopPropagation();garVer('${encodeURIComponent(key)}')" title="Nivel de garantía" style="border:none;background:${gok?'var(--green-lt)':'var(--gray-100)'};color:${gok?'var(--green)':'var(--gray-400)'};border-radius:8px;padding:6px 9px;cursor:pointer;font-size:14px">📄</button><div style="text-align:right"><div style="font-weight:700">${st.toLocaleString('es-PY')}</div><div style="font-size:10px;color:var(--gray-400)">bolsas</div></div></div></div>`; }).join('') || '<div class="empty">Sin productos.</div>';
@@ -3750,9 +3750,19 @@ function garLinkHtml(nom){ const k=garKeyDeNombre(nom); if(!k) return '';
   return `<span onclick="garVer('${encodeURIComponent(k)}')" style="cursor:pointer;color:var(--green-d);font-size:12px;font-weight:600">📘 Ver niveles de garantía</span>`; }
 function garRow(g){ return { id:g.id, prod_key:g.prod_key||'', prod_nom:g.prod_nom||'', data:{ registro:g.registro||'', especie:g.especie||'', composicion:g.composicion||[], ingredientes:g.ingredientes||'', indicaciones:g.indicaciones||'', dosis:g.dosis||'' }, ts:g.ts||null }; }
 function rowGar(r){ let d=r.data; if(typeof d==='string'){ try{ d=JSON.parse(d); }catch{ d={}; } } d=d||{}; return { id:r.id, prod_key:r.prod_key||'', prod_nom:r.prod_nom||'', registro:d.registro||'', especie:d.especie||'', composicion:Array.isArray(d.composicion)?d.composicion:[], ingredientes:d.ingredientes||'', indicaciones:d.indicaciones||'', dosis:d.dosis||'', ts:r.ts, pending:false }; }
-// Corrección de nombres en la ficha de Confi 4 MV ya importada (16-10-2026): selenito de sodio y fosfato bicálcico.
-function garCorregirNCL004(){ if(!esGerente()) return; const a=getGarantias(); const g=a.find(x=>x.prod_key==='NCL004');
-  if(!g || !/selenio de sodio|sulfato bic[aá]lcico/i.test(g.ingredientes||'')) return;
+// Ficha de Confi 4 MV (16-10-2026): se crea sola si falta (sin depender del botón de importar)
+// y corrige los nombres de una copia vieja (selenito de sodio, fosfato bicálcico).
+// Sólo después de haber bajado las garantías de la nube, para no pisar una versión editada.
+let _garSincronizadas=false;
+function garCorregirNCL004(){ if(!esGerente()) return; if(typeof AUTH_ON!=='undefined' && AUTH_ON && !_garSincronizadas) return;
+  const a=getGarantias(); let g=a.find(x=>x.prod_key==='NCL004');
+  if(!g || !garTieneDatos(g)){
+    const c=CAT_GAR.find(x=>x.k==='NCL004'); let p=null; try{ p=precioList().find(x=>precioKey(x)==='NCL004'); }catch(e){}
+    if(!c || !p) return;
+    const nuevo={ id:'GA-NCL004', prod_key:'NCL004', prod_nom:p.n, registro:'', especie:'Bovinos — consumo bovino, uso veterinario', composicion:catGarComp(c.comp), ingredientes:c.ing||'', indicaciones:[c.ben,c.des].filter(Boolean).join('\n\n'), dosis:c.uso||'', ts:new Date().toISOString(), pending:true };
+    saveGarantias([nuevo, ...a.filter(x=>x.prod_key!=='NCL004')]); if(typeof cloudPush==='function') cloudPush('garantia',nuevo); return;
+  }
+  if(!/selenio de sodio|sulfato bic[aá]lcico/i.test(g.ingredientes||'')) return;
   g.ingredientes=String(g.ingredientes).replace(/selenio de sodio/ig,'selenito de sodio').replace(/sulfato bic[aá]lcico/ig,'fosfato bicálcico');
   g.ts=new Date().toISOString(); g.pending=true; saveGarantias(a); if(typeof cloudPush==='function') cloudPush('garantia',g); }
 function renderProductosGar(){ garCorregirNCL004(); const q=(gs('prodGarBuscar').value||'').trim().toLowerCase(); let ls=precioList(); if(q) ls=ls.filter(p=>((p.n||'')+' '+(p.c||'')).toLowerCase().includes(q)); if(gs('prodGarCount')) gs('prodGarCount').textContent=ls.length+' productos';
