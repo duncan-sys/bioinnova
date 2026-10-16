@@ -56,6 +56,7 @@ function pushPricingCfg(){}
 <script src="js/costeo.js"></script>
 <script src="js/metas.js"></script>
 <script src="js/comercial.js"></script>
+<script src="js/directorio.js"></script>
 
 <script>
 // Se sobreescriben DESPUÉS de cargar costeo.js: las funciones de adentro resuelven
@@ -719,6 +720,25 @@ test('cmCierreFalta: pasados o con motivo ya no se piden', ()=>{
   eq(cmCierreFalta(d2,'Pedro','2026-10-26','2026-10-19').length,0);
 });
 test('cmCierreFalta no exige cerrar semanas anteriores al arranque de la exigencia', ()=>{ eq(cmCierreFalta(DD,'Pedro','2026-10-26','2026-10-26').length,0); });
+
+// ── Tablero del Directorio (js/directorio.js) ─────────────────────────────
+grupo('Tablero del Directorio');
+test('Los datos embebidos cuadran con el modelo: 2027 resultado +180.491.861', ()=>{
+  let s=0; Object.keys(DIR_PPTO).filter(k=>k.startsWith('2027')).forEach(k=>s+=DIR_PPTO[k][3]); eq(s,DIR_PLAN.fy2027_res);
+});
+test('2026: real ene-sep + presupuesto oct-dic = -661.042.738', ()=>{
+  let s=0; Object.values(DIR_REAL_BASE).forEach(r=>s+=r[3]); ['2026-10','2026-11','2026-12'].forEach(k=>s+=DIR_PPTO[k][3]); eq(s,DIR_PLAN.fy2026_res);
+});
+test('dirDiasHabiles: octubre 2026 tiene 27 días de lunes a sábado; al 15 van 13', ()=>{ const d=dirDiasHabiles('2026-10','2026-10-15'); eq(d.tot,27); eq(d.pas,13); });
+test('dirProyeccion lineal por días hábiles', ()=>{ eq(dirProyeccion(130,{pas:13,tot:26}),260); eq(dirProyeccion(100,{pas:0,tot:26}),null); });
+test('dirReal: lo cargado por gerencia manda sobre la base', ()=>{ eq(dirReal('2026-09',{})[3],-1051371); eq(dirReal('2026-09',{'2026-09':{venta:1,mb:1,ebitda:1,res:5}})[3],5); eq(dirReal('2026-10',{}),null); });
+test('dirAcumAnio 2026: el real se corta en septiembre y el cierre proyectado usa el presupuesto', ()=>{
+  const a=dirAcumAnio(2026,{}); eq(a[8].real,-427669742); eq(a[9].real,null); eq(a[11].proyectado,DIR_PLAN.fy2026_res); eq(a[11].ppto,DIR_PLAN.fy2026_res);
+});
+test('dirAcumAnio: un real cargado de octubre reemplaza al presupuesto en la proyección', ()=>{
+  const a=dirAcumAnio(2026,{'2026-10':{venta:1,mb:1,ebitda:1,res:0}}); eq(a[9].real,-427669742); eq(a[11].proyectado,DIR_PLAN.fy2026_res-DIR_PPTO['2026-10'][3]);
+});
+test('dirYmSuma cruza de año', ()=>{ eq(dirYmSuma('2026-12',1),'2027-01'); eq(dirYmSuma('2027-01',-1),'2026-12'); });
 
 // ── Salida ──────────────────────────────────────────────────────────────────
 document.getElementById('res').innerHTML = OUT.join('') +

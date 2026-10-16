@@ -961,7 +961,7 @@ const visitasDe   =cid=>getVisitas().filter(v=>v.cliente_id===cid);
 // Versión de la app. SUBIR JUNTO CON `CACHE` en sw.js en cada publicación.
 // Es sólo informativa (se muestra en la cabecera) y sirve para saber de un vistazo
 // si un equipo ya tomó el último cambio o quedó con una copia vieja en caché.
-const APP_VERSION = 133;
+const APP_VERSION = 134;
 try{ document.addEventListener('DOMContentLoaded', ()=>{ const v=document.getElementById('verChip'); if(v) v.textContent='v'+APP_VERSION; }); }catch(e){}
 const SUPABASE_URL = 'https://mnuldrgynighabwtulkf.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_uAH-nT2MczSB8m9F4THmdw_T6u77exI';
@@ -1615,7 +1615,7 @@ async function verificarEsquema(){
   }
   return falta;
 }
-async function cloudPullAll(){ if(!AUTH_ON) return; await cloudPull('clientes'); await cloudPull('estancias'); await cloudPull('visitas'); await cloudPull('ot'); await cloudPull('mov'); await cloudPull('caja'); await cloudPull('viat'); await cloudPull('insumo'); await cloudPull('precio'); await cloudPull('cotiz'); await cloudPull('insprec'); await cloudPull('formula'); await cloudPull('ptmov'); await cloudPull('garantia'); await cloudPull('agenda'); await cloudPull('venta'); await cloudPull('compra'); await cloudPull('sueldo'); await cloudPull('cheque'); await cloudPull('prestamo'); await cloudPull('meta'); if(typeof pullComCfg==='function') await pullComCfg(); await pullFinCaja(); await pullFinProy(); await pullPricingCfg(); refreshVista(); }
+async function cloudPullAll(){ if(!AUTH_ON) return; await cloudPull('clientes'); await cloudPull('estancias'); await cloudPull('visitas'); await cloudPull('ot'); await cloudPull('mov'); await cloudPull('caja'); await cloudPull('viat'); await cloudPull('insumo'); await cloudPull('precio'); await cloudPull('cotiz'); await cloudPull('insprec'); await cloudPull('formula'); await cloudPull('ptmov'); await cloudPull('garantia'); await cloudPull('agenda'); await cloudPull('venta'); await cloudPull('compra'); await cloudPull('sueldo'); await cloudPull('cheque'); await cloudPull('prestamo'); await cloudPull('meta'); if(typeof pullComCfg==='function') await pullComCfg(); if(typeof pullDirReal==='function') await pullDirReal(); await pullFinCaja(); await pullFinProy(); await pullPricingCfg(); refreshVista(); }
 function refreshVista(){ const act=document.querySelector('.screen.active'); if(!act) return;
   if(act.id==='sHome') renderHome(); else if(act.id==='sClientes') renderClientes();
   else if(act.id==='sCliente'&&curCliente) abrirCliente(curCliente); else if(act.id==='sHistorial') renderHistorial();
@@ -5215,6 +5215,7 @@ if(!navigator.onLine) pintarConexion();
 </script>
 <!-- Seguimiento comercial: va DESPUÉS del script principal porque envuelve showScreen/applyRoleUI -->
 <script src="js/comercial.js"></script>
+<script src="js/directorio.js"></script>
 <script>try{ applyRoleUI(); if(document.querySelector('.screen.active')&&document.querySelector('.screen.active').id==='sHome') goHome(); }catch(e){}</script>
 </body>
 </html>
