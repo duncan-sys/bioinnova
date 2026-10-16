@@ -151,7 +151,9 @@ function cmDesempeno(d, nombre, desde, hasta){
     ventasContactados:[...cliVen].filter(id=>cliCont.has(id)).length };
   t.pctAgenda=pct(t.agendaContactados,t.agendados); t.pctCotSol=pct(t.cotSol,t.contactados);
   t.pctCotPres=pct(t.cotPres,t.cotSol); t.pctVenta=pct(t.ventasContactados,t.contactados);
-  return { desde, hasta, filas, fuera, t };
+  const fueraFilas=fuera.map(id=>{ const cs=cont.filter(x=>x.cliente_id===id); const cot=cs.filter(x=>x.cotiz).pop(); const vts=ventas.filter(v=>v.cliente_id===id);
+    return { cliente_id:id, nombre:cli[id]?cli[id].nombre:'—', visitas:cs.filter(x=>x.presencial).length, remotos:cs.filter(x=>!x.presencial).length, cotiz:cot?cot.cotiz.estado:'', pedido:cs.some(x=>x.resultado==='pedido'), venta:vts.reduce((s,v)=>s+monto(v),0) }; });
+  return { desde, hasta, filas, fuera, fueraFilas, t };
 }
 // Agendados de la semana anterior sin contacto y sin cerrar (ni pasados ni con motivo).
 function cmCierreFalta(d, nombre, hoyIso, exigirDesde){
@@ -233,7 +235,7 @@ function cmHomeTop(){
 let _vr={};   // estado del formulario
 function openVisitaRapida(clienteId){
   if(!(puedeVer('visita')&&canEdit())){ showToast('Sin permiso'); return; }
-  _vr={ cliente_id:clienteId||'', medio:'Visita', resultado:'', prox:'', fechaProx:'', items:[{producto:'',kg:''}], gps:null };
+  _vr={ cliente_id:clienteId||'', fecha:'', medio:'Visita', resultado:'', prox:'', fechaProx:'', items:[{producto:'',kg:''}], gps:null };
   showScreen('sVisitaRapida','Registrar visita','En 20 segundos',true);
   cmVrRender();
   cmVrGps();
@@ -264,6 +266,10 @@ function cmVrRender(){
     ${c?`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;border:1.5px solid var(--green);border-radius:10px;margin-bottom:6px"><b>${esc(c.nombre)}</b><span style="color:var(--green);cursor:pointer;font-weight:600;font-size:13px" onclick="_vr.cliente_id='';cmVrRender()">cambiar</span></div>`
       :`<input type="search" id="vrBuscar" placeholder="🔎 Buscar cliente… (o escribí un prospecto nuevo)" autocomplete="off" oninput="cmVrFiltrar()" value="${esc(_vr.q||'')}">
         <div id="vrLista" style="max-height:210px;overflow:auto;margin-top:4px"></div>`}
+    <label class="fl">¿Cuándo fue?</label>
+    ${cmChips('cuando',[[hoy(),'Hoy'],[cmAddDias(hoy(),-1),'Ayer'],['otra','Otro día']],(_vr.fechaOtra?'otra':(!_vr.fecha?hoy():([hoy(),cmAddDias(hoy(),-1)].includes(_vr.fecha)?_vr.fecha:'otra'))),'cmVrFecha')}
+    ${(_vr.fecha && ![hoy(),cmAddDias(hoy(),-1)].includes(_vr.fecha)) || _vr.fechaOtra?`<input type="date" id="vrFecha" value="${_vr.fecha&&_vr.fecha!==hoy()?_vr.fecha:''}" min="${cmAddDias(hoy(),-14)}" max="${hoy()}" onchange="_vr.fecha=this.value" style="margin:-4px 0 10px">`:''}
+    ${c?cmVrAvisoAgenda(c):''}
     <label class="fl">¿Cómo fue el contacto?</label>
     ${cmChips('medio',CM_MEDIOS,_vr.medio,'cmVrMedio')}
     <label class="fl">¿Qué pasó?</label>
@@ -312,11 +318,19 @@ function cmVrFiltrar(){
     + (_vr.prospecto?`<div style="font-size:12px;color:var(--green);padding:6px 2px">Se va a crear el prospecto <b>${esc(_vr.prospecto)}</b> asignado a vos.</div>`:'');
 }
 function cmVrProspectoMsg(){ cmVrFiltrar(); }
+function cmVrFecha(k){ cmVrKeep(); if(k==='otra'){ _vr.fechaOtra=true; if([hoy(),cmAddDias(hoy(),-1)].includes(_vr.fecha)) _vr.fecha=''; } else { _vr.fechaOtra=false; _vr.fecha=k; } cmVrRender(); }
+// Aviso: un contacto no agendado se registra igual y cuenta, como "fuera de agenda".
+function cmVrAvisoAgenda(c){
+  const yo=cmYo(); const f=_vr.fecha||hoy(); const s=cmSemana(f);
+  const ag=getAgenda().some(a=>cmMismo(a.comercial,yo) && a.fecha>=s.desde && a.fecha<=s.hasta && (a.cliente_id===c.id || (!a.cliente_id && cmMismo(a.titulo,c.nombre))));
+  return ag?`<div style="font-size:11.5px;color:var(--green);margin:-4px 0 8px">📅 Estaba en tu agenda de esa semana: queda marcado como hecho.</div>`
+           :`<div style="font-size:11.5px;color:var(--gray-500);margin:-4px 0 8px">No estaba en tu agenda: se registra igual y cuenta como <b>contacto fuera de agenda</b>.</div>`;
+}
 function cmVrMedio(k){ _vr.medio=k; cmVrKeep(); cmVrRender(); }
 function cmVrRes(k){ _vr.resultado=k; if(!_vr.prox){ _vr.prox = k==='pide_cotiz'?'llamar':(k==='sin_interes'?'ninguno':'visitar'); if(_vr.prox!=='ninguno') _vr.fechaProx=cmAddDias(hoy(), k==='pide_cotiz'?7:15); } cmVrKeep(); cmVrRender(); }
 function cmVrProx(k){ _vr.prox=k; if(k==='ninguno') _vr.fechaProx=''; else if(!_vr.fechaProx) _vr.fechaProx=cmAddDias(hoy(),15); cmVrKeep(); cmVrRender(); }
 function cmVrDias(d){ _vr.fechaProx=cmAddDias(hoy(),d); const f=gs('vrFechaProx'); if(f) f.value=_vr.fechaProx; }
-function cmVrKeep(){ const n=gs('vrNota'); if(n) _vr.nota=n.value; const iv=gs('vrInfVimos'); if(iv) _vr.infVimos=iv.value; const ir=gs('vrInfReco'); if(ir) _vr.infReco=ir.value; const b=gs('vrBuscar'); if(b) _vr.q=b.value; }
+function cmVrKeep(){ const n=gs('vrNota'); if(n) _vr.nota=n.value; const vf=gs('vrFecha'); if(vf&&vf.value) _vr.fecha=vf.value; const iv=gs('vrInfVimos'); if(iv) _vr.infVimos=iv.value; const ir=gs('vrInfReco'); if(ir) _vr.infReco=ir.value; const b=gs('vrBuscar'); if(b) _vr.q=b.value; }
 function cmVrGpsTxt(){ const g=_vr.gps; if(g==null) return '📍 Buscando ubicación…'; if(g===false) return '📍 Sin ubicación (no es obligatoria)'; return '📍 Ubicación registrada (±'+Math.round(g.acc||0)+' m)'; }
 function cmVrGps(){
   if(!navigator.geolocation){ _vr.gps=false; return; }
@@ -335,7 +349,10 @@ function cmVrGuardar(imprimir){
   let items=[];
   if(_vr.resultado==='pide_cotiz'){ items=_vr.items.filter(x=>String(x.producto||'').trim()).map(x=>({producto:String(x.producto).trim(), kg:Number(x.kg)||null}));
     if(!items.length){ showToast('Indicá al menos un producto para cotizar'); return; } }
-  const ahora=new Date().toISOString(); const f=hoy();
+  if(_vr.fechaOtra && !_vr.fecha){ showToast('Elegí la fecha del contacto'); return; }
+  const ahora=new Date().toISOString(); const f=_vr.fecha||hoy();
+  if(f>hoy()){ showToast('La fecha del contacto no puede ser futura'); return; }
+  if(f<cmAddDias(hoy(),-14)){ showToast('Sólo se pueden cargar contactos de las últimas 2 semanas'); return; }
   // prospecto nuevo → se crea el cliente, asignado al comercial
   let cl=getClientes(); let c=_vr.cliente_id?cl.find(x=>x.id===_vr.cliente_id):null;
   if(!c){ c={ id:'CL-'+Date.now(), nombre:_vr.prospecto, codigo:'', ruc:'', direccion:'', contacto:'', tel:'', email:'', ubicacion:'', obs:'', estado:'Prospecto', prioridad:'', comercial:yo, prox_fecha:'', prox_nota:'', seguimientos:[], ts:ahora, pending:true }; cl.push(c); }
@@ -569,6 +586,7 @@ function cmPerfHtml(nombre, desde){
   <div class="card"><div class="card-h"><span>Cliente por cliente (agendados)</span><span style="color:var(--gray-400);font-weight:500">${p.filas.length}</span></div><div style="overflow-x:auto">
     <table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="background:var(--gray-100);color:var(--gray-500);font-size:10px"><th style="text-align:left;padding:6px 8px">Cliente</th><th>Visitas</th><th>Llam./WA</th><th>Cotiz.</th><th style="text-align:right;padding-right:8px">Venta</th><th>Contacto</th></tr></thead>
     <tbody>${p.filas.map(fila).join('')||'<tr><td colspan="6" style="padding:10px;color:var(--gray-400)">No hubo agenda esa semana.</td></tr>'}</tbody></table></div></div>
+  ${p.fueraFilas.length?`<div class="card"><div class="card-h"><span>Contactos fuera de agenda</span><span style="color:var(--gray-400);font-weight:500">${p.fueraFilas.length}</span></div><div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="background:var(--gray-100);color:var(--gray-500);font-size:10px"><th style="text-align:left;padding:6px 8px">Cliente</th><th>Visitas</th><th>Llam./WA</th><th>Cotiz.</th><th style="text-align:right;padding-right:8px">Venta</th></tr></thead><tbody>${p.fueraFilas.map(f=>`<tr style="border-top:1px solid var(--gray-100)"><td style="padding:6px 8px">${esc(f.nombre)}</td><td style="text-align:center">${f.visitas||''}</td><td style="text-align:center">${f.remotos||''}</td><td style="text-align:center">${f.cotiz?esc(f.cotiz):''}</td><td style="text-align:right;padding-right:8px">${f.venta?finGsFmt(f.venta):(f.pedido?'pedido':'')}</td></tr>`).join('')}</tbody></table></div></div>`:''}
   <div class="card"><div class="card-h"><span>Últimas 8 semanas</span></div><div class="card-b">
     ${cmEmbudo(p8.t,'Acumulado de las 8 semanas (clientes distintos)')}
     <div style="overflow-x:auto;margin-top:10px"><table style="width:100%;border-collapse:collapse;font-size:11.5px"><thead><tr style="background:var(--gray-100);color:var(--gray-500);font-size:10px"><th style="text-align:left;padding:5px 6px">Semana</th><th>Agenda</th><th>Contact.</th><th>Visitas</th><th>Cot. ped./pres.</th><th style="text-align:right;padding-right:6px">Ventas</th></tr></thead>

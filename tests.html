@@ -710,6 +710,9 @@ test('Embudo: contactados 4, cotización pedida 1 y presentada 1, 1 venta de un 
   const t=cmDesempeno(DD,'Pedro','2026-10-19').t; eq(t.contactados,4); eq(t.cotSol,1); eq(t.cotPres,1); eq(t.ventasClientes,1); eq(t.ventasMonto,20000000); cerca(t.pctVenta,0.25,0.001);
 });
 test('Fuera de agenda: el cliente contactado sin agendar se cuenta aparte', ()=>{ eq(cmDesempeno(DD,'Pedro','2026-10-19').t.fuera,1); });
+test('cmDesempeno devuelve el detalle de los contactos fuera de agenda', ()=>{
+  const f=cmDesempeno(DD,'Pedro','2026-10-19').fueraFilas; eq(f.length,1); eq(f[0].cliente_id,'K6'); eq(f[0].remotos,1);
+});
 test('Una visita de la semana anterior no cuenta para esta semana', ()=>{
   const f=cmDesempeno(DD,'Pedro','2026-10-19').filas.find(x=>x.agenda.id==='a5'); eq(f.contactado,false);
 });
