@@ -56,6 +56,7 @@ function pushPricingCfg(){}
 <script src="js/costeo.js"></script>
 <script src="js/metas.js"></script>
 <script src="js/comercial.js"></script>
+<script src="js/gestion.js"></script>
 <script src="js/directorio.js"></script>
 
 <script>
@@ -739,6 +740,27 @@ test('dirAcumAnio: un real cargado de octubre reemplaza al presupuesto en la pro
   const a=dirAcumAnio(2026,{'2026-10':{venta:1,mb:1,ebitda:1,res:0}}); eq(a[9].real,-427669742); eq(a[11].proyectado,DIR_PLAN.fy2026_res-DIR_PPTO['2026-10'][3]);
 });
 test('dirYmSuma cruza de año', ()=>{ eq(dirYmSuma('2026-12',1),'2027-01'); eq(dirYmSuma('2027-01',-1),'2026-12'); });
+
+// ── Gestión comercial consolidada (js/gestion.js) ─────────────────────────
+grupo('Gestión comercial');
+const GD={
+  clientes:[{id:'G1',nombre:'Uno',comercial:'Pedro',prox_fecha:'2026-10-10',estado:'Activo',seguimientos:[{fecha:'2026-10-05',tipo:'Llamada',por:'Pedro',nota:'llamó'},{fecha:'2026-10-06',tipo:'Visita',por:'Pedro',visita_id:'w1'},{fecha:'2026-10-07',tipo:'Nota',por:'Pedro',reprog:true,nota:'Reprogramado'}]},
+            {id:'G2',nombre:'Dos',comercial:'Pedro',prox_fecha:'2026-10-30',estado:'Activo',seguimientos:[]},
+            {id:'G3',nombre:'Tres',comercial:'Pedro',prox_fecha:'2026-10-20',estado:'Activo',seguimientos:[{fecha:'2026-10-12',tipo:'Llamada',por:'Pedro'}]},
+            {id:'G4',nombre:'Cuatro',comercial:'Pedro',prox_fecha:'2026-10-30',estado:'Activo',seguimientos:[{fecha:'2026-10-14',tipo:'Llamada',por:'Pedro'}]}],
+  visitas:[{id:'w1',tipo:'rapida',tecnico:'Pedro',fecha:'2026-10-06',cliente_id:'G1',comercial:{medio:'Visita',resultado:'pide_cotiz',cotiz:{estado:'pendiente',items:[{producto:'X',kg:100}]}}},
+           {id:'w2',tipo:'tecnica',tecnico:'Pedro',fecha:'2026-09-01',cliente_id:'G1',evaluaciones:[{categoria:'Recría'}]},
+           {id:'w3',tipo:'rapida',tecnico:'Pedro',fecha:'2026-10-13',cliente_id:'G4',comercial:{medio:'Visita',resultado:'pide_cotiz',cotiz:{estado:'pendiente',items:[]}}}],
+  ventas:[{id:'s1',fecha:'2026-10-08',cliente_id:'G1',monto:1000,comercial:'Pedro'},{id:'s2',fecha:'2026-08-01',cliente_id:'G2',monto:5000,comercial:'Pedro'}],
+  cotiz:[{id:'q1',num:12,fecha:'2026-10-09',cliente_id:'G1'}], agenda:[]
+};
+test('gsTimeline junta visitas, cotización pedida, contactos, cotización formal y ventas sin duplicar', ()=>{
+  const t=gsTimeline('G1',GD); eq(t.length,7); eq(t[0].tipo,'cotizf'); eq(t.filter(e=>e.tipo==='visita').length,2); eq(t.filter(e=>e.tipo==='contacto').length,1); eq(t.filter(e=>e.tipo==='nota').length,1);
+});
+test('gsUrgencia: vencido primero; cotización esperando; sin contacto 30 días; al día', ()=>{
+  eq(gsUrgencia(GD.clientes[0],GD,'2026-10-15'),0); eq(gsUrgencia(GD.clientes[1],GD,'2026-10-15'),2); eq(gsUrgencia(GD.clientes[2],GD,'2026-10-15'),3); eq(gsUrgencia(GD.clientes[3],GD,'2026-10-15'),1);
+});
+test('gsGrandesSinContacto: el que compró y no tiene contacto hace 30 días aparece', ()=>{ const r=gsGrandesSinContacto(GD,'2026-10-15',180).map(x=>x.c.id); eq(r.join(','),'G2'); });
 
 // ── Salida ──────────────────────────────────────────────────────────────────
 document.getElementById('res').innerHTML = OUT.join('') +

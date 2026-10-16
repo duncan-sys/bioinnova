@@ -961,7 +961,7 @@ const visitasDe   =cid=>getVisitas().filter(v=>v.cliente_id===cid);
 // Versión de la app. SUBIR JUNTO CON `CACHE` en sw.js en cada publicación.
 // Es sólo informativa (se muestra en la cabecera) y sirve para saber de un vistazo
 // si un equipo ya tomó el último cambio o quedó con una copia vieja en caché.
-const APP_VERSION = 134;
+const APP_VERSION = 135;
 try{ document.addEventListener('DOMContentLoaded', ()=>{ const v=document.getElementById('verChip'); if(v) v.textContent='v'+APP_VERSION; }); }catch(e){}
 const SUPABASE_URL = 'https://mnuldrgynighabwtulkf.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_uAH-nT2MczSB8m9F4THmdw_T6u77exI';
@@ -5215,6 +5215,7 @@ if(!navigator.onLine) pintarConexion();
 </script>
 <!-- Seguimiento comercial: va DESPUÉS del script principal porque envuelve showScreen/applyRoleUI -->
 <script src="js/comercial.js"></script>
+<script src="js/gestion.js"></script>
 <script src="js/directorio.js"></script>
 <script>try{ applyRoleUI(); if(document.querySelector('.screen.active')&&document.querySelector('.screen.active').id==='sHome') goHome(); }catch(e){}</script>
 </body>
