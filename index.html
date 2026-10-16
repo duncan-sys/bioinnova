@@ -961,7 +961,7 @@ const visitasDe   =cid=>getVisitas().filter(v=>v.cliente_id===cid);
 // Versión de la app. SUBIR JUNTO CON `CACHE` en sw.js en cada publicación.
 // Es sólo informativa (se muestra en la cabecera) y sirve para saber de un vistazo
 // si un equipo ya tomó el último cambio o quedó con una copia vieja en caché.
-const APP_VERSION = 136;
+const APP_VERSION = 137;
 try{ document.addEventListener('DOMContentLoaded', ()=>{ const v=document.getElementById('verChip'); if(v) v.textContent='v'+APP_VERSION; }); }catch(e){}
 const SUPABASE_URL = 'https://mnuldrgynighabwtulkf.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_uAH-nT2MczSB8m9F4THmdw_T6u77exI';
@@ -3543,7 +3543,8 @@ const CAT_GAR_FUENTE = 'Catálogo BioInnova 08-2026';
 // Se saca de acá en cuanto la nutricionista confirme el valor correcto.
 const GAR_REVISAR = {
   BAL008: 'El producto se vende como 19% de proteína y el catálogo garantiza PB 16%. Confirmar con la nutricionista cuál es el valor correcto antes de entregar esta ficha.',
-  BAL009: 'El producto se vende como 28% de proteína y el catálogo garantiza PB 18%. Confirmar con la nutricionista cuál es el valor correcto antes de entregar esta ficha.'
+  BAL009: 'El producto se vende como 28% de proteína y el catálogo garantiza PB 18%. Confirmar con la nutricionista cuál es el valor correcto antes de entregar esta ficha.',
+  NCL004: 'Cenizas 99,51% y NNP 99,51% repiten exactamente el valor de materia seca, y un núcleo mineral con cenizas cercanas al 100% no puede tener a la vez 100% de proteína bruta. Confirmar con la nutricionista los valores de cenizas, NNP y proteína bruta antes de entregar esta ficha.'
 };
 function garAvisoHtml(key){ const t=GAR_REVISAR[key]; if(!t) return '';
   return `<div style="background:var(--amber-lt);border-left:3px solid var(--amber);border-radius:6px;padding:9px 11px;margin-bottom:9px;font-size:12px;line-height:1.45;color:var(--gray-800)"><b>⚠️ Revisar antes de usar.</b> ${esc(t)}</div>`; }
@@ -3678,7 +3679,15 @@ const CAT_GAR = [
   ben:'',
   des:'Mejorador de la eficiencia alimentaria. Levaduras que mejoran la producción ruminal, el consumo de materia seca y el pH ruminal. Cromo quelatado como factor anti-stress. 40% de proteína bruta de origen vegetal de alta calidad.',
   uso:'20% CONFIPESO 40 + 80% de maíz (u otra fuente energética), junto con una fuente de voluminoso. En dieta total, 800 a 1.200 g/animal/día.',
-  comp:[['Humedad','130','Gr'],['PB Min','400','Gr'],['Extracto etéreo Max','20','Gr'],['Materia mineral Max','180','Gr'],['Materia fibrosa Max','150','Gr'],['Calcio Min','25','Gr'],['Calcio Max','32','Gr'],['Fósforo Min','9','Gr'],['FDA Max','100','Gr'],['NNP Max','230','Gr'],['Monensina','200','Mg'],['Saccharomyces cerevisiae','4x10¹⁰','UFC'],['Vitamina A','25000','Ui'],['Vitamina D','4000','Ui'],['Vitamina E','35','Ui']]}
+  comp:[['Humedad','130','Gr'],['PB Min','400','Gr'],['Extracto etéreo Max','20','Gr'],['Materia mineral Max','180','Gr'],['Materia fibrosa Max','150','Gr'],['Calcio Min','25','Gr'],['Calcio Max','32','Gr'],['Fósforo Min','9','Gr'],['FDA Max','100','Gr'],['NNP Max','230','Gr'],['Monensina','200','Mg'],['Saccharomyces cerevisiae','4x10¹⁰','UFC'],['Vitamina A','25000','Ui'],['Vitamina D','4000','Ui'],['Vitamina E','35','Ui']]},
+
+ // Ficha entregada por gerencia el 16-10-2026 (no está en el catálogo 08-2026).
+ {k:'NCL004', nom:'CONFI 4 MV', linea:'Núcleo', peso:'25 kg',
+  ben:'',
+  des:'Núcleo de minerales y vitaminas con medicamento y mejorador de desempeño, destinado a la formulación de raciones concentradas para bovinos de corte en fase de crecimiento y engorde. Contiene medicamento.',
+  uso:'Seguir las instrucciones de uso del profesional técnico.',
+  ing:'Carbonato de calcio, sulfato de cobre, iodato de potasio, iodato de calcio, sulfato de manganeso, selenio de sodio, vitamina A, vitamina D, vitamina E, sulfato bicálcico, calcítica, sal yodada, urea, monensina, virginiamicina.',
+  comp:[['Proteína bruta','100','%'],['Materia seca','99,51','%'],['NNP equivalente','1000','g'],['PDR','100','% MS'],['NNP','99,51','% NNP'],['Calcio','16,4','%'],['Fósforo','0,5','%'],['Magnesio','1,26','%'],['Cloro','6,64','%'],['Azufre','1,49','%'],['Sodio','4,3','%'],['Cenizas','99,51','%'],['Cobre','511,92','ppm'],['Cobalto','17,76','ppm'],['Hierro','703,15','ppm'],['Manganeso','1654,93','ppm'],['Selenio','19,98','ppm'],['Yodo','17,13','ppm'],['Zinc','2557,89','ppm'],['Cromo','4,14','ppm'],['Vitamina A','113,49','KUI/kg MS'],['Vitamina D','22,7','KUI/kg MS'],['Vitamina E','157,89','UI/kg MS'],['Monensina','750','ppm'],['Virginiamicina','500','ppm']]}
 ];
 
 // Separa el "Min"/"Max" que algunas fichas traen pegado al nombre del nutriente
@@ -3707,7 +3716,7 @@ function garImportarCatalogo(){
       id:'GA-'+c.k, prod_key:c.k, prod_nom:p.n,
       registro:'', especie:'Bovinos — consumo bovino, uso veterinario',
       composicion: catGarComp(c.comp),
-      ingredientes:'',
+      ingredientes: c.ing||'',
       indicaciones: [c.ben, c.des].filter(Boolean).join('\n\n'),
       dosis: c.uso||'',
       ts:new Date().toISOString(), pending:true
