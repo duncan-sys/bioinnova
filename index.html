@@ -961,7 +961,7 @@ const visitasDe   =cid=>getVisitas().filter(v=>v.cliente_id===cid);
 // Versión de la app. SUBIR JUNTO CON `CACHE` en sw.js en cada publicación.
 // Es sólo informativa (se muestra en la cabecera) y sirve para saber de un vistazo
 // si un equipo ya tomó el último cambio o quedó con una copia vieja en caché.
-const APP_VERSION = 139;
+const APP_VERSION = 140;
 try{ document.addEventListener('DOMContentLoaded', ()=>{ const v=document.getElementById('verChip'); if(v) v.textContent='v'+APP_VERSION; }); }catch(e){}
 const SUPABASE_URL = 'https://mnuldrgynighabwtulkf.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_uAH-nT2MczSB8m9F4THmdw_T6u77exI';
@@ -3684,7 +3684,7 @@ const CAT_GAR = [
  // Ficha entregada por gerencia el 16-10-2026 (no está en el catálogo 08-2026).
  {k:'NCL004', nom:'CONFI 4 MV', linea:'Núcleo', peso:'25 kg',
   ben:'',
-  des:'Núcleo de minerales y vitaminas con medicamento y mejorador de desempeño, destinado a la formulación de raciones concentradas para bovinos de corte en fase de crecimiento y engorde. Contiene medicamento.',
+  des:'Núcleo de minerales y vitaminas con medicamento y mejorador de desempeño, destinado a la formulación de raciones concentradas para bovinos de corte en fase de crecimiento y engorde.',
   uso:'Seguir las instrucciones de uso del profesional técnico.',
   ing:'Carbonato de calcio, sulfato de cobre, iodato de potasio, iodato de calcio, sulfato de manganeso, selenito de sodio, vitamina A, vitamina D, vitamina E, fosfato bicálcico, calcítica, sal yodada, urea, monensina, virginiamicina.',
   comp:[['Proteína bruta','100','%'],['Materia seca','99,51','%'],['NNP equivalente','1000','g'],['PDR','100','% MS'],['NNP','99,51','% NNP'],['Calcio','16,4','%'],['Fósforo','0,5','%'],['Magnesio','1,26','%'],['Cloro','6,64','%'],['Azufre','1,49','%'],['Sodio','4,3','%'],['Cenizas','99,51','%'],['Cobre','511,92','ppm'],['Cobalto','17,76','ppm'],['Hierro','703,15','ppm'],['Manganeso','1654,93','ppm'],['Selenio','19,98','ppm'],['Yodo','17,13','ppm'],['Zinc','2557,89','ppm'],['Cromo','4,14','ppm'],['Vitamina A','113,49','KUI/kg MS'],['Vitamina D','22,7','KUI/kg MS'],['Vitamina E','157,89','UI/kg MS'],['Monensina','750','ppm'],['Virginiamicina','500','ppm']]}
@@ -3762,8 +3762,11 @@ function garCorregirNCL004(){ if(!esGerente()) return; if(typeof AUTH_ON!=='unde
     const nuevo={ id:'GA-NCL004', prod_key:'NCL004', prod_nom:p.n, registro:'', especie:'Bovinos — consumo bovino, uso veterinario', composicion:catGarComp(c.comp), ingredientes:c.ing||'', indicaciones:[c.ben,c.des].filter(Boolean).join('\n\n'), dosis:c.uso||'', ts:new Date().toISOString(), pending:true };
     saveGarantias([nuevo, ...a.filter(x=>x.prod_key!=='NCL004')]); if(typeof cloudPush==='function') cloudPush('garantia',nuevo); return;
   }
-  if(!/selenio de sodio|sulfato bic[aá]lcico/i.test(g.ingredientes||'')) return;
-  g.ingredientes=String(g.ingredientes).replace(/selenio de sodio/ig,'selenito de sodio').replace(/sulfato bic[aá]lcico/ig,'fosfato bicálcico');
+  // Copia vieja: nombres de ingredientes y el "Contiene medicamento." final que gerencia pidió sacar (16-10-2026).
+  const finMed=/\s*Contiene medicamento\.\s*$/i;
+  if(!/selenio de sodio|sulfato bic[aá]lcico/i.test(g.ingredientes||'') && !finMed.test(g.indicaciones||'')) return;
+  g.ingredientes=String(g.ingredientes||'').replace(/selenio de sodio/ig,'selenito de sodio').replace(/sulfato bic[aá]lcico/ig,'fosfato bicálcico');
+  g.indicaciones=String(g.indicaciones||'').replace(finMed,'');
   g.ts=new Date().toISOString(); g.pending=true; saveGarantias(a); if(typeof cloudPush==='function') cloudPush('garantia',g); }
 function renderProductosGar(){ garCorregirNCL004(); const q=(gs('prodGarBuscar').value||'').trim().toLowerCase(); let ls=precioList(); if(q) ls=ls.filter(p=>((p.n||'')+' '+(p.c||'')).toLowerCase().includes(q)); if(gs('prodGarCount')) gs('prodGarCount').textContent=ls.length+' productos';
   gs('prodGarList').innerHTML=ls.map(p=>{ const key=precioKey(p); const g=garantiaDe(key); const ok=garTieneDatos(g); const n=(g&&g.composicion&&g.composicion.length)||0;
