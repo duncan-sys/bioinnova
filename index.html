@@ -121,13 +121,14 @@ textarea{resize:vertical;min-height:66px}
     <div id="loginError" style="display:none;font-size:12px;color:var(--red);background:var(--red-lt);border-radius:8px;padding:8px 10px;margin-top:12px;text-align:center"></div>
     <button class="btn btn-primary btn-block" style="margin-top:16px" onclick="doLogin()">Ingresar</button>
     <div id="loginLoading" style="display:none;text-align:center;font-size:12px;color:var(--gray-500);margin-top:12px">Verificando…</div>
+    <div style="text-align:center;font-size:11.5px;color:var(--gray-500);margin-top:14px">Versión <b data-ver></b></div>
   </div>
 </div>
 
 <div class="app">
   <div class="hdr">
     <div class="logo" id="hLogo">🐂</div>
-    <div class="htxt"><div class="htitle" id="hTitle">BioInnova <span id="verChip" style="font-size:10px;font-weight:500;color:#94a3b8;letter-spacing:.3px"></span></div><div class="hsub" id="hSub">Visitas técnicas a campo</div></div>
+    <div class="htxt"><div class="htitle"><span id="hTitle">BioInnova</span> <span id="verChip" style="font-size:10px;font-weight:500;color:#94a3b8;letter-spacing:.3px"></span></div><div class="hsub" id="hSub">Visitas técnicas a campo</div></div>
     <div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px">
       <div id="hBack" style="display:none;gap:5px">
         <button class="hback" onclick="navBack()">← Volver</button>
@@ -144,6 +145,7 @@ textarea{resize:vertical;min-height:66px}
   <!-- HOME -->
   <div class="screen active" id="sHome">
     <div style="text-align:center;padding:2px 0 12px"><img src="logo.jpg" alt="BioInnova" style="height:36px;background:#fff;border-radius:8px;padding:4px 10px;box-shadow:0 1px 3px rgba(0,0,0,.06)"></div>
+    <div style="text-align:center;font-size:11.5px;color:var(--gray-500);margin:-6px 0 12px">Versión <b data-ver></b></div>
     <div class="stat-strip">
       <div class="stat"><div class="sv" id="stClientes">0</div><div class="sl">Clientes</div></div>
       <div class="stat"><div class="sv" id="stVisitas">0</div><div class="sl">Visitas</div></div>
@@ -961,8 +963,8 @@ const visitasDe   =cid=>getVisitas().filter(v=>v.cliente_id===cid);
 // Versión de la app. SUBIR JUNTO CON `CACHE` en sw.js en cada publicación.
 // Es sólo informativa (se muestra en la cabecera) y sirve para saber de un vistazo
 // si un equipo ya tomó el último cambio o quedó con una copia vieja en caché.
-const APP_VERSION = 141;
-try{ document.addEventListener('DOMContentLoaded', ()=>{ const v=document.getElementById('verChip'); if(v) v.textContent='v'+APP_VERSION; }); }catch(e){}
+const APP_VERSION = 142;
+try{ document.addEventListener('DOMContentLoaded', ()=>{ const v=document.getElementById('verChip'); if(v) v.textContent='v'+APP_VERSION; document.querySelectorAll('[data-ver]').forEach(e=>e.textContent=APP_VERSION); }); }catch(e){}
 const SUPABASE_URL = 'https://mnuldrgynighabwtulkf.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_uAH-nT2MczSB8m9F4THmdw_T6u77exI';
 const AUTH_ON = !!(SUPABASE_URL && SUPABASE_KEY);
