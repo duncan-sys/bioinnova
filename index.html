@@ -961,7 +961,7 @@ const visitasDe   =cid=>getVisitas().filter(v=>v.cliente_id===cid);
 // Versión de la app. SUBIR JUNTO CON `CACHE` en sw.js en cada publicación.
 // Es sólo informativa (se muestra en la cabecera) y sirve para saber de un vistazo
 // si un equipo ya tomó el último cambio o quedó con una copia vieja en caché.
-const APP_VERSION = 140;
+const APP_VERSION = 141;
 try{ document.addEventListener('DOMContentLoaded', ()=>{ const v=document.getElementById('verChip'); if(v) v.textContent='v'+APP_VERSION; }); }catch(e){}
 const SUPABASE_URL = 'https://mnuldrgynighabwtulkf.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_uAH-nT2MczSB8m9F4THmdw_T6u77exI';
@@ -3262,14 +3262,37 @@ function renderInv(){
   gs('invList').innerHTML = keys.map(k=>`<div style="padding:10px 14px 4px;font-size:11px;font-weight:700;color:var(--green);text-transform:uppercase;letter-spacing:.04em">${esc(k)} <span style="color:var(--gray-400)">(${groups[k].length})</span></div>`+groups[k].map(row).join('')).join('') || '<div class="empty">Sin insumos.</div>';
   gs('invCount').textContent = cat.length+' insumos'+(bajos?' · '+bajos+' bajos':'');
 }
+// ── Movimientos de inventario: borrar y detectar duplicados (gerente y supervisor de planta) ──
+function puedeBorrarMov(){ return esGerente() || currentRol==='supervisor'; }
+let _invVerTodos=false, _ptVerTodos=false;
+// Ids de los movimientos que repiten a uno anterior: mismo ítem, tipo, cantidad, fecha y origen (la OT o el motivo).
+function movDuplicados(movs, campoCant){ const vistos=new Set(), dup=new Set();
+  movs.slice().sort((a,b)=>String(a.ts||'').localeCompare(String(b.ts||''))).forEach(m=>{
+    const k=[m.insumo_c||m.prod_key, m.tipo, Number(m[campoCant])||0, m.fecha, m.ot_id||'', m.ot_id?'':(m.motivo||'')].join('|');
+    if(vistos.has(k)) dup.add(m.id); else vistos.add(k); });
+  return dup; }
+// Antes de guardar un movimiento manual: ¿hay uno idéntico cargado hace menos de 10 minutos? (doble toque, dos equipos)
+function movPareceRepetido(lista, m, campoCant, campoItem){ const lim=Date.now()-10*60*1000;
+  return lista.some(x=>x[campoItem]===m[campoItem] && x.tipo===m.tipo && Number(x[campoCant])===Number(m[campoCant]) && x.fecha===m.fecha && !x.ot_id && Date.parse(x.ts||0)>=lim); }
+function movBorrarHtml(fn,id,dup){ return `<td style="text-align:right;white-space:nowrap;padding-left:4px">${dup?'<span title="Igual a otro movimiento: posible duplicado" style="font-size:10px;color:var(--amber);font-weight:700">⚠ dup.</span> ':''}${puedeBorrarMov()?`<span onclick="${fn}('${id}')" title="Borrar movimiento" style="cursor:pointer;color:var(--red);font-size:14px">🗑</span>`:''}</td>`; }
+function invBorrarMov(id){ if(!puedeBorrarMov()) return; const m=getMovs().find(x=>x.id===id); if(!m) return;
+  const tN={ingreso:'Ingreso',egreso:'Salida',ajuste:'Ajuste'};
+  if(!confirm('¿Borrar este movimiento?\n\n'+(tN[m.tipo]||m.tipo)+' de '+Math.abs(Number(m.cant)||0).toLocaleString('es-PY')+' '+(m.u||'')+' · '+fmtFecha(m.fecha)+(m.motivo?'\n'+m.motivo:'')+'\n\nEl stock se recalcula. No se puede deshacer.')) return;
+  saveMovs(getMovs().filter(x=>x.id!==id)); cloudDelete('mov',id); showToast('✓ Movimiento borrado'); invDetalle(m.insumo_c); renderInv(); }
+function ptBorrarMov(id){ if(!puedeBorrarMov()) return; const m=getPtMovs().find(x=>x.id===id); if(!m) return;
+  const tN={produccion:'Ingreso',salida:'Salida',ajuste:'Ajuste'};
+  if(!confirm('¿Borrar este movimiento?\n\n'+(tN[m.tipo]||m.tipo)+' de '+Math.abs(Number(m.bolsas)||0).toLocaleString('es-PY')+' bolsas · '+fmtFecha(m.fecha)+(m.ot_id?'\nProducción OT N° '+(m.ot_num||''):(m.motivo?'\n'+m.motivo:''))+'\n\nEl stock se recalcula. No se puede deshacer.')) return;
+  savePtMovs(getPtMovs().filter(x=>x.id!==id)); if(typeof cloudDelete==='function') cloudDelete('ptmov',id); showToast('✓ Movimiento borrado'); ptDetalle(encodeURIComponent(m.prod_key)); renderProductosInv(); }
 function invDetalle(c){
   const it=invItem(c); if(!it) return;
+  if(_invVerTodos!==c) _invVerTodos=false;
   const s=invStock(c); const mn=invMins()[c]||0;
-  const movs=getMovs().filter(m=>m.insumo_c===c).sort((a,b)=>String(b.ts||'').localeCompare(String(a.ts||''))).slice(0,15);
+  const todos=getMovs().filter(m=>m.insumo_c===c).sort((a,b)=>String(b.ts||'').localeCompare(String(a.ts||'')));
+  const movs=_invVerTodos===c?todos:todos.slice(0,15); const dup=movDuplicados(todos,'cant');
   const tN={ingreso:'Ingreso',egreso:'Salida',ajuste:'Ajuste'};
   const filas=movs.map(m=>{ const neg=m.tipo==='egreso'||(m.tipo==='ajuste'&&Number(m.cant)<0); const val=Math.abs(Number(m.cant)||0);
     const costoTxt = (m.tipo==='ingreso'&&m.costo!=null&&m.costo>0) ? `<div style="font-size:10px;color:var(--gray-400)">₲ ${Math.round(m.costo).toLocaleString('es-PY')}/${it.u||'kg'}${m.moneda==='USD'&&m.costo_orig!=null?' (US$ '+m.costo_orig+' × '+Math.round(m.tc||0).toLocaleString('es-PY')+')':''}</div>` : '';
-    return `<tr style="border-top:1px solid var(--gray-200)"><td style="padding:4px 6px;color:var(--gray-500)">${fmtFecha(m.fecha)}</td><td>${tN[m.tipo]||m.tipo}${m.ot_id?' · OT':''}${m.motivo&&!m.ot_id?'<div style="font-size:10px;color:var(--gray-400)">'+esc(m.motivo)+'</div>':''}${costoTxt}</td><td style="text-align:right;font-weight:600;color:${neg?'var(--red)':'var(--green)'}">${neg?'−':'+'}${val.toLocaleString('es-PY')}</td></tr>`; }).join('') || '<tr><td colspan="3" style="color:var(--gray-400);padding:8px 6px">Sin movimientos aún.</td></tr>';
+    return `<tr style="border-top:1px solid var(--gray-200);${dup.has(m.id)?'background:#fffbeb':''}"><td style="padding:4px 6px;color:var(--gray-500)">${fmtFecha(m.fecha)}</td><td>${tN[m.tipo]||m.tipo}${m.ot_id?' · OT':''}${m.motivo?'<div style="font-size:10px;color:var(--gray-400)">'+esc(m.motivo)+'</div>':''}${costoTxt}</td><td style="text-align:right;font-weight:600;color:${neg?'var(--red)':'var(--green)'}">${neg?'−':'+'}${val.toLocaleString('es-PY')}</td>${movBorrarHtml('invBorrarMov',m.id,dup.has(m.id))}</tr>`; }).join('') || '<tr><td colspan="4" style="color:var(--gray-400);padding:8px 6px">Sin movimientos aún.</td></tr>';
   const edit=puedeVer('inventario');
   const extra=esGerente()&&getInsumosExtra().some(x=>x.c===c);
   gs('modalBox').innerHTML=`<h3 style="margin-bottom:2px">${esc(it.n)} ${extra?`<span onclick="cerrarModal();invInsumoModal('${(getInsumosExtra().find(x=>x.c===c)||{}).id}')" style="color:var(--green);cursor:pointer;font-size:12px;font-weight:600">✎</span>`:''}</h3><div style="font-size:12px;color:var(--gray-600)">${esc(it.c)}${it.prov?' · '+esc(it.prov):''}</div>
@@ -3277,8 +3300,9 @@ function invDetalle(c){
     <div style="font-size:12px;color:var(--gray-600);margin-bottom:8px">Precio p/ cotizar: <b>${gsFmt(insPrecio(c))}/${it.u}</b> ${getInsPrecOv().some(x=>x.c===c)?'<span style="color:var(--amber)">· fijado a mano (🧪)</span>':(insWavg(c)!=null?'<span style="color:var(--green)">· promedio ponderado de compras</span>':'<span style="color:var(--gray-400)">· default de fábrica</span>')}</div>
     ${edit?`<label class="fl">Stock mínimo (alerta)</label><input type="number" id="invMinInp" value="${mn||''}" placeholder="sin alerta" onchange="setInvMin('${c}',num(this.value)||0);renderInv()">
     <div style="display:flex;gap:8px;margin:12px 0"><button class="btn btn-primary" style="flex:1" onclick="invMovModal('${c}','ingreso')">＋ Ingreso</button><button class="btn btn-sec" style="flex:1" onclick="invMovModal('${c}','egreso')">− Salida</button><button class="btn btn-amber" style="flex:1" onclick="invMovModal('${c}','ajuste')">⚖ Ajuste</button></div>`:''}
-    <div style="font-size:12px;font-weight:700;color:var(--gray-600);margin-top:8px">Últimos movimientos</div>
+    <div style="font-size:12px;font-weight:700;color:var(--gray-600);margin-top:8px">${_invVerTodos===c?'Todos los movimientos':'Últimos movimientos'}${dup.size?` · <span style="color:var(--amber)">${dup.size} posible${dup.size!==1?'s':''} duplicado${dup.size!==1?'s':''}</span>`:''}</div>
     <table style="width:100%;border-collapse:collapse;font-size:12px"><tbody>${filas}</tbody></table>
+    ${todos.length>15&&_invVerTodos!==c?`<div style="text-align:center;margin-top:6px"><span style="color:var(--green);cursor:pointer;font-size:12px;font-weight:600" onclick="_invVerTodos='${c}';invDetalle('${c}')">Ver los ${todos.length} movimientos</span></div>`:''}
     <button class="btn btn-ghost btn-block" style="margin-top:12px" onclick="cerrarModal()">Cerrar</button>`;
   gs('modal').classList.add('show');
 }
@@ -3320,6 +3344,7 @@ function invGuardarMov(){
     }
   }
   const m={ id:'MV-'+Date.now(), insumo_c:_invC, insumo_n:it.n, u:it.u, tipo:_invTipo, cant, motivo, proveedor:prov, costo, moneda:monedaC, costo_orig:costoOrig, tc:tcC, ot_id:'', fecha:gs('mvFecha').value||hoy(), usuario:(getSession()&&getSession().nombre)||'', ts:new Date().toISOString(), pending:true };
+  if(_invTipo!=='ajuste' && movPareceRepetido(getMovs(),m,'cant','insumo_c') && !confirm('Ya hay un movimiento igual (mismo insumo, tipo, cantidad y fecha) cargado hace pocos minutos.\n\n¿Guardar otro igual de todas formas?')) return;
   const a=getMovs(); a.unshift(m); saveMovs(a); cloudPush('mov',m);
   let msg='✓ Movimiento guardado';
   if(_invTipo==='ingreso' && costo!=null && costo>0){ const w=insWavg(_invC); const ov=getInsPrecOv().some(x=>x.c===_invC); if(w!=null && !ov) msg='✓ Compra registrada · precio promedio de cotización → ₲ '+w.toLocaleString('es-PY')+'/'+it.u; }
@@ -3330,8 +3355,11 @@ function otProducir(id){
   const o=getOTs().find(x=>x.id===id); if(!o||!esPlanta()) return;
   if(o.estado==='producida'){ showToast('Los insumos ya fueron descontados'); return; }
   if(!confirm('¿Descontar del inventario los insumos de esta OT?')) return;
-  const movs=getMovs(); const stamp=new Date().toISOString(); const nuevos=[];
-  (o.insumos||[]).forEach((l,i)=>{ if(l.t==='m') return; const m={ id:'MV-'+Date.now()+'-'+i, insumo_c:l.c, insumo_n:l.n, u:l.t==='b'?'u':'kg', tipo:'egreso', cant:Math.abs(Number(l.cant)||0), motivo:'Producción OT N° '+o.num, proveedor:'', costo:null, ot_id:o.id, fecha:o.fecha||hoy(), usuario:(getSession()&&getSession().nombre)||'', ts:stamp, pending:true }; nuevos.push(m); });
+  // Idempotente: ids fijos por OT y renglón, y se reemplaza lo que hubiera de esta OT.
+  // Así confirmar dos veces (doble toque, dos equipos) no duplica las salidas.
+  getMovs().filter(m=>m.ot_id===o.id).forEach(m=>cloudDelete('mov',m.id));
+  const movs=getMovs().filter(m=>m.ot_id!==o.id); const stamp=new Date().toISOString(); const nuevos=[];
+  (o.insumos||[]).forEach((l,i)=>{ if(l.t==='m') return; const m={ id:'MV-OT-'+o.id+'-'+i, insumo_c:l.c, insumo_n:l.n, u:l.t==='b'?'u':'kg', tipo:'egreso', cant:Math.abs(Number(l.cant)||0), motivo:'Producción OT N° '+o.num, proveedor:'', costo:null, ot_id:o.id, fecha:o.fecha||hoy(), usuario:(getSession()&&getSession().nombre)||'', ts:stamp, pending:true }; nuevos.push(m); });
   saveMovs(nuevos.concat(movs)); nuevos.forEach(m=>cloudPush('mov',m));
   o.estado='producida'; o.ts=stamp; o.pending=true; saveOTs(getOTs().map(x=>x.id===o.id?o:x)); cloudPush('ot',o);
   ptAddFromOT(o);   // suma el stock de producto terminado
@@ -3491,17 +3519,20 @@ function renderProductosInv(){ const q=(gs('prodInvBuscar').value||'').trim().to
     return `<div class="li" onclick="ptDetalle('${encodeURIComponent(key)}')"><div style="min-width:0"><div class="li-t">${esc(p.n)}</div><div class="li-s">${p.c?esc(p.c)+' · ':''}${p.kg||prodKgBolsa(p)}kg/bolsa</div></div><div style="text-align:right;flex-shrink:0"><div style="font-weight:700;color:${st<=0?'var(--gray-400)':'var(--gray-800)'}">${st.toLocaleString('es-PY')}</div><div style="font-size:10px;color:var(--gray-400)">bolsas</div></div></div>`; }).join('') || '<div class="empty">Sin productos.</div>';
 }
 function ptDetalle(keyEnc){ const key=decodeURIComponent(keyEnc); const p=precioList().find(x=>precioKey(x)===key); if(!p) return; const st=ptStock(key); const kb=p.kg||prodKgBolsa(p);
-  const movs=getPtMovs().filter(m=>m.prod_key===key).sort((a,b)=>String(b.ts||'').localeCompare(String(a.ts||''))).slice(0,15);
+  if(_ptVerTodos!==key) _ptVerTodos=false;
+  const todos=getPtMovs().filter(m=>m.prod_key===key).sort((a,b)=>String(b.ts||'').localeCompare(String(a.ts||'')));
+  const movs=_ptVerTodos===key?todos:todos.slice(0,15); const dup=movDuplicados(todos,'bolsas');
   const tN={produccion:'Ingreso',salida:'Salida',ajuste:'Ajuste'};
   const filas=movs.map(m=>{ const neg=m.tipo==='salida'||(m.tipo==='ajuste'&&Number(m.bolsas)<0); const val=Math.abs(Number(m.bolsas)||0);
     const sub=m.ot_id?('Producción OT N° '+esc(m.ot_num||'')):(esc(m.motivo||'')+(m.cliente?' · '+esc(m.cliente):''));
-    return `<tr style="border-top:1px solid var(--gray-200)"><td style="padding:4px 6px;color:var(--gray-500)">${fmtFecha(m.fecha)}</td><td>${tN[m.tipo]||m.tipo}${sub?'<div style="font-size:10px;color:var(--gray-400)">'+sub+'</div>':''}</td><td style="text-align:right;font-weight:600;color:${neg?'var(--red)':'var(--green)'}">${neg?'−':'+'}${val.toLocaleString('es-PY')}</td></tr>`; }).join('')||'<tr><td colspan="3" style="color:var(--gray-400);padding:8px 6px">Sin movimientos aún.</td></tr>';
+    return `<tr style="border-top:1px solid var(--gray-200);${dup.has(m.id)?'background:#fffbeb':''}"><td style="padding:4px 6px;color:var(--gray-500)">${fmtFecha(m.fecha)}</td><td>${tN[m.tipo]||m.tipo}${sub?'<div style="font-size:10px;color:var(--gray-400)">'+sub+'</div>':''}</td><td style="text-align:right;font-weight:600;color:${neg?'var(--red)':'var(--green)'}">${neg?'−':'+'}${val.toLocaleString('es-PY')}</td>${movBorrarHtml('ptBorrarMov',m.id,dup.has(m.id))}</tr>`; }).join('')||'<tr><td colspan="4" style="color:var(--gray-400);padding:8px 6px">Sin movimientos aún.</td></tr>';
   const edit=puedeVer('inventario')||esPlanta();
   gs('modalBox').innerHTML=`<h3>${esc(p.n)}</h3><div style="font-size:12px;color:var(--gray-600)">${p.c?esc(p.c)+' · ':''}${kb}kg/bolsa</div>
     <div style="display:flex;align-items:baseline;gap:8px;margin:10px 0 4px"><div style="font-size:28px;font-weight:800;color:${st<=0?'var(--gray-400)':'var(--gray-800)'}">${st.toLocaleString('es-PY')}</div><div style="color:var(--gray-500)">bolsas en stock${kb?' · '+(st*kb).toLocaleString('es-PY')+' kg':''}</div></div>
     ${edit?`<div style="display:flex;gap:8px;margin:12px 0"><button class="btn btn-primary" style="flex:1" onclick="ptMovModal('${keyEnc}','produccion')">＋ Ingreso</button><button class="btn btn-sec" style="flex:1" onclick="ptMovModal('${keyEnc}','salida')">− Salida</button><button class="btn btn-amber" style="flex:1" onclick="ptMovModal('${keyEnc}','ajuste')">⚖ Ajuste</button></div>`:''}
-    <div style="font-size:12px;font-weight:700;color:var(--gray-600);margin-top:8px">Últimos movimientos</div>
+    <div style="font-size:12px;font-weight:700;color:var(--gray-600);margin-top:8px">${_ptVerTodos===key?'Todos los movimientos':'Últimos movimientos'}${dup.size?` · <span style="color:var(--amber)">${dup.size} posible${dup.size!==1?'s':''} duplicado${dup.size!==1?'s':''}</span>`:''}</div>
     <table style="width:100%;border-collapse:collapse;font-size:12px"><tbody>${filas}</tbody></table>
+    ${todos.length>15&&_ptVerTodos!==key?`<div style="text-align:center;margin-top:6px"><span style="color:var(--green);cursor:pointer;font-size:12px;font-weight:600" onclick="_ptVerTodos=decodeURIComponent('${keyEnc}');ptDetalle('${keyEnc}')">Ver los ${todos.length} movimientos</span></div>`:''}
     <button class="btn btn-ghost btn-block" style="margin-top:12px" onclick="cerrarModal()">Cerrar</button>`;
   gs('modal').classList.add('show');
 }
@@ -3520,6 +3551,7 @@ function ptGuardarMov(){ const p=precioList().find(x=>precioKey(x)===_ptKey); if
   if(_ptTipo==='ajuste'){ const real=num(gs('ptReal').value); if(real==null){ showToast('Ingresá el stock contado'); return; } bolsas=Math.round(real-ptStock(_ptKey)); if(bolsas===0){ showToast('El stock ya coincide'); return; } motivo='Conteo físico'; }
   else { const v=num(gs('ptCant').value); if(!v||v<=0){ showToast('Ingresá la cantidad'); return; } bolsas=Math.abs(Math.round(v)); motivo=(gs('ptMotivo')&&gs('ptMotivo').value.trim())||(_ptTipo==='salida'?'Despacho':'Ingreso'); if(_ptTipo==='salida') cliente=(gs('ptCliente')&&gs('ptCliente').value.trim())||''; }
   const m={ id:'PT-'+Date.now(), prod_key:_ptKey, prod_cod:p.c||'', prod_nom:p.n, kg_bolsa:(p.kg||prodKgBolsa(p)), tipo:_ptTipo, bolsas, motivo, cliente, ot_id:'', ot_num:'', fecha:gs('ptFecha').value||hoy(), usuario:(getSession()&&getSession().nombre)||'', ts:new Date().toISOString(), pending:true };
+  if(_ptTipo!=='ajuste' && movPareceRepetido(getPtMovs(),m,'bolsas','prod_key') && !confirm('Ya hay un movimiento igual (mismo producto, tipo, bolsas y fecha) cargado hace pocos minutos.\n\n¿Guardar otro igual de todas formas?')) return;
   const a=getPtMovs(); a.unshift(m); savePtMovs(a); if(typeof cloudPush==='function') cloudPush('ptmov',m); showToast('✓ Movimiento guardado'); ptDetalle(encodeURIComponent(_ptKey)); renderProductosInv();
 }
 // Stock de terminados desde una OT producida
