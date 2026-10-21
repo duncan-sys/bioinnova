@@ -963,7 +963,7 @@ const visitasDe   =cid=>getVisitas().filter(v=>v.cliente_id===cid);
 // Versión de la app. SUBIR JUNTO CON `CACHE` en sw.js en cada publicación.
 // Es sólo informativa (se muestra en la cabecera) y sirve para saber de un vistazo
 // si un equipo ya tomó el último cambio o quedó con una copia vieja en caché.
-const APP_VERSION = 143;
+const APP_VERSION = 144;
 try{ document.addEventListener('DOMContentLoaded', ()=>{ const v=document.getElementById('verChip'); if(v) v.textContent='v'+APP_VERSION; document.querySelectorAll('[data-ver]').forEach(e=>e.textContent=APP_VERSION); }); }catch(e){}
 const SUPABASE_URL = 'https://mnuldrgynighabwtulkf.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_uAH-nT2MczSB8m9F4THmdw_T6u77exI';
@@ -1617,7 +1617,7 @@ async function verificarEsquema(){
   }
   return falta;
 }
-async function cloudPullAll(){ if(!AUTH_ON) return; await cloudPull('clientes'); await cloudPull('estancias'); await cloudPull('visitas'); await cloudPull('ot'); await cloudPull('mov'); await cloudPull('caja'); await cloudPull('viat'); await cloudPull('insumo'); await cloudPull('precio'); await cloudPull('cotiz'); await cloudPull('insprec'); await cloudPull('formula'); await cloudPull('ptmov'); await cloudPull('garantia'); await cloudPull('agenda'); await cloudPull('venta'); await cloudPull('compra'); await cloudPull('sueldo'); await cloudPull('cheque'); await cloudPull('prestamo'); await cloudPull('meta'); if(typeof pullComCfg==='function') await pullComCfg(); if(typeof pullDirReal==='function') await pullDirReal(); await pullFinCaja(); await pullFinProy(); await pullPricingCfg(); _garSincronizadas=true; try{ garCorregirNCL004(); }catch(e){} refreshVista(); }
+async function cloudPullAll(){ if(!AUTH_ON) return; await cloudPull('clientes'); await cloudPull('estancias'); await cloudPull('visitas'); await cloudPull('ot'); await cloudPull('mov'); await cloudPull('caja'); await cloudPull('viat'); await cloudPull('insumo'); await cloudPull('precio'); await cloudPull('cotiz'); await cloudPull('insprec'); await cloudPull('formula'); await cloudPull('ptmov'); await cloudPull('garantia'); await cloudPull('agenda'); await cloudPull('venta'); await cloudPull('compra'); await cloudPull('sueldo'); await cloudPull('cheque'); await cloudPull('prestamo'); await cloudPull('meta'); if(typeof pullComCfg==='function') await pullComCfg(); if(typeof pullDirReal==='function') await pullDirReal(); await pullFinCaja(); await pullFinProy(); await pullPricingCfg(); _garSincronizadas=true; try{ garAsegurarCatalogo(); }catch(e){} refreshVista(); }
 function refreshVista(){ const act=document.querySelector('.screen.active'); if(!act) return;
   if(act.id==='sHome') renderHome(); else if(act.id==='sClientes') renderClientes();
   else if(act.id==='sCliente'&&curCliente) abrirCliente(curCliente); else if(act.id==='sHistorial') renderHistorial();
@@ -3392,7 +3392,7 @@ function prodSetTab(t){ _prodTab=t; const cat=t==='cat', inv=t==='inv', gar=t===
   gs('prodTabCat').className='btn '+(cat?'btn-primary':'btn-sec'); gs('prodTabInv').className='btn '+(inv?'btn-primary':'btn-sec'); if(gs('prodTabGar')) gs('prodTabGar').className='btn '+(gar?'btn-primary':'btn-sec');
   if(cat){ const b=gs('btnNuevoProducto'); if(b) b.style.display=puedeEditarFormula()?'':'none'; const bd=gs('btnDesglosarNuc'); if(bd) bd.style.display=puedeEditarFormula()?'':'none'; const bl=gs('btnLimpiarOv'); if(bl) bl.style.display=esGerente()?'':'none'; renderProductosCat(); } else if(inv) renderProductosInv(); else { const bg=gs('btnImpCatGar'); if(bg) bg.style.display=esGerente()?'':'none'; renderProductosGar(); }
 }
-function renderProductosCat(){ try{ garCorregirNCL004(); }catch(e){} const q=(gs('prodBuscar').value||'').trim().toLowerCase(); let ls=precioList(); if(q) ls=ls.filter(p=>((p.n||'')+' '+(p.c||'')).toLowerCase().includes(q)); if(gs('prodCount')) gs('prodCount').textContent=ls.length+' productos';
+function renderProductosCat(){ try{ garAsegurarCatalogo(); }catch(e){} const q=(gs('prodBuscar').value||'').trim().toLowerCase(); let ls=precioList(); if(q) ls=ls.filter(p=>((p.n||'')+' '+(p.c||'')).toLowerCase().includes(q)); if(gs('prodCount')) gs('prodCount').textContent=ls.length+' productos';
   gs('prodList').innerHTML=ls.map(p=>{ const key=precioKey(p); const st=ptStock(key); const fx=tieneFormula(p);
     const gk=garantiaDe(key); const gok=garTieneDatos(gk);
     return `<div class="li" onclick="productoEditor('${encodeURIComponent(key)}')"><div style="min-width:0"><div class="li-t">${esc(p.n)} ${fx?'<span style="font-size:10px;color:var(--green)">fórmula</span>':'<span style="font-size:10px;color:var(--gray-400)">sin fórmula</span>'}</div><div class="li-s">${p.c?esc(p.c)+' · ':''}${p.kg||prodKgBolsa(p)}kg · Contado ${gsFmt(p.p0)}/kg</div></div><div style="display:flex;align-items:center;gap:8px;flex-shrink:0"><button onclick="event.stopPropagation();garVer('${encodeURIComponent(key)}')" title="Nivel de garantía" style="border:none;background:${gok?'var(--green-lt)':'var(--gray-100)'};color:${gok?'var(--green)':'var(--gray-400)'};border-radius:8px;padding:6px 9px;cursor:pointer;font-size:14px">📄</button><div style="text-align:right"><div style="font-weight:700">${st.toLocaleString('es-PY')}</div><div style="font-size:10px;color:var(--gray-400)">bolsas</div></div></div></div>`; }).join('') || '<div class="empty">Sin productos.</div>';
@@ -3788,21 +3788,23 @@ function rowGar(r){ let d=r.data; if(typeof d==='string'){ try{ d=JSON.parse(d);
 // y corrige los nombres de una copia vieja (selenito de sodio, fosfato bicálcico).
 // Sólo después de haber bajado las garantías de la nube, para no pisar una versión editada.
 let _garSincronizadas=false;
-function garCorregirNCL004(){ if(!esGerente()) return; if(typeof AUTH_ON!=='undefined' && AUTH_ON && !_garSincronizadas) return;
-  const a=getGarantias(); let g=a.find(x=>x.prod_key==='NCL004');
-  if(!g || !garTieneDatos(g)){
-    const c=CAT_GAR.find(x=>x.k==='NCL004'); let p=null; try{ p=precioList().find(x=>precioKey(x)==='NCL004'); }catch(e){}
-    if(!c || !p) return;
-    const nuevo={ id:'GA-NCL004', prod_key:'NCL004', prod_nom:p.n, registro:'', especie:'Bovinos — consumo bovino, uso veterinario', composicion:catGarComp(c.comp), ingredientes:c.ing||'', indicaciones:[c.ben,c.des].filter(Boolean).join('\n\n'), dosis:c.uso||'', ts:new Date().toISOString(), pending:true };
-    saveGarantias([nuevo, ...a.filter(x=>x.prod_key!=='NCL004')]); if(typeof cloudPush==='function') cloudPush('garantia',nuevo); return;
-  }
+function garAsegurarCatalogo(){ if(!esGerente()) return; if(typeof AUTH_ON!=='undefined' && AUTH_ON && !_garSincronizadas) return;
+  // Toda ficha del catálogo oficial vinculada a un producto se crea sola si
+  // falta: el botón de importar nunca se usó y por eso Aguas y el resto no
+  // aparecían. Las que el gerente borró a mano no se recrean.
+  let a=getGarantias(); const borradas=new Set(getArr('bio:garBorradas'));
+  let keys={}; try{ precioList().forEach(p=>{ keys[precioKey(p)]=p; }); }catch(e){}
+  const nuevos=CAT_GAR.filter(c=>c.k && keys[c.k] && !borradas.has(c.k) && !garTieneDatos(a.find(x=>x.prod_key===c.k))).map(c=>{ const p=keys[c.k];
+    return { id:'GA-'+c.k, prod_key:c.k, prod_nom:p.n, registro:'', especie:'Bovinos — consumo bovino, uso veterinario', composicion:catGarComp(c.comp), ingredientes:c.ing||'', indicaciones:[c.ben,c.des].filter(Boolean).join('\n\n'), dosis:c.uso||'', ts:new Date().toISOString(), pending:true }; });
+  if(nuevos.length){ a=[...nuevos, ...a.filter(x=>!nuevos.some(n=>n.prod_key===x.prod_key))]; saveGarantias(a); if(typeof cloudPush==='function') nuevos.forEach(n=>cloudPush('garantia',n)); }
+  const g=a.find(x=>x.prod_key==='NCL004'); if(!g) return;
   // Copia vieja: nombres de ingredientes y el "Contiene medicamento." final que gerencia pidió sacar (16-10-2026).
   const finMed=/\s*Contiene medicamento\.\s*$/i;
   if(!/selenio de sodio|sulfato bic[aá]lcico/i.test(g.ingredientes||'') && !finMed.test(g.indicaciones||'')) return;
   g.ingredientes=String(g.ingredientes||'').replace(/selenio de sodio/ig,'selenito de sodio').replace(/sulfato bic[aá]lcico/ig,'fosfato bicálcico');
   g.indicaciones=String(g.indicaciones||'').replace(finMed,'');
   g.ts=new Date().toISOString(); g.pending=true; saveGarantias(a); if(typeof cloudPush==='function') cloudPush('garantia',g); }
-function renderProductosGar(){ garCorregirNCL004(); const q=(gs('prodGarBuscar').value||'').trim().toLowerCase(); let ls=precioList(); if(q) ls=ls.filter(p=>((p.n||'')+' '+(p.c||'')).toLowerCase().includes(q)); if(gs('prodGarCount')) gs('prodGarCount').textContent=ls.length+' productos';
+function renderProductosGar(){ garAsegurarCatalogo(); const q=(gs('prodGarBuscar').value||'').trim().toLowerCase(); let ls=precioList(); if(q) ls=ls.filter(p=>((p.n||'')+' '+(p.c||'')).toLowerCase().includes(q)); if(gs('prodGarCount')) gs('prodGarCount').textContent=ls.length+' productos';
   gs('prodGarList').innerHTML=ls.map(p=>{ const key=precioKey(p); const g=garantiaDe(key); const ok=garTieneDatos(g); const n=(g&&g.composicion&&g.composicion.length)||0;
     return `<div class="li" onclick="garVer('${encodeURIComponent(key)}')"><div style="min-width:0"><div class="li-t">${esc(p.n)}</div><div class="li-s">${p.c?esc(p.c)+' · ':''}${ok?('<span style="color:var(--green)">✓ garantía cargada'+(n?' ('+n+' ítems)':'')+'</span>'):'<span style="color:var(--gray-400)">sin garantía</span>'}${(ok&&GAR_REVISAR[key])?' · <span style="color:var(--amber)">⚠️ revisar</span>':''}</div></div><div class="li-chev">${ok?'📄':'＋'}</div></div>`; }).join('') || '<div class="empty">Sin productos.</div>';
 }
@@ -3880,7 +3882,7 @@ function garGuardar(keyEnc){ if(!esGerente()){ showToast('Solo el gerente'); ret
   if(typeof cloudPush==='function') cloudPush('garantia',rec);
   showToast('✓ Garantía guardada'); garVer(keyEnc); renderProductosGar();
 }
-function garBorrar(keyEnc){ if(!esGerente()) return; if(!confirm('¿Quitar la garantía de este producto?')) return; const key=decodeURIComponent(keyEnc); const g=garantiaDe(key); if(g){ saveGarantias(getGarantias().filter(x=>x.prod_key!==key)); if(typeof cloudDelete==='function') cloudDelete('garantia', g.id); } cerrarModal(); renderProductosGar(); }
+function garBorrar(keyEnc){ if(!esGerente()) return; if(!confirm('¿Quitar la garantía de este producto?')) return; const key=decodeURIComponent(keyEnc); setArr('bio:garBorradas',[...new Set([...getArr('bio:garBorradas'),key])]); const g=garantiaDe(key); if(g){ saveGarantias(getGarantias().filter(x=>x.prod_key!==key)); if(typeof cloudDelete==='function') cloudDelete('garantia', g.id); } cerrarModal(); renderProductosGar(); }
 function garPrint(keyEnc){ const key=decodeURIComponent(keyEnc); const p=precioList().find(x=>precioKey(x)===key); const g=garantiaDe(key); if(!garTieneDatos(g)){ showToast('Sin garantía'); return; }
   if(GAR_REVISAR[key] && !confirm('⚠️ Esta garantía está pendiente de revisión.\n\n'+GAR_REVISAR[key]+'\n\n¿Imprimir igual?')) return;
   const w=window.open('','_blank'); if(!w){ showToast('Permití las ventanas emergentes'); return; }
