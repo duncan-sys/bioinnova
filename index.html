@@ -963,7 +963,7 @@ const visitasDe   =cid=>getVisitas().filter(v=>v.cliente_id===cid);
 // Versión de la app. SUBIR JUNTO CON `CACHE` en sw.js en cada publicación.
 // Es sólo informativa (se muestra en la cabecera) y sirve para saber de un vistazo
 // si un equipo ya tomó el último cambio o quedó con una copia vieja en caché.
-const APP_VERSION = 145;
+const APP_VERSION = 146;
 try{ document.addEventListener('DOMContentLoaded', ()=>{ const v=document.getElementById('verChip'); if(v) v.textContent='v'+APP_VERSION; document.querySelectorAll('[data-ver]').forEach(e=>e.textContent=APP_VERSION); }); }catch(e){}
 const SUPABASE_URL = 'https://mnuldrgynighabwtulkf.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_uAH-nT2MczSB8m9F4THmdw_T6u77exI';
@@ -3803,8 +3803,16 @@ function garAsegurarCatalogo(){ if(!esGerente()) return; if(typeof AUTH_ON!=='un
   // aparecían. Las que el gerente borró a mano no se recrean.
   let a=getGarantias(); const borradas=new Set(getArr('bio:garBorradas'));
   let keys={}; try{ precioList().forEach(p=>{ keys[precioKey(p)]=p; }); }catch(e){}
-  const nuevos=CAT_GAR.filter(c=>c.k && keys[c.k] && !borradas.has(c.k) && !garTieneDatos(a.find(x=>x.prod_key===c.k))).map(c=>{ const p=keys[c.k];
-    return { id:'GA-'+c.k, prod_key:c.k, prod_nom:p.n, registro:'', especie:'Bovinos — consumo bovino, uso veterinario', composicion:catGarComp(c.comp), ingredientes:c.ing||'', indicaciones:[c.ben,c.des].filter(Boolean).join('\n\n'), dosis:c.uso||'', ts:new Date().toISOString(), pending:true }; });
+  // Una ficha empezada a mano (indicaciones o dosis, sin la tabla) contaba como
+  // "cargada" y se quedaba sin índices: se completa lo vacío y no se toca lo escrito.
+  const nuevos=[];
+  CAT_GAR.filter(c=>c.k && keys[c.k] && !borradas.has(c.k)).forEach(c=>{ const p=keys[c.k]; const g=a.find(x=>x.prod_key===c.k);
+    const cat={ composicion:catGarComp(c.comp), ingredientes:c.ing||'', indicaciones:[c.ben,c.des].filter(Boolean).join('\n\n'), dosis:c.uso||'' };
+    if(!g){ nuevos.push({ id:'GA-'+c.k, prod_key:c.k, prod_nom:p.n, registro:'', especie:'Bovinos — consumo bovino, uso veterinario', ...cat, ts:new Date().toISOString(), pending:true }); return; }
+    if(g.composicion && g.composicion.length) return;
+    Object.keys(cat).forEach(f=>{ const vacio=Array.isArray(g[f])?!g[f].length:!String(g[f]||'').trim(); if(vacio) g[f]=cat[f]; });
+    if(!g.especie) g.especie='Bovinos — consumo bovino, uso veterinario';
+    g.ts=new Date().toISOString(); g.pending=true; nuevos.push(g); });
   if(nuevos.length){ a=[...nuevos, ...a.filter(x=>!nuevos.some(n=>n.prod_key===x.prod_key))]; saveGarantias(a); if(typeof cloudPush==='function') nuevos.forEach(n=>cloudPush('garantia',n)); }
   const g=a.find(x=>x.prod_key==='NCL004'); if(!g) return;
   // Copia vieja: nombres de ingredientes y el "Contiene medicamento." final que gerencia pidió sacar (16-10-2026).
