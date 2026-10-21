@@ -963,7 +963,7 @@ const visitasDe   =cid=>getVisitas().filter(v=>v.cliente_id===cid);
 // Versión de la app. SUBIR JUNTO CON `CACHE` en sw.js en cada publicación.
 // Es sólo informativa (se muestra en la cabecera) y sirve para saber de un vistazo
 // si un equipo ya tomó el último cambio o quedó con una copia vieja en caché.
-const APP_VERSION = 144;
+const APP_VERSION = 145;
 try{ document.addEventListener('DOMContentLoaded', ()=>{ const v=document.getElementById('verChip'); if(v) v.textContent='v'+APP_VERSION; document.querySelectorAll('[data-ver]').forEach(e=>e.textContent=APP_VERSION); }); }catch(e){}
 const SUPABASE_URL = 'https://mnuldrgynighabwtulkf.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_uAH-nT2MczSB8m9F4THmdw_T6u77exI';
@@ -3576,6 +3576,8 @@ const CAT_GAR_FUENTE = 'Catálogo BioInnova 08-2026';
 // porque la garantía es el documento que se entrega al cliente.
 // Se saca de acá en cuanto la nutricionista confirme el valor correcto.
 const GAR_REVISAR = {
+  NCL001: 'El catálogo pone Cobalto 225 g por kilo, lo que es imposible para un núcleo: en todas las demás fichas el cobalto va en miligramos (1 a 52 mg). Casi seguro son 225 mg, pero confirmarlo con la nutricionista antes de entregar esta ficha.',
+  NCL002: 'El catálogo pone Cobalto 225 g por kilo, lo que es imposible para un núcleo: en todas las demás fichas el cobalto va en miligramos (1 a 52 mg). Casi seguro son 225 mg, pero confirmarlo con la nutricionista antes de entregar esta ficha.',
   BAL008: 'El producto se vende como 19% de proteína y el catálogo garantiza PB 16%. Confirmar con la nutricionista cuál es el valor correcto antes de entregar esta ficha.',
   BAL009: 'El producto se vende como 28% de proteína y el catálogo garantiza PB 18%. Confirmar con la nutricionista cuál es el valor correcto antes de entregar esta ficha.',
   NCL004: 'Cenizas 99,51% y NNP 99,51% repiten exactamente el valor de materia seca, y un núcleo mineral con cenizas cercanas al 100% no puede tener a la vez 100% de proteína bruta. Confirmar con la nutricionista los valores de cenizas, NNP y proteína bruta antes de entregar esta ficha.'
@@ -3697,10 +3699,17 @@ const CAT_GAR = [
   uso:'Para animales con alto valor genético, con fuentes de voluminoso. Utilizado en fase reproductiva, crecimiento y desarrollo. Para desmamantes destetados a campo con régimen en pastura.',
   comp:[['NDT','69,04','%'],['PB','22','%'],['Calcio','0,58','Gr'],['Fósforo','0,49','Gr'],['Sodio','0,55','Gr'],['Magnesio','0,17','Gr'],['Azufre','0,15','Gr'],['Hierro','38,63','Mg'],['Cromo','0,19','Mg'],['Cobre','22,61','Mg'],['Manganeso','67,64','Mg'],['Zinc','74,76','Mg'],['Cobalto','1,39','Mg'],['Selenio','0,45','Gr'],['Iodo','1,39','Mg'],['Monencina sódica','40','Mg'],['Vit A','3560','KUI/kg'],['Vit D','712','KUI/kg'],['Vit E','35,6','UI/kg']]},
 
- {k:null, nom:'CONFIPESO 4', linea:'Núcleo', peso:'25 kg',
+ // La ficha "CONFIPESO 4" del catálogo es la del Confi 4 y vale para las dos
+ // versiones: SL sin levadura y CL con levadura (Martín, 21-10-2026).
+ {k:'NCL001', nom:'CONFI 4 SL', linea:'Núcleo', peso:'25 kg',
   ben:'',
-  des:'Núcleo de minerales, con mejorador de desempeño y vitaminas, destinado a la formulación de raciones concentradas para bovinos de corte en crecimiento y engorde. Mejora la eficiencia alimentaria y el ambiente ruminal. El cromo quelatado es un importante factor anti-stress, sobre todo en los primeros 30 días del confinamiento.',
-  uso:'40 kg de CONFIPESO 4 por cada 1.000 kg de ración concentrada, provista junto con una fuente de voluminoso. En dieta total, 200 a 250 g/animal/día. Para dietas especiales consultar al técnico BioInnova.',
+  des:'Núcleo de minerales, con mejorador de desempeño y vitaminas, destinado a la formulación de raciones concentradas para bovinos de corte en crecimiento y engorde. Mejora la eficiencia alimentaria y el ambiente ruminal. El cromo quelatado es un importante factor anti-stress, sobre todo en los primeros 30 días del confinamiento. Versión sin levadura.',
+  uso:'40 kg de CONFIPESO 4 por cada 1.000 kg de ración concentrada, provista junto con una fuente de voluminoso. En dieta total, 200 a 250 g/animal/día. Para dietas especiales consultar al técnico BioInnova.'.replace(/CONFIPESO 4/g,'CONFI 4 SL'),
+  comp:[['Fósforo Max','30','Gr'],['Calcio Max','140','Gr'],['Sodio','38','Gr'],['Magnesio','108','Gr'],['Azufre','20','Gr'],['Cobalto','225','Gr'],['Cobre','675','Mg'],['Iodo','225','Mg'],['Manganeso','2.020','Mg'],['Selenio','27','Mg'],['Zinc','3.370','Mg'],['Hierro','450','Mg'],['Monensina','1.000','Mg'],['Cromo','5,5','Mg'],['Vit A','150.000','Ui'],['Vit D','24.000','Ui'],['Vit E','210','Ui']]},
+ {k:'NCL002', nom:'CONFI 4 CL', linea:'Núcleo', peso:'25 kg',
+  ben:'',
+  des:'Núcleo de minerales, con mejorador de desempeño y vitaminas, destinado a la formulación de raciones concentradas para bovinos de corte en crecimiento y engorde. Mejora la eficiencia alimentaria y el ambiente ruminal. El cromo quelatado es un importante factor anti-stress, sobre todo en los primeros 30 días del confinamiento. Versión con levadura.',
+  uso:'40 kg de CONFIPESO 4 por cada 1.000 kg de ración concentrada, provista junto con una fuente de voluminoso. En dieta total, 200 a 250 g/animal/día. Para dietas especiales consultar al técnico BioInnova.'.replace(/CONFIPESO 4/g,'CONFI 4 CL'),
   comp:[['Fósforo Max','30','Gr'],['Calcio Max','140','Gr'],['Sodio','38','Gr'],['Magnesio','108','Gr'],['Azufre','20','Gr'],['Cobalto','225','Gr'],['Cobre','675','Mg'],['Iodo','225','Mg'],['Manganeso','2.020','Mg'],['Selenio','27','Mg'],['Zinc','3.370','Mg'],['Hierro','450','Mg'],['Monensina','1.000','Mg'],['Cromo','5,5','Mg'],['Vit A','150.000','Ui'],['Vit D','24.000','Ui'],['Vit E','210','Ui']]},
 
  {k:'COFO10', nom:'CONFIPESO 10', linea:'Núcleo', peso:'40 kg',
