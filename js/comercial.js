@@ -313,8 +313,8 @@ function cmVrRender(){
 function cmVrFiltrar(){
   const inp=gs('vrBuscar'); const q=inp?inp.value:''; _vr.q=q; const box=gs('vrLista'); if(!box) return;
   const ops=cmVrClientesOpts(q);
-  box.innerHTML = ops.map(c=>`<div class="li" style="padding:8px 10px" onclick="_vr.cliente_id='${c.id}';_vr.prospecto='';cmVrRender()"><div class="li-t" style="font-size:13px">${esc(c.nombre)}</div>${c.comercial?`<div class="li-s">${esc(c.comercial)}</div>`:''}</div>`).join('')
-    + (q.trim()?`<div class="li" style="padding:8px 10px;color:var(--green)" onclick="cmVrKeep();cmNuevoCliente(gs('vrBuscar').value.trim(),'vr')"><div class="li-t" style="font-size:13px">➕ No está en la lista: cargar <b>${esc(q.trim())}</b> como cliente nuevo</div></div>`:'')
+  box.innerHTML = (q.trim()?cmNuevoOpcionHtml(q,'vr'):'')
+    + ops.map(c=>`<div class="li" style="padding:8px 10px" onclick="_vr.cliente_id='${c.id}';_vr.prospecto='';cmVrRender()"><div class="li-t" style="font-size:13px">${esc(c.nombre)}</div>${c.comercial?`<div class="li-s">${esc(c.comercial)}</div>`:''}</div>`).join('')
     + (_vr.prospecto?`<div style="font-size:12px;color:var(--green);padding:6px 2px">Se va a crear el prospecto <b>${esc(_vr.prospecto)}</b> asignado a vos.</div>`:'');
 }
 function cmVrProspectoMsg(){ cmVrFiltrar(); }
@@ -476,7 +476,8 @@ function cmRenderPlan(){
       <label class="fl">Día</label>${cmChips('dia',dias,_ps.dia,'cmPsDia')}
       <label class="fl">Tipo</label>${cmChips('medio',['Visita','Llamada'],_ps.medio,'cmPsMedio')}
       <label class="fl">Cliente o prospecto</label>
-      <input type="search" id="psBuscar" placeholder="🔎 Buscar o escribir un nombre…" autocomplete="off" value="${esc(q)}" oninput="_ps.q=this.value;cmPsLista()">
+      <input type="search" id="psBuscar" placeholder="🔎 Buscar o escribir un nombre…" autocomplete="off" value="${esc(q)}" oninput="_ps.q=this.value;cmPsLista()" onkeydown="if(event.key==='Enter'){event.preventDefault();cmPsEnter();}">
+      <div style="text-align:right;margin-top:4px"><span style="color:var(--green);font-weight:700;font-size:12px;cursor:pointer" onclick="cmNuevoCliente(gs('psBuscar').value.trim(),'ps')">➕ Cliente nuevo</span></div>
       <div id="psLista" style="max-height:200px;overflow:auto;margin-top:4px">${cmPsListaHtml(ops,q)}</div>
     </div></div>
     ${sug.length?`<div class="card"><div class="card-h"><span>Sugeridos · tocá para agregar</span></div><div>${sug.map(x=>`<div class="li" onclick="cmPsAdd('${x.c.id}')"><div style="min-width:0"><div class="li-t" style="font-size:13px">${esc(x.c.nombre)}</div><div class="li-s">${esc(x.por)}</div></div><span style="color:var(--green);font-weight:700">＋</span></div>`).join('')}</div></div>`:''}
@@ -485,11 +486,20 @@ function cmRenderPlan(){
     </div></div>
     ${falta?'':'<button class="btn btn-primary btn-block" onclick="goHome()">Listo</button>'}`;
 }
+// "Cliente nuevo" va ARRIBA de las coincidencias: abajo de una lista con scroll,
+// y con el teclado del celular abierto, los comerciales no lo veían.
 function cmPsListaHtml(ops,q){
-  return ops.map(c=>`<div class="li" style="padding:8px 10px" onclick="cmPsAdd('${c.id}')"><div class="li-t" style="font-size:13px">${esc(c.nombre)}</div><span style="color:var(--green);font-weight:700">＋</span></div>`).join('')
-    + (q.trim()?`<div class="li" style="padding:8px 10px;color:var(--green)" onclick="cmNuevoCliente(gs('psBuscar').value.trim(),'ps')"><div class="li-t" style="font-size:13px">➕ No está en la lista: cargar <b>${esc(q.trim())}</b> como cliente nuevo</div></div>`:'');
+  return (q.trim()?cmNuevoOpcionHtml(q,"ps"):'')
+    + ops.map(c=>`<div class="li" style="padding:8px 10px" onclick="cmPsAdd('${c.id}')"><div class="li-t" style="font-size:13px">${esc(c.nombre)}</div><span style="color:var(--green);font-weight:700">＋</span></div>`).join('');
 }
+function cmNuevoOpcionHtml(q,origen){ const inp=origen==='ps'?'psBuscar':'vrBuscar';
+  return `<div class="li" style="padding:9px 10px;color:var(--green);background:#eaf5ef;border-radius:8px;margin-bottom:4px" onclick="${origen==='vr'?'cmVrKeep();':''}cmNuevoCliente(gs('${inp}').value.trim(),'${origen}')"><div class="li-t" style="font-size:13px">➕ ¿No está? Cargar <b>${esc(q.trim())}</b> como cliente nuevo</div></div>`; }
 function cmPsLista(){ const box=gs('psLista'); if(!box) return; const yo=cmYo(); const en=new Set(cmPlanSemana(getAgenda(),yo,hoy()).map(a=>a.cliente_id).filter(Boolean)); box.innerHTML=cmPsListaHtml(_ps.q.trim()?cmVrClientesOpts(_ps.q).filter(c=>!en.has(c.id)).slice(0,12):[],_ps.q); }
+// Enter en el buscador: si hay un solo parecido lo agrega; si no hay ninguno,
+// abre el alta del cliente con lo escrito.
+function cmPsEnter(){ const q=(_ps.q||'').trim(); if(!q) return; const en=new Set(cmPlanSemana(getAgenda(),cmYo(),hoy()).map(a=>a.cliente_id).filter(Boolean));
+  const ops=cmVrClientesOpts(q).filter(c=>!en.has(c.id));
+  if(ops.length===1) cmPsAdd(ops[0].id); else if(!ops.length) cmNuevoCliente(q,'ps'); }
 function cmPsDia(d){ _ps.dia=d; cmRenderPlan(); }
 function cmPsMedio(m){ _ps.medio=m; cmRenderPlan(); }
 function cmPsAdd(cid, nombre){
