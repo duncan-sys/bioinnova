@@ -963,7 +963,7 @@ const visitasDe   =cid=>getVisitas().filter(v=>v.cliente_id===cid);
 // Versión de la app. SUBIR JUNTO CON `CACHE` en sw.js en cada publicación.
 // Es sólo informativa (se muestra en la cabecera) y sirve para saber de un vistazo
 // si un equipo ya tomó el último cambio o quedó con una copia vieja en caché.
-const APP_VERSION = 146;
+const APP_VERSION = 147;
 try{ document.addEventListener('DOMContentLoaded', ()=>{ const v=document.getElementById('verChip'); if(v) v.textContent='v'+APP_VERSION; document.querySelectorAll('[data-ver]').forEach(e=>e.textContent=APP_VERSION); }); }catch(e){}
 const SUPABASE_URL = 'https://mnuldrgynighabwtulkf.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_uAH-nT2MczSB8m9F4THmdw_T6u77exI';
@@ -3582,7 +3582,9 @@ const GAR_REVISAR = {
   BAL009: 'El producto se vende como 28% de proteína y el catálogo garantiza PB 18%. Confirmar con la nutricionista cuál es el valor correcto antes de entregar esta ficha.',
   NCL004: 'Cenizas 99,51% y NNP 99,51% repiten exactamente el valor de materia seca, y un núcleo mineral con cenizas cercanas al 100% no puede tener a la vez 100% de proteína bruta. Confirmar con la nutricionista los valores de cenizas, NNP y proteína bruta antes de entregar esta ficha.'
 };
-function garAvisoHtml(key){ const t=GAR_REVISAR[key]; if(!t) return '';
+// "BAL003-Z" → "BAL003": la variante comparte ficha y avisos con su base.
+function garKeyBase(key){ const m=/^(.+)-[A-Z]$/.exec(String(key||'')); return m?m[1]:null; }
+function garAvisoHtml(key){ const t=GAR_REVISAR[key]||GAR_REVISAR[garKeyBase(key)]; if(!t) return '';
   return `<div style="background:var(--amber-lt);border-left:3px solid var(--amber);border-radius:6px;padding:9px 11px;margin-bottom:9px;font-size:12px;line-height:1.45;color:var(--gray-800)"><b>⚠️ Revisar antes de usar.</b> ${esc(t)}</div>`; }
 const CAT_GAR = [
  {k:'BIOSAL03', nom:'NUTRI', linea:'Mineral', peso:'30 kg',
@@ -3806,9 +3808,12 @@ function garAsegurarCatalogo(){ if(!esGerente()) return; if(typeof AUTH_ON!=='un
   // Una ficha empezada a mano (indicaciones o dosis, sin la tabla) contaba como
   // "cargada" y se quedaba sin índices: se completa lo vacío y no se toca lo escrito.
   const nuevos=[];
-  CAT_GAR.filter(c=>c.k && keys[c.k] && !borradas.has(c.k)).forEach(c=>{ const p=keys[c.k]; const g=a.find(x=>x.prod_key===c.k);
+  // Las variantes (BAL003-Z, BAL003-M…) llevan la ficha de su producto base:
+  // la "Z" es la base con 0,3% de zeolita y no se menciona (Martín, 21-10-2026).
+  const pares=[]; CAT_GAR.filter(c=>c.k).forEach(c=>Object.keys(keys).forEach(k=>{ if(k===c.k || garKeyBase(k)===c.k) pares.push([c,k]); }));
+  pares.filter(([c,k])=>!borradas.has(k)).forEach(([c,k])=>{ const p=keys[k]; const g=a.find(x=>x.prod_key===k);
     const cat={ composicion:catGarComp(c.comp), ingredientes:c.ing||'', indicaciones:[c.ben,c.des].filter(Boolean).join('\n\n'), dosis:c.uso||'' };
-    if(!g){ nuevos.push({ id:'GA-'+c.k, prod_key:c.k, prod_nom:p.n, registro:'', especie:'Bovinos — consumo bovino, uso veterinario', ...cat, ts:new Date().toISOString(), pending:true }); return; }
+    if(!g){ nuevos.push({ id:'GA-'+k, prod_key:k, prod_nom:p.n, registro:'', especie:'Bovinos — consumo bovino, uso veterinario', ...cat, ts:new Date().toISOString(), pending:true }); return; }
     if(g.composicion && g.composicion.length) return;
     Object.keys(cat).forEach(f=>{ const vacio=Array.isArray(g[f])?!g[f].length:!String(g[f]||'').trim(); if(vacio) g[f]=cat[f]; });
     if(!g.especie) g.especie='Bovinos — consumo bovino, uso veterinario';
@@ -3823,7 +3828,7 @@ function garAsegurarCatalogo(){ if(!esGerente()) return; if(typeof AUTH_ON!=='un
   g.ts=new Date().toISOString(); g.pending=true; saveGarantias(a); if(typeof cloudPush==='function') cloudPush('garantia',g); }
 function renderProductosGar(){ garAsegurarCatalogo(); const q=(gs('prodGarBuscar').value||'').trim().toLowerCase(); let ls=precioList(); if(q) ls=ls.filter(p=>((p.n||'')+' '+(p.c||'')).toLowerCase().includes(q)); if(gs('prodGarCount')) gs('prodGarCount').textContent=ls.length+' productos';
   gs('prodGarList').innerHTML=ls.map(p=>{ const key=precioKey(p); const g=garantiaDe(key); const ok=garTieneDatos(g); const n=(g&&g.composicion&&g.composicion.length)||0;
-    return `<div class="li" onclick="garVer('${encodeURIComponent(key)}')"><div style="min-width:0"><div class="li-t">${esc(p.n)}</div><div class="li-s">${p.c?esc(p.c)+' · ':''}${ok?('<span style="color:var(--green)">✓ garantía cargada'+(n?' ('+n+' ítems)':'')+'</span>'):'<span style="color:var(--gray-400)">sin garantía</span>'}${(ok&&GAR_REVISAR[key])?' · <span style="color:var(--amber)">⚠️ revisar</span>':''}</div></div><div class="li-chev">${ok?'📄':'＋'}</div></div>`; }).join('') || '<div class="empty">Sin productos.</div>';
+    return `<div class="li" onclick="garVer('${encodeURIComponent(key)}')"><div style="min-width:0"><div class="li-t">${esc(p.n)}</div><div class="li-s">${p.c?esc(p.c)+' · ':''}${ok?('<span style="color:var(--green)">✓ garantía cargada'+(n?' ('+n+' ítems)':'')+'</span>'):'<span style="color:var(--gray-400)">sin garantía</span>'}${(ok&&(GAR_REVISAR[key]||GAR_REVISAR[garKeyBase(key)]))?' · <span style="color:var(--amber)">⚠️ revisar</span>':''}</div></div><div class="li-chev">${ok?'📄':'＋'}</div></div>`; }).join('') || '<div class="empty">Sin productos.</div>';
 }
 function garDocCss(){ return `
   .gd{max-width:760px;margin:0 auto;background:#fff;color:#1a202c;font-family:Arial,Helvetica,sans-serif}
@@ -3901,7 +3906,7 @@ function garGuardar(keyEnc){ if(!esGerente()){ showToast('Solo el gerente'); ret
 }
 function garBorrar(keyEnc){ if(!esGerente()) return; if(!confirm('¿Quitar la garantía de este producto?')) return; const key=decodeURIComponent(keyEnc); setArr('bio:garBorradas',[...new Set([...getArr('bio:garBorradas'),key])]); const g=garantiaDe(key); if(g){ saveGarantias(getGarantias().filter(x=>x.prod_key!==key)); if(typeof cloudDelete==='function') cloudDelete('garantia', g.id); } cerrarModal(); renderProductosGar(); }
 function garPrint(keyEnc){ const key=decodeURIComponent(keyEnc); const p=precioList().find(x=>precioKey(x)===key); const g=garantiaDe(key); if(!garTieneDatos(g)){ showToast('Sin garantía'); return; }
-  if(GAR_REVISAR[key] && !confirm('⚠️ Esta garantía está pendiente de revisión.\n\n'+GAR_REVISAR[key]+'\n\n¿Imprimir igual?')) return;
+  if((GAR_REVISAR[key]||GAR_REVISAR[garKeyBase(key)]) && !confirm('⚠️ Esta garantía está pendiente de revisión.\n\n'+(GAR_REVISAR[key]||GAR_REVISAR[garKeyBase(key)])+'\n\n¿Imprimir igual?')) return;
   const w=window.open('','_blank'); if(!w){ showToast('Permití las ventanas emergentes'); return; }
   w.document.write(`<html><head><meta charset="utf-8"><title>Garantía — ${esc(p?p.n:'')}</title><style>body{margin:0;padding:24px;background:#fff}${garDocCss()}@media print{body{padding:0}.noprint{display:none}}</style></head><body>${garDocInner(g,p)}<div class="noprint" style="text-align:center;margin-top:16px"><button onclick="window.print()" style="background:#2f7d3b;color:#fff;border:none;padding:10px 22px;border-radius:8px;cursor:pointer">🖨️ Imprimir / Guardar PDF</button> <button onclick="window.close()" style="background:#e2e8f0;color:#334155;border:none;padding:10px 22px;border-radius:8px;cursor:pointer;margin-left:8px">← Volver</button></div></body></html>`);
   w.document.close();
