@@ -963,7 +963,7 @@ const visitasDe   =cid=>getVisitas().filter(v=>v.cliente_id===cid);
 // Versión de la app. SUBIR JUNTO CON `CACHE` en sw.js en cada publicación.
 // Es sólo informativa (se muestra en la cabecera) y sirve para saber de un vistazo
 // si un equipo ya tomó el último cambio o quedó con una copia vieja en caché.
-const APP_VERSION = 148;
+const APP_VERSION = 149;
 try{ document.addEventListener('DOMContentLoaded', ()=>{ const v=document.getElementById('verChip'); if(v) v.textContent='v'+APP_VERSION; document.querySelectorAll('[data-ver]').forEach(e=>e.textContent=APP_VERSION); }); }catch(e){}
 const SUPABASE_URL = 'https://mnuldrgynighabwtulkf.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_uAH-nT2MczSB8m9F4THmdw_T6u77exI';
@@ -2805,12 +2805,17 @@ function cotizVer(id){ const c=getCotiz().find(x=>x.id===id); if(!c) return;
   gs('modalBox').innerHTML=`<h3>Cotización N° ${c.num}</h3><div style="font-size:12px;color:var(--gray-600);margin-bottom:6px">${esc(c.cliente)} · ${fmtFecha(c.fecha)} · ${COND_LBL[c.forma_pago||c.condicion]||''}${c.vendedor?'<br>Vendedor: '+esc(c.vendedor):''}</div>
    <table style="width:100%;border-collapse:collapse;font-size:12px"><tbody>${filas}${_sinTot?'':`${c.flete?`<tr><td>Flete</td><td></td><td style="text-align:right">${gsFmt(c.flete)}</td></tr>`:''}<tr style="border-top:2px solid var(--gray-300)"><td><b>Total</b></td><td></td><td style="text-align:right"><b>${gsFmt(c.total)}</b></td></tr>`}</tbody></table>${_sinTot?'<div style="font-size:10px;color:var(--gray-400)">Lista de precios (sin total general)</div>':''}${_plan}
    <div class="row2" style="margin-top:12px"><button class="btn btn-sec" onclick="cotizEditar('${c.id}')">✎ Editar</button><button class="btn btn-amber" onclick="cotizPrint('${c.id}')">🖨️ Imprimir</button></div>
+   ${puedeVer('finanzas')?cotizFacturaBtn(c):''}
    ${puedeVer('finanzas')?`<button class="btn btn-sec btn-block" style="margin-top:8px" onclick="verCostoDetalle('cotiz','${c.id}')">🔍 Ver detalle de costos</button>`:''}
    <button class="btn btn-sec btn-block" style="margin-top:8px" onclick="cotizPrint('${c.id}',true)">📎 Imprimir con índices de garantía</button>
    <button class="btn btn-sec btn-block" style="margin-top:8px;color:var(--red)" onclick="cotizBorrar('${c.id}')">Borrar</button>
    <button class="btn btn-ghost btn-block" style="margin-top:8px" onclick="cerrarModal()">Cerrar</button>`;
   gs('modal').classList.add('show');
 }
+// Facturada: muestra la venta; si no, carga la factura emitida como venta.
+function cotizFacturaBtn(c){ const v=getVentas().find(x=>x.cotiz_id===c.id);
+  if(v) return `<button class="btn btn-sec btn-block" style="margin-top:8px;color:var(--green-d)" onclick="cerrarModal();finVentaModal('${v.id}')">✓ Facturada${v.factura?' · N° '+esc(v.factura):''} · ver la venta</button>`;
+  return `<button class="btn btn-primary btn-block" style="margin-top:8px" onclick="finVentaDesdeCotiz('${c.id}')">🧾 Cargar la factura emitida</button>`; }
 function cotizEditar(id){ const c=getCotiz().find(x=>x.id===id); if(!c) return; cerrarModal(); cotizNueva(); curCotizId=id;
   gs('czCliente').value=c.cliente||''; gs('czLugar').value=c.lugar||''; gs('czCond').value=c.forma_pago||c.condicion||'p0'; gs('czFecha').value=c.fecha; gs('czValidez').value=c.validez||7; gs('czVendedor').value=c.vendedor||''; gs('czFlete').value=c.flete_kg||''; gs('czCom').value=(c.comision_val!=null?c.comision_val:''); gs('czComTipo').value=c.comision_tipo||'pct'; gs('czObs').value=c.obs||''; gs('czUsd').checked=c.moneda==='USD'; gs('czDolar').value=c.dolar||cotizDolar();
   _cotizLineas=(c.items||[]).map(i=>({ key:i.key, nombre:i.nombre, kg_bolsa:i.kg_bolsa, precio_kg:(i.precio_base!=null?i.precio_base:((Number(i.precio_kg)||0)-(c.flete_kg||0))), unidad:i.unidad, cantidad:i.cantidad, margen:(i.margen!=null?i.margen:null), manual:!!i.manual }));
@@ -4228,7 +4233,17 @@ function finComDesglose(base){
         <div style="font-size:9px;color:var(--gray-400)">${f.n} fact.${f.pend>0?' · pend '+finGsFmt(f.pend):''}</div></div></div>`).join('')
     + '</div>';
 }
-function finClientesDL(){ return '<datalist id="finCliDL">'+getClientes().slice().sort((a,b)=>a.nombre.localeCompare(b.nombre)).map(c=>`<option value="${esc(c.nombre)}">`).join('')+'</datalist>'; }
+// Clientes del maestro y también los nombres ya usados en ventas y cotizaciones:
+// a un cliente que sólo existe como texto en una cotización (prospecto) se le
+// tiene que poder facturar igual.
+function finClientesDL(){ const m=new Map(); const add=n=>{ const t=String(n||'').trim(); if(t && !m.has(t.toLowerCase())) m.set(t.toLowerCase(),t); };
+  getClientes().forEach(c=>add(c.nombre)); getCotiz().forEach(c=>add(c.cliente)); getVentas().forEach(v=>add(v.cliente));
+  return '<datalist id="finCliDL">'+[...m.values()].sort((a,b)=>a.localeCompare(b)).map(n=>`<option value="${esc(n)}">`).join('')+'</datalist>'; }
+// Desde la cotización: abre "Nueva venta" con el cliente y la cotización ya
+// elegidos; sólo falta el N° de factura (y ajustar si lo facturado cambió).
+function finVentaDesdeCotiz(id){ const c=getCotiz().find(x=>x.id===id); if(!c) return; cerrarModal(); finVentaModal();
+  gs('finVCli').value=c.cliente||''; finVClienteCambio(); finVCotizOpts(c.id); gs('finVCotiz').value=c.id; finVCotizElegida();
+  const f=gs('finVFact'); if(f) f.focus(); }
 function finVentaModal(id){ if(!canEdit()){ showToast('Sin permiso'); return; } const v=id?getVentas().find(x=>x.id===id):null;
   gs('modalBox').innerHTML=`<h3>${v?'Editar':'Nueva'} venta</h3>${finClientesDL()}${finComercialDL()}
     <label class="fl">Cliente</label><input id="finVCli" list="finCliDL" value="${esc(v&&v.cliente)}" placeholder="Nombre del cliente" autocomplete="off" onchange="finVClienteCambio();finVCotizOpts()">
