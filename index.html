@@ -902,7 +902,7 @@ function desglosarNucleos(){ if(!puedeEditarFormula()){ showToast('Sin permiso')
 }
 function desglosarNucleosOk(){ if(!puedeEditarFormula()) return; const cambios=_desgloseCambios||[]; if(!cambios.length){ cerrarModal(); return; }
   let fa=getFormulasExtra(); const now=new Date().toISOString(); const recs=[];
-  cambios.forEach(x=>{ const f=x.f; const rec={ id:'FM-'+(f.c||f.n), c:f.c||'', n:f.n||'', kg:f.kg||30, ins:x.ins, custom:true, ts:now, pending:true }; const key=precioKey(rec); fa=fa.filter(y=>precioKey(y)!==key); fa.unshift(rec); recs.push(rec); });
+  cambios.forEach(x=>{ const f=x.f; const rec={ id:'FM-'+(f.c||f.n), c:f.c||'', n:f.n||'', kg:f.kg||30, ins:x.ins, custom:true, ts:now, pending:true }; const key=precioKey(rec); formulaVersionar(rec, key); fa=fa.filter(y=>precioKey(y)!==key); fa.unshift(rec); recs.push(rec); });
   saveFormulasExtra(fa); recs.forEach(rec=>{ if(typeof cloudPush==='function') cloudPush('formula',rec); });
   cerrarModal(); showToast('✓ '+cambios.length+' fórmulas desglosadas'); if(typeof renderProductosCat==='function') renderProductosCat();
 }
@@ -963,7 +963,7 @@ const visitasDe   =cid=>getVisitas().filter(v=>v.cliente_id===cid);
 // Versión de la app. SUBIR JUNTO CON `CACHE` en sw.js en cada publicación.
 // Es sólo informativa (se muestra en la cabecera) y sirve para saber de un vistazo
 // si un equipo ya tomó el último cambio o quedó con una copia vieja en caché.
-const APP_VERSION = 153;
+const APP_VERSION = 154;
 try{ document.addEventListener('DOMContentLoaded', ()=>{ const v=document.getElementById('verChip'); if(v) v.textContent='v'+APP_VERSION; document.querySelectorAll('[data-ver]').forEach(e=>e.textContent=APP_VERSION); }); }catch(e){}
 const SUPABASE_URL = 'https://mnuldrgynighabwtulkf.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_uAH-nT2MczSB8m9F4THmdw_T6u77exI';
@@ -1148,7 +1148,7 @@ const SYNC_DEFS = {
   precio:{ get:getPreciosOv, save:savePreciosOv, table:'bio_precios', toRow:precRow, fromRow:rowPrec },
   cotiz:{ get:getCotiz, save:saveCotiz, table:'bio_cotiz', toRow:cotizRow, fromRow:rowCotiz, criticos:['margen','flete_kg','subtotal','comision_tipo','comision_val','cuotas'], toRowSafe:(c)=>{ const r=cotizRow(c); delete r.subtotal; delete r.flete; delete r.flete_kg; delete r.margen; delete r.comision_tipo; delete r.comision_val; delete r.lugar; delete r.cuotas; return r; } },
   insprec:{ get:getInsPrecOv, save:saveInsPrecOv, table:'bio_insprec', toRow:insprecRow, fromRow:rowInsprec },
-  formula:{ get:getFormulasExtra, save:saveFormulasExtra, table:'bio_formulas', toRow:formulaRow, fromRow:rowFormula },
+  formula:{ get:getFormulasExtra, save:saveFormulasExtra, table:'bio_formulas', toRow:formulaRow, fromRow:rowFormula, criticos:['hist'], toRowSafe:(f)=>{ const r=formulaRow(f); delete r.hist; return r; } },
   ptmov:{ get:getPtMovs, save:savePtMovs, table:'bio_ptmov', toRow:ptmovRow, fromRow:rowPtmov },
   garantia:{ get:getGarantias, save:saveGarantias, table:'bio_garantias', toRow:garRow, fromRow:rowGar },
   agenda:{ get:getAgenda, save:saveAgenda, table:'bio_agenda', toRow:agRow, fromRow:rowAg, toRowSafe:(a)=>{ const r=agRow(a); delete r.estancia_id; return r; } },
@@ -1511,8 +1511,9 @@ function getFinProy(){ try{ const o=JSON.parse(localStorage.getItem('bio:finproy
 function setFinProy(o){ localStorage.setItem('bio:finproy',JSON.stringify(o)); }
 async function pullFinProy(){ if(!AUTH_ON) return; try{ const rows=await sb.query('bio_config',{id:'finproy'}); if(rows&&rows[0]&&rows[0].data){ const d=(typeof rows[0].data==='string')?JSON.parse(rows[0].data):rows[0].data; if(d) setFinProy(d); } }catch(e){} }
 async function pushFinProy(){ if(!AUTH_ON) return; try{ await sb.upsert('bio_config',{id:'finproy',data:getFinProy()||{},ts:new Date().toISOString()},'id'); }catch(e){} }
-function formulaRow(f){ return { id:f.id||('FM-'+(f.c||f.n)), c:f.c||'', n:f.n||'', kg:Number(f.kg)||0, ins:f.ins||[], ts:f.ts||null }; }
-function rowFormula(r){ let ins=r.ins; if(typeof ins==='string'){ try{ ins=JSON.parse(ins); }catch{ ins=[]; } } return { id:r.id, c:r.c||'', n:r.n||'', kg:Number(r.kg)||0, ins:Array.isArray(ins)?ins:[], custom:true, ts:r.ts }; }
+// hist sólo viaja si hay versiones: así las fórmulas sin historial se suben aunque la columna todavía no exista.
+function formulaRow(f){ const r={ id:f.id||('FM-'+(f.c||f.n)), c:f.c||'', n:f.n||'', kg:Number(f.kg)||0, ins:f.ins||[], ts:f.ts||null }; if(Array.isArray(f.hist)&&f.hist.length) r.hist=f.hist; return r; }
+function rowFormula(r){ let ins=r.ins; if(typeof ins==='string'){ try{ ins=JSON.parse(ins); }catch{ ins=[]; } } let hist=r.hist; if(typeof hist==='string'){ try{ hist=JSON.parse(hist); }catch{ hist=[]; } } return { id:r.id, c:r.c||'', n:r.n||'', kg:Number(r.kg)||0, ins:Array.isArray(ins)?ins:[], hist:Array.isArray(hist)?hist:[], custom:true, ts:r.ts }; }
 function insprecRow(o){ return { id:o.id||('IP-'+o.c), c:o.c||'', gskg:Number(o.gskg)||0, ts:o.ts||null }; }
 function rowInsprec(r){ return { id:r.id, c:r.c||'', gskg:Number(r.gskg)||0, ts:r.ts, pending:false }; }
 // Parámetros de costeo (costcfg + margen) — fila única en bio_config
@@ -2409,6 +2410,7 @@ function verFormula(gi){ const f=PL_FORMULAS[gi]; if(!f) return;
     <table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="color:var(--gray-500)"><th style="text-align:left">Cód.</th><th style="text-align:left">Insumo</th><th style="text-align:right">Proporción</th></tr></thead><tbody>${filas}</tbody></table>
     <button class="btn btn-amber btn-block" style="margin-top:12px" onclick="cerrarModal();nuevaOTde(${gi})">🏭 Crear OT de este producto</button>
     ${(f.custom&&puedeEditarFormula())?`<button class="btn btn-sec btn-block" style="margin-top:8px" onclick="cerrarModal();formulaEditor('${esc(f.c||f.n)}')">✎ Editar formulación</button>`:''}
+    ${(f.hist&&f.hist.length)?`<button class="btn btn-sec btn-block" style="margin-top:8px" onclick="formulaHist(${gi})">🕘 Versiones anteriores (${f.hist.length})</button>`:''}
     <button class="btn btn-ghost btn-block" style="margin-top:8px" onclick="cerrarModal()">Cerrar</button>`;
   gs('modal').classList.add('show');
 }
@@ -2445,11 +2447,32 @@ function fmRecalc(){ const rows=fmReadRows(); const tot=rows.reduce((a,x)=>a+(Nu
     el.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;background:${bg};border-radius:8px;padding:8px 12px;font-weight:700;font-size:13px;color:${col}"><span>Total: ${tot.toFixed(1)}%</span><span>${msg}</span></div>`; }
   const kg=num(gs('fmKg').value)||30; const f={ c:(gs('fmC').value||'').trim(), n:(gs('fmN').value||'').trim(), kg, ins:rows };
   const pe=gs('fmPrecio'); if(pe){ if(rows.length){ const base=costoBaseFormula(f); const p0=precioBaseKg(f,'p0',margenDe(f.c,f.n)); pe.textContent=`Costo base insumos: ${gsFmt(Math.round(base))}/kg · Precio contado estimado: ${gsFmt(p0)}/kg (margen ${(margenDe(f.c,f.n)*100).toFixed(0)}%)`; } else pe.textContent=''; } }
+// ── Historial de versiones: al guardar, la receta que se reemplaza queda en rec.hist ──
+function _insFirma(f){ return JSON.stringify((f.ins||[]).filter(i=>(i.t||'p')==='p').map(i=>[String(i.c||i.n||''),Number(i.p)||0])); }
+function formulaVersionar(rec, prevKey){ const prev=PL_FORMULAS.find(f=>precioKey(f)===prevKey);
+  const hist=(prev&&Array.isArray(prev.hist))?prev.hist:[];
+  // El editor sólo muestra los ingredientes con %: bolsa, etiqueta y mano de obra se heredan de la versión anterior.
+  if(prev && !(rec.ins||[]).some(i=>(i.t||'p')!=='p')) rec.ins=[...(rec.ins||[]), ...(prev.ins||[]).filter(i=>(i.t||'p')!=='p')];
+  if(!prev || (Number(prev.kg)===Number(rec.kg) && _insFirma(prev)===_insFirma(rec))){ rec.hist=hist; return rec; }
+  const s=getSession()||{};
+  rec.hist=[{ c:prev.c||'', n:prev.n||'', kg:prev.kg||null, ins:prev.ins||[], desde:prev.custom?(prev.ts||null):null, hasta:rec.ts, por:s.nombre||s.email||'' }, ...hist];
+  return rec; }
+function formulaHist(gi){ const f=PL_FORMULAS[gi]; if(!f) return; const hs=f.hist||[];
+  const bloques=hs.map((h,i)=>{ const filas=(h.ins||[]).map(x=>`<tr><td style="color:var(--gray-500)">${esc(x.c)}</td><td>${esc(x.n)}</td><td style="text-align:right;font-weight:600">${x.t==='p'||!x.t?(x.p+'%'):(x.t==='b'?'× bolsa':x.t==='m'?'× kg':'—')}</td></tr>`).join('');
+    const desde=h.desde?fmtFecha(String(h.desde).slice(0,10)):'fórmula de fábrica';
+    return `<details${i===0?' open':''} style="border:1px solid var(--gray-200);border-radius:8px;padding:6px 10px;margin-bottom:6px"><summary style="cursor:pointer;font-size:12px;font-weight:600">Hasta el ${fmtFecha(String(h.hasta||'').slice(0,10))}${h.por?' · cambió '+esc(h.por):''}</summary>
+      <div style="font-size:11px;color:var(--gray-500);margin:4px 0">Vigente desde: ${desde}${h.n&&h.n!==f.n?' · nombre: '+esc(h.n):''} · ${h.kg||plKgBolsa(f)} kg/bolsa</div>
+      <table style="width:100%;border-collapse:collapse;font-size:12px"><tbody>${filas}</tbody></table></details>`; }).join('');
+  gs('modalBox').innerHTML=`<h3>Versiones anteriores</h3><div style="font-size:12px;color:var(--gray-600);margin-bottom:8px">${esc(f.n)}${f.c?' · '+esc(f.c):''}</div>
+    <div style="max-height:60vh;overflow:auto">${bloques||'<div class="empty">Sin versiones anteriores.</div>'}</div>
+    <div class="row2" style="margin-top:12px"><button class="btn btn-sec" onclick="verFormula(${gi})">‹ Volver</button><button class="btn btn-ghost" onclick="cerrarModal()">Cerrar</button></div>`;
+  gs('modal').classList.add('show'); }
 function formulaGuardar(orig){ if(!puedeEditarFormula()){ showToast('Sin permiso'); return; }
   const c=(gs('fmC').value||'').trim(); const n=(gs('fmN').value||'').trim(); if(!n){ showToast('Poné el nombre del producto'); return; }
   const kg=num(gs('fmKg').value)||30; const ins=fmReadRows(); if(!ins.length){ showToast('Agregá al menos un ingrediente'); return; }
   const key=precioKey({c,n}); if((!orig) && PL_FORMULAS_BASE.some(f=>precioKey(f)===key)){ showToast('Ese código/nombre ya existe en las fórmulas de fábrica'); return; }
   const rec={ id:'FM-'+(c||n), c, n, kg, ins, custom:true, ts:new Date().toISOString() };
+  const pf=orig?getFormulasExtra().find(x=>(x.c||x.n)===orig):null; formulaVersionar(rec, pf?precioKey(pf):key);
   const a=getFormulasExtra().filter(x=>(x.c||x.n)!==orig); a.unshift(rec); saveFormulasExtra(a);
   if(typeof cloudPush==='function') cloudPush('formula',rec);
   cerrarModal(); showToast('✓ Producto guardado'); renderFormulas();
@@ -3502,7 +3525,7 @@ function productoGuardar(keyEnc){ if(!puedeEditarFormula()){ showToast('Sin perm
   const kg=num(gs('fmKg').value)||30; const ins=fmReadRows(); const key=precioKey({c,n}); const now=new Date().toISOString();
   if(ins.length){
     if((!origKey||origKey!==key) && PL_FORMULAS_BASE.some(ff=>precioKey(ff)===key)){ showToast('Ese código/nombre ya existe en fórmulas de fábrica'); return; }
-    const rec={ id:'FM-'+(c||n), c, n, kg, ins, custom:true, ts:now };
+    const rec={ id:'FM-'+(c||n), c, n, kg, ins, custom:true, ts:now }; formulaVersionar(rec, origKey||key);
     let fa=getFormulasExtra().filter(x=>precioKey(x)!==key && (!origKey||precioKey(x)!==origKey)); fa.unshift(rec); saveFormulasExtra(fa); if(typeof cloudPush==='function') cloudPush('formula',rec);
     _removePrecioOv(key); if(origKey&&origKey!==key) _removePrecioOv(origKey);
   } else {
