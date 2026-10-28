@@ -963,7 +963,7 @@ const visitasDe   =cid=>getVisitas().filter(v=>v.cliente_id===cid);
 // Versión de la app. SUBIR JUNTO CON `CACHE` en sw.js en cada publicación.
 // Es sólo informativa (se muestra en la cabecera) y sirve para saber de un vistazo
 // si un equipo ya tomó el último cambio o quedó con una copia vieja en caché.
-const APP_VERSION = 159;
+const APP_VERSION = 160;
 try{ document.addEventListener('DOMContentLoaded', ()=>{ const v=document.getElementById('verChip'); if(v) v.textContent='v'+APP_VERSION; document.querySelectorAll('[data-ver]').forEach(e=>e.textContent=APP_VERSION); }); }catch(e){}
 const SUPABASE_URL = 'https://mnuldrgynighabwtulkf.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_uAH-nT2MczSB8m9F4THmdw_T6u77exI';
@@ -3733,9 +3733,9 @@ const CAT_GAR = [
   // comparativo de la nutricionista. Sin urea: sin NNP; sin DCAD ni FDN. La MS del producto va tal cual.
   comp:[['Materia seca','89,75','%'],['NDT','76,55','%'],['Extracto etéreo','6,69','%'],['Almidón','17,52','%'],['PB','24,51','%'],['PDR','14,94','%'],['PDR','60,96','% PB'],['Calcio','0,89','%'],['Fósforo','0,48','%'],['Magnesio','0,30','%'],['Potasio','1,17','%'],['Sodio','0,22','%'],['Cloro','0,34','%'],['Azufre','0,35','%'],['Cenizas','5,87','%'],['Cobalto','1,34','mg/kg'],['Cobre','45,55','mg/kg'],['Cromo','0,42','mg/kg'],['Hierro','141,73','mg/kg'],['Manganeso','145,13','mg/kg'],['Selenio','1,62','mg/kg'],['Iodo','1,29','mg/kg'],['Zinc','225,54','mg/kg'],['Vit A','8430','UI/kg'],['Vit D','1690','UI/kg'],['Vit E','11,73','UI/kg'],['Monensina sódica','55,71','mg/kg'],['Saccharomyces cerevisiae','0,11','10⁹ UFC/kg']]},
 
- // BAL024 Desmamante Precoz 24% PB (antes "Destete Hiper Precoz 24% PB"; creado en la app).
+ // BAL024 Desmamante Precoz 24% CL (antes "Destete Hiper Precoz 24% PB"; creado en la app). BAL024-Z lleva la misma ficha.
  // Planilla "HiperPrecoz 24 – Formulación MS/MN" del 28-10-2026, sin DCAD, FDN ni NNP.
- {k:'BAL024', re:/precoz\s*24/i, nom:'DESMAMANTE PRECOZ 24% PB', linea:'Balanceados',
+ {k:'BAL024', nom:'DESMAMANTE PRECOZ 24% CL', linea:'Balanceados',
   comp:[['Materia seca','89,07','%'],['NDT','82,87','%'],['Extracto etéreo','4,55','%'],['Almidón','29,70','%'],['PB','24,50','%'],['PDR','13,08','%'],['PDR','53,39','% PB'],['Calcio','0,90','%'],['Fósforo','0,54','%'],['Magnesio','0,31','%'],['Potasio','1,15','%'],['Sodio','0,22','%'],['Cloro','0,34','%'],['Azufre','0,42','%'],['Cenizas','6,23','%'],['Cobalto','1,08','mg/kg'],['Cobre','37,80','mg/kg'],['Cromo','0,38','mg/kg'],['Hierro','145,25','mg/kg'],['Manganeso','117,37','mg/kg'],['Selenio','1,39','mg/kg'],['Iodo','1,03','mg/kg'],['Zinc','194,47','mg/kg'],['Vit A','6790','UI/kg'],['Vit D','1360','UI/kg'],['Vit E','9,45','UI/kg'],['Monensina sódica','44,91','mg/kg'],['Saccharomyces cerevisiae','0,09','10⁹ UFC/kg']]},
 
  // La ficha "CONFIPESO 4" del catálogo es la del Confi 4 y vale para las dos
@@ -3857,16 +3857,38 @@ function formulasAsegurar(){ if(!puedeEditarFormula()) return;
     formulaVersionar(rec, k); rec.hist[0].motivo=FORM_DP22_MOTIVO;
     saveFormulasExtra([rec, ...getFormulasExtra().filter(x=>precioKey(x)!==k)]);
     if(typeof cloudPush==='function') cloudPush('formula',rec); });
-  // 28-10-2026: el BAL024 "Destete Hiper Precoz 24% PB" pasa a llamarse "Desmamante Precoz 24% PB".
-  // Puede estar como fórmula propia o como producto de precio manual. La v158 exigía el código
-  // BAL024 y no alcanzó al producto real: ahora va por el nombre, sea cual sea el código, y sólo
-  // cambia "Destete Hiper Precoz" por "Desmamante Precoz" (lo demás del nombre queda igual).
-  // Si el código quedó escrito en el nombre ("BAL024 Destete…") y el campo código está vacío, pasa al código.
-  const ren=x=>BAL024_RE.test(x.n||'');
-  getFormulasExtra().filter(ren).forEach(f=>{ const rec={...f, ...bal024Partir(f.c,f.n), ts:new Date().toISOString(), pending:true};
-    saveFormulasExtra(getFormulasExtra().map(x=>x.id===f.id?rec:x)); if(typeof cloudPush==='function') cloudPush('formula',rec); });
-  getPreciosOv().filter(ren).forEach(p=>{ const rec={...p, ...bal024Partir(p.c,p.n), ts:new Date().toISOString(), pending:true};
-    savePreciosOv(getPreciosOv().map(x=>x.id===p.id?rec:x)); if(typeof cloudPush==='function') cloudPush('precio',rec); });
+  bal024Consolidar();
+}
+// 28-10-2026: el "Destete Hiper Precoz 24% PB" era el mismo producto que el BAL024 y la app mostraba
+// los dos. Queda uno solo, BAL024 "Desmamante Precoz 24% CL" (Martín); el duplicado y su ficha se borran,
+// y se crea la variante BAL024-Z (+0,3% zeolítica, igual que BAL002-Z).
+const BAL024_NOMBRE='Desmamante Precoz 24% CL', BAL024Z_NOMBRE='Desmamante Precoz 24% CL - Z';
+// Duplicado: nombre del Hiper, o el que le dejó el renombre de la v159 ("Desmamante Precoz 24% PB").
+const esDupBal024=n=>BAL024_RE.test(n||'') || /desmamante\s+precoz\s+24%\s*pb\b/i.test(n||'');
+function bal024Consolidar(){ const now=new Date().toISOString(); const push=(t,x)=>{ if(typeof cloudPush==='function') cloudPush(t,x); };
+  const del=(t,id)=>{ if(typeof cloudDelete==='function') cloudDelete(t,id); };
+  const fs=getFormulasExtra(), ps=getPreciosOv(); const k24=x=>precioKey(x)==='BAL024';
+  // Se prefiere el que tiene fórmula, para no perder la receta si el BAL024 era sólo precio manual.
+  const canon=fs.find(k24)||fs.find(x=>esDupBal024(x.n))||ps.find(k24)||ps.find(x=>esDupBal024(x.n)); if(!canon) return;
+  const esDup=x=>x!==canon && !k24(x) && garKeyBase(precioKey(x))!=='BAL024' && esDupBal024(x.n);
+  const dupKeys=new Set([...fs.filter(esDup),...ps.filter(esDup)].map(precioKey));
+  fs.filter(esDup).forEach(x=>del('formula',x.id)); ps.filter(esDup).forEach(x=>del('precio',x.id));
+  let fa=fs.filter(x=>!esDup(x)), pa=ps.filter(x=>!esDup(x));
+  // El que queda lleva código BAL024 y el nombre nuevo (también un precio manual con esa clave).
+  const fija=x=>{ if(x!==canon && !k24(x)) return x; if(x.c==='BAL024' && x.n===BAL024_NOMBRE) return x; const r={...x, c:'BAL024', n:BAL024_NOMBRE, ts:now, pending:true}; push(fs.includes(x)?'formula':'precio', r); return r; };
+  fa=fa.map(fija); pa=pa.map(fija);
+  if(fa.length!==fs.length || fa.some((x,i)=>x!==fs[i])) saveFormulasExtra(fa);
+  if(pa.length!==ps.length || pa.some((x,i)=>x!==ps[i])) savePreciosOv(pa);
+  // Fichas: la del BAL024 se queda (o hereda la del duplicado si no tenía); las demás se borran.
+  let ga=getGarantias(); const gDup=g=>g.prod_key!=='BAL024' && garKeyBase(g.prod_key||'')!=='BAL024' && (dupKeys.has(g.prod_key) || esDupBal024(g.prod_nom));
+  ga.filter(gDup).forEach(g=>{ if(!ga.some(y=>y.prod_key==='BAL024')){ g.prod_key='BAL024'; g.prod_nom=BAL024_NOMBRE; g.ts=now; g.pending=true; push('garantia',g); } else { ga=ga.filter(y=>y!==g); del('garantia',g.id); } });
+  ga.filter(g=>g.prod_key==='BAL024' && g.prod_nom!==BAL024_NOMBRE).forEach(g=>{ g.prod_nom=BAL024_NOMBRE; g.ts=now; g.pending=true; push('garantia',g); });
+  saveGarantias(ga);
+  // Variante Z: la fórmula del BAL024 con zeolítica 0,3% por encima del 100%, como el BAL002-Z.
+  const f24=PL_FORMULAS.find(k24); const hayZ=PL_FORMULAS.some(x=>precioKey(x)==='BAL024-Z')||getPreciosOv().some(x=>precioKey(x)==='BAL024-Z');
+  if(f24 && (f24.ins||[]).length && !hayZ){ const pIns=(f24.ins||[]).filter(i=>(i.t||'p')==='p' && i.c!=='INS070');
+    const rec={ id:'FM-BAL024-Z', c:'BAL024-Z', n:BAL024Z_NOMBRE, kg:f24.kg, ins:[...pIns.map(i=>({...i})), {c:'INS070',n:'Zeolita',p:0.3,t:'p'}, ...(f24.ins||[]).filter(i=>(i.t||'p')!=='p').map(i=>({...i}))], custom:true, ts:now, pending:true };
+    saveFormulasExtra([rec, ...getFormulasExtra()]); push('formula',rec); }
 }
 const BAL024_RE=/(destete\s+)?h[ií]per[\s-]*precoz/i;
 function bal024Nombre(n){ return String(n||'').replace(BAL024_RE,'Desmamante Precoz').replace(/\s{2,}/g,' ').trim(); }
@@ -4028,7 +4050,9 @@ function garExcel(keyEnc){ const key=decodeURIComponent(keyEnc); const p=precioL
 // garantías (con datos) correspondientes a los ítems de una cotización
 // Primero por código (i.key): así una cotización vieja encuentra la ficha aunque el producto haya cambiado de nombre.
 // El último intento normaliza el nombre (Hiper Precoz → Desmamante Precoz, sin el código al frente) por si cambió la clave.
-function garForCotizItems(items){ const byName={}, byKey={}, byNorm={}; const norm=s=>bal024Partir('',s).n.toLowerCase();
+function garForCotizItems(items){ const byName={}, byKey={}, byNorm={};
+  // En el Precoz 24 el sufijo cambió de "PB" a "CL": para este fallback no cuenta.
+  const norm=s=>{ let n=bal024Partir('',s).n.toLowerCase(); if(/precoz\s*24/.test(n)) n=n.replace(/\s*\b(pb|cl)\b/g,'').replace(/\s{2,}/g,' '); return n.trim(); };
   precioList().forEach(p=>{ const m={key:precioKey(p),p}; byName[String(p.n).trim().toLowerCase()]=m; byKey[m.key]=m; byNorm[norm(p.n)]=m; });
   const out=[]; (items||[]).forEach(i=>{ const m=(i.key&&byKey[i.key])||byName[String(i.nombre||'').trim().toLowerCase()]||byNorm[norm(i.nombre)]; if(!m) return; const g=garantiaDe(m.key); if(garTieneDatos(g) && !out.some(o=>o.key===m.key)){ out.push({key:m.key, nom:i.nombre, g, p:m.p}); } }); return out; }
 
