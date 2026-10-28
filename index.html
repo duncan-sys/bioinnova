@@ -963,7 +963,7 @@ const visitasDe   =cid=>getVisitas().filter(v=>v.cliente_id===cid);
 // Versión de la app. SUBIR JUNTO CON `CACHE` en sw.js en cada publicación.
 // Es sólo informativa (se muestra en la cabecera) y sirve para saber de un vistazo
 // si un equipo ya tomó el último cambio o quedó con una copia vieja en caché.
-const APP_VERSION = 156;
+const APP_VERSION = 157;
 try{ document.addEventListener('DOMContentLoaded', ()=>{ const v=document.getElementById('verChip'); if(v) v.textContent='v'+APP_VERSION; document.querySelectorAll('[data-ver]').forEach(e=>e.textContent=APP_VERSION); }); }catch(e){}
 const SUPABASE_URL = 'https://mnuldrgynighabwtulkf.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_uAH-nT2MczSB8m9F4THmdw_T6u77exI';
@@ -3839,12 +3839,19 @@ let _garSincronizadas=false;
 // versión propia, así la receta anterior queda en el historial; si después se edita a mano,
 // la marca "motivo" en el historial evita que se vuelva a pisar.
 const FORM_DP22_MOTIVO='Planilla Destete Precoz 22% (27-10-2026)';
-const FORM_DP22=[{c:'INS008',n:'Harina de Soja',p:28.743,t:'p'},{c:'INS003',n:'Afrecho de Arroz',p:25.208,t:'p'},{c:'INS001',n:'Maiz',p:23.577,t:'p'},{c:'INS058',n:'Cascarilla de Soja',p:10,t:'p'},{c:'INS002',n:'Burlanda kilos',p:10,t:'p'},{c:'INS040',n:'Calcareo',p:1.735,t:'p'},{c:'INS007',n:'Sal entrefina yodada animal',p:0.4,t:'p'},{c:'INS038',n:'Prymix confipeso',p:0.337,t:'p'}];
+const FORM_DP22=[{c:'INS008',n:'Harina de Soja',p:28.743,t:'p'},{c:'INS003',n:'Afrecho de Arroz',p:25.208,t:'p'},{c:'INS001',n:'Maiz',p:23.577,t:'p'},{c:'INS058',n:'Cascarilla de Soja',p:10,t:'p'},{c:'INS002',n:'Burlanda kilos',p:10,t:'p'},{c:'INS040',n:'Calcareo',p:1.735,t:'p'},{c:'INS007',n:'Sal entrefina yodada animal',p:0.4,t:'p'},{c:'INS039',n:'Prymix confipeso Levadura',p:0.337,t:'p'}];
 function formulasAsegurar(){ if(!puedeEditarFormula()) return;
   [['BAL002',FORM_DP22],['BAL002-Z',[...FORM_DP22,{c:'INS070',n:'Zeolita',p:0.3,t:'p'}]]].forEach(([k,ins])=>{
     const cur=PL_FORMULAS.find(f=>precioKey(f)===k); if(!cur) return;
-    if((cur.hist||[]).some(h=>h.motivo===FORM_DP22_MOTIVO)) return;
     const rec={ id:'FM-'+k, c:cur.c, n:cur.n, kg:cur.kg, ins:ins.map(i=>({...i})), custom:true, ts:new Date().toISOString(), pending:true };
+    if((cur.hist||[]).some(h=>h.motivo===FORM_DP22_MOTIVO)){
+      // La v156 la cargó con el Prymix sin levadura (INS038); Martín confirmó que va CON levadura.
+      // Se corrige en el lugar, sin sumar una versión, y sólo si nadie la tocó después.
+      const conSL={ ins:ins.map(i=>i.c==='INS039'?{...i,c:'INS038'}:i) };
+      if(_insFirma(cur)!==_insFirma(conSL)) return;
+      rec.ins=[...rec.ins, ...(cur.ins||[]).filter(i=>(i.t||'p')!=='p')]; rec.hist=cur.hist;
+      saveFormulasExtra([rec, ...getFormulasExtra().filter(x=>precioKey(x)!==k)]);
+      if(typeof cloudPush==='function') cloudPush('formula',rec); return; }
     if(_insFirma(cur)===_insFirma(rec)) return;
     formulaVersionar(rec, k); rec.hist[0].motivo=FORM_DP22_MOTIVO;
     saveFormulasExtra([rec, ...getFormulasExtra().filter(x=>precioKey(x)!==k)]);
