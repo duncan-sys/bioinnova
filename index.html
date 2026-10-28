@@ -963,7 +963,7 @@ const visitasDe   =cid=>getVisitas().filter(v=>v.cliente_id===cid);
 // Versión de la app. SUBIR JUNTO CON `CACHE` en sw.js en cada publicación.
 // Es sólo informativa (se muestra en la cabecera) y sirve para saber de un vistazo
 // si un equipo ya tomó el último cambio o quedó con una copia vieja en caché.
-const APP_VERSION = 150;
+const APP_VERSION = 151;
 try{ document.addEventListener('DOMContentLoaded', ()=>{ const v=document.getElementById('verChip'); if(v) v.textContent='v'+APP_VERSION; document.querySelectorAll('[data-ver]').forEach(e=>e.textContent=APP_VERSION); }); }catch(e){}
 const SUPABASE_URL = 'https://mnuldrgynighabwtulkf.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_uAH-nT2MczSB8m9F4THmdw_T6u77exI';
@@ -2823,6 +2823,8 @@ function cotizEditar(id){ const c=getCotiz().find(x=>x.id===id); if(!c) return; 
 }
 function cotizBorrar(id){ if(!confirm('¿Borrar esta cotización?')) return; saveCotiz(getCotiz().filter(x=>x.id!==id)); cloudDelete('cotiz',id); cerrarModal(); openCotiz(); }
 function cotizPrint(id, incluirGar){ const c=getCotiz().find(x=>x.id===id); if(!c) return;
+  // Una cotización vieja imprime la ficha vigente: se ponen al día antes de armarla.
+  if(incluirGar){ try{ garAsegurarCatalogo(); }catch(e){} }
   if(incluirGar && !garForCotizItems(c.items||[]).length){ showToast('Ningún producto de esta cotización tiene garantía cargada'); return; }
   const w=window.open('','_blank'); if(!w){ showToast('Permití las ventanas emergentes'); return; }
   const base=`${location.origin}${location.pathname.replace(/[^/]*$/,'')}logo.jpg`; const usd=c.moneda==='USD'; const dol=c.dolar||cotizDolar();
@@ -3834,7 +3836,7 @@ function garAsegurarCatalogo(){ if(!esGerente()) return; if(typeof AUTH_ON!=='un
   // 28-10-2026: la ficha pasa a la fórmula comercial en MS. Se reescribe sólo
   // si todavía tiene la tabla vieja (NDT 69,04); lo editado a mano no se toca.
   const bal=CAT_GAR.find(c=>c.k==='BAL002');
-  a.filter(x=>(x.prod_key==='BAL002'||x.prod_key==='BAL002-Z') && Array.isArray(x.composicion) && x.composicion.some(r=>/^NDT/i.test(r.nut||'') && String(r.valor).trim()==='69,04')).forEach(x=>{
+  a.filter(x=>(x.prod_key==='BAL002'||garKeyBase(x.prod_key||'')==='BAL002') && Array.isArray(x.composicion) && x.composicion.some(r=>/^NDT/i.test(r.nut||'') && String(r.valor).trim()==='69,04')).forEach(x=>{
     x.composicion=catGarComp(bal.comp);
     x.ts=new Date().toISOString(); x.pending=true; saveGarantias(a); if(typeof cloudPush==='function') cloudPush('garantia',x); });
   const g=a.find(x=>x.prod_key==='NCL004'); if(!g) return;
