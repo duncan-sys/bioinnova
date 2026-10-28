@@ -963,7 +963,7 @@ const visitasDe   =cid=>getVisitas().filter(v=>v.cliente_id===cid);
 // Versión de la app. SUBIR JUNTO CON `CACHE` en sw.js en cada publicación.
 // Es sólo informativa (se muestra en la cabecera) y sirve para saber de un vistazo
 // si un equipo ya tomó el último cambio o quedó con una copia vieja en caché.
-const APP_VERSION = 151;
+const APP_VERSION = 152;
 try{ document.addEventListener('DOMContentLoaded', ()=>{ const v=document.getElementById('verChip'); if(v) v.textContent='v'+APP_VERSION; document.querySelectorAll('[data-ver]').forEach(e=>e.textContent=APP_VERSION); }); }catch(e){}
 const SUPABASE_URL = 'https://mnuldrgynighabwtulkf.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_uAH-nT2MczSB8m9F4THmdw_T6u77exI';
@@ -3707,7 +3707,7 @@ const CAT_GAR = [
   des:'Ración de bovinos de carne. Recomendado para animales en reproducción de alto valor genético. Usar entre 1-2% de peso vivo según instrucciones del nutricionista.',
   uso:'Para animales con alto valor genético, con fuentes de voluminoso. Utilizado en fase reproductiva, crecimiento y desarrollo. Para desmamantes destetados a campo con régimen en pastura.',
   // Valores de la fórmula comercial en materia seca (planilla comparativa, 28-10-2026).
-  comp:[['Materia seca','89,85','%'],['NDT','72,04','%'],['Extracto etéreo','9,15','%'],['Almidón','20,86','%'],['PB','22,27','%'],['PDR','14,89','%'],['NNP (equiv. proteína)','59,47','g'],['NNP','39,95','% PDR'],['FDN','15,87','%'],['Calcio','0,70','%'],['Fósforo','0,57','%'],['Magnesio','0,64','%'],['Potasio','0,74','%'],['Sodio','0,53','%'],['Cloro','0,55','%'],['Azufre','0,32','%'],['Cenizas','7,69','%'],['DCAD','6,77','mEq/100g'],['Cobalto','9,72','mg/kg'],['Cobre','33,73','mg/kg'],['Cromo','0,28','mg/kg'],['Hierro','60,13','mg/kg'],['Manganeso','103,62','mg/kg'],['Selenio','1,26','mg/kg'],['Iodo','9,71','mg/kg'],['Zinc','172,38','mg/kg'],['Vit A','6460','UI/kg'],['Vit D','1030','UI/kg'],['Vit E','9,04','UI/kg'],['Monensina sódica','43,07','mg/kg']]},
+  comp:[['Materia seca','89,85','%'],['NDT','72,04','%'],['Extracto etéreo','9,15','%'],['Almidón','20,86','%'],['PB','22,27','%'],['PDR','14,89','%'],['NNP (equiv. proteína)','59,47','g'],['NNP','39,95','% PDR'],['Calcio','0,70','%'],['Fósforo','0,57','%'],['Magnesio','0,64','%'],['Potasio','0,74','%'],['Sodio','0,53','%'],['Cloro','0,55','%'],['Azufre','0,32','%'],['Cenizas','7,69','%'],['Cobalto','9,72','mg/kg'],['Cobre','33,73','mg/kg'],['Cromo','0,28','mg/kg'],['Hierro','60,13','mg/kg'],['Manganeso','103,62','mg/kg'],['Selenio','1,26','mg/kg'],['Iodo','9,71','mg/kg'],['Zinc','172,38','mg/kg'],['Vit A','6460','UI/kg'],['Vit D','1030','UI/kg'],['Vit E','9,04','UI/kg'],['Monensina sódica','43,07','mg/kg']]},
 
  // La ficha "CONFIPESO 4" del catálogo es la del Confi 4 y vale para las dos
  // versiones: SL sin levadura y CL con levadura (Martín, 21-10-2026).
@@ -3838,6 +3838,11 @@ function garAsegurarCatalogo(){ if(!esGerente()) return; if(typeof AUTH_ON!=='un
   const bal=CAT_GAR.find(c=>c.k==='BAL002');
   a.filter(x=>(x.prod_key==='BAL002'||garKeyBase(x.prod_key||'')==='BAL002') && Array.isArray(x.composicion) && x.composicion.some(r=>/^NDT/i.test(r.nut||'') && String(r.valor).trim()==='69,04')).forEach(x=>{
     x.composicion=catGarComp(bal.comp);
+    x.ts=new Date().toISOString(); x.pending=true; saveGarantias(a); if(typeof cloudPush==='function') cloudPush('garantia',x); });
+  // 28-10-2026: Martín sacó DCAD y FDN. Sólo en la tabla de 30 renglones que dejó la v150.
+  const sinDF=r=>!/^(DCAD|FDN)$/i.test(String(r.nut||'').trim());
+  a.filter(x=>(x.prod_key==='BAL002'||garKeyBase(x.prod_key||'')==='BAL002') && Array.isArray(x.composicion) && x.composicion.length===30 && x.composicion.filter(r=>!sinDF(r)).length===2).forEach(x=>{
+    x.composicion=x.composicion.filter(sinDF);
     x.ts=new Date().toISOString(); x.pending=true; saveGarantias(a); if(typeof cloudPush==='function') cloudPush('garantia',x); });
   const g=a.find(x=>x.prod_key==='NCL004'); if(!g) return;
   // Copia vieja: nombres de ingredientes y el "Contiene medicamento." final que gerencia pidió sacar (16-10-2026).
