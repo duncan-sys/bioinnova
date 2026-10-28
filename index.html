@@ -963,7 +963,7 @@ const visitasDe   =cid=>getVisitas().filter(v=>v.cliente_id===cid);
 // Versión de la app. SUBIR JUNTO CON `CACHE` en sw.js en cada publicación.
 // Es sólo informativa (se muestra en la cabecera) y sirve para saber de un vistazo
 // si un equipo ya tomó el último cambio o quedó con una copia vieja en caché.
-const APP_VERSION = 162;
+const APP_VERSION = 163;
 try{ document.addEventListener('DOMContentLoaded', ()=>{ const v=document.getElementById('verChip'); if(v) v.textContent='v'+APP_VERSION; document.querySelectorAll('[data-ver]').forEach(e=>e.textContent=APP_VERSION); }); }catch(e){}
 const SUPABASE_URL = 'https://mnuldrgynighabwtulkf.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_uAH-nT2MczSB8m9F4THmdw_T6u77exI';
@@ -3972,7 +3972,7 @@ function garDocCss(){ return `
   .gd td{padding:6px 9px;border:1px solid #dde3ea}
   .gd td.v{text-align:right;font-weight:700;white-space:nowrap;width:170px}
   .gd .txt{font-size:12.5px;white-space:pre-wrap;line-height:1.55}
-  .gd .cols{display:flex;gap:12px;align-items:flex-start} .gd .cols table{flex:1} .gd .cols td.v{width:auto}
+  .gd table.densa{font-size:12px} .gd table.densa th{padding:5px 9px} .gd table.densa td{padding:3.5px 9px}
   .gd{break-inside:avoid;page-break-inside:avoid}
   .gd .ft{margin-top:20px;border-top:1px solid #cbd5e0;padding-top:8px;color:#718096;font-size:10.5px;text-align:center}`; }
 // La ficha va siempre en UNA hoja: se mide al ancho de impresión de un A4 y, si no entra, se achica lo justo.
@@ -3984,11 +3984,8 @@ function garDocInner(g,p){ const base=`${location.origin}${location.pathname.rep
   const comp=(g.composicion||[]).filter(x=>x.nut);
   const fila=x=>{ const tip=(x.tipo&&x.tipo!=='—')?(x.tipo+'. '):''; return `<tr><td>${esc(x.nut)}</td><td class="v">${tip}${esc(x.valor)} ${esc(x.unidad||'')}</td></tr>`; };
   const thead='<thead><tr><th>Nutriente</th><th style="text-align:right">Garantía</th></tr></thead>';
-  // Más de 12 renglones: dos columnas (se lee hacia abajo la primera y después la segunda).
-  const mitad=Math.ceil(comp.length/2);
-  const tabla=!comp.length ? `<table>${thead}<tbody><tr><td colspan="2" style="color:#a0aec0">—</td></tr></tbody></table>`
-    : comp.length>12 ? `<div class="cols"><table>${thead}<tbody>${comp.slice(0,mitad).map(fila).join('')}</tbody></table><table>${thead}<tbody>${comp.slice(mitad).map(fila).join('')}</tbody></table></div>`
-    : `<table>${thead}<tbody>${comp.map(fila).join('')}</tbody></table>`;
+  // Una sola tabla; con muchos renglones, más apretada (Martín no quiere dos columnas).
+  const tabla=`<table${comp.length>16?' class="densa"':''}>${thead}<tbody>${comp.length?comp.map(fila).join(''):'<tr><td colspan="2" style="color:#a0aec0">—</td></tr>'}</tbody></table>`;
   const sec=(t,b)=>b?`<div class="sec">${t}</div><div class="txt">${esc(b)}</div>`:'';
   return `<div class="gd">
     <div class="hd"><img src="${base}" onerror="this.style.display='none'"><div class="co"><div class="t1">BIOINNOVA S.A.</div><div class="t2">Análisis garantizado</div></div></div>
