@@ -963,7 +963,7 @@ const visitasDe   =cid=>getVisitas().filter(v=>v.cliente_id===cid);
 // Versión de la app. SUBIR JUNTO CON `CACHE` en sw.js en cada publicación.
 // Es sólo informativa (se muestra en la cabecera) y sirve para saber de un vistazo
 // si un equipo ya tomó el último cambio o quedó con una copia vieja en caché.
-const APP_VERSION = 161;
+const APP_VERSION = 162;
 try{ document.addEventListener('DOMContentLoaded', ()=>{ const v=document.getElementById('verChip'); if(v) v.textContent='v'+APP_VERSION; document.querySelectorAll('[data-ver]').forEach(e=>e.textContent=APP_VERSION); }); }catch(e){}
 const SUPABASE_URL = 'https://mnuldrgynighabwtulkf.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_uAH-nT2MczSB8m9F4THmdw_T6u77exI';
@@ -2894,7 +2894,7 @@ function cotizPrint(id, incluirGar){ const c=getCotiz().find(x=>x.id===id); if(!
    <div class="close">En espera de una respuesta favorable me despido,<br>Atte</div>
    <div class="firma"><b>${esc(c.vendedor||'')}</b><br>Asesor técnico<br><b>Bioinnova S.A.</b></div>
    <div class="vh">Válido Hasta ${validoHasta}</div>
-   ${incluirGar?('<style>'+garDocCss()+'</style>'+garForCotizItems(items).map(x=>`<div style="page-break-before:always;padding-top:10px">${garDocInner(x.g,x.p)}</div>`).join('')):''}
+   ${incluirGar?('<style>'+garDocCss()+'</style>'+garForCotizItems(items).map(x=>`<div style="page-break-before:always;padding-top:10px">${garDocInner(x.g,x.p)}</div>`).join('')+garAjusteJs()):''}
    <div id="czbar" class="noprint" style="text-align:center;margin-top:20px"><button onclick="var b=document.getElementById('czbar');b.style.display='none';window.onafterprint=function(){b.style.display='';};window.print();" style="background:#2e5b8a;color:#fff;border:none;padding:10px 22px;border-radius:8px;cursor:pointer">🖨️ Imprimir / Guardar PDF</button> <button onclick="window.close()" style="background:#e2e8f0;color:#334155;border:none;padding:10px 22px;border-radius:8px;cursor:pointer;margin-left:8px">← Volver</button></div>
    </div></body></html>`);
   w.document.close();
@@ -3972,17 +3972,30 @@ function garDocCss(){ return `
   .gd td{padding:6px 9px;border:1px solid #dde3ea}
   .gd td.v{text-align:right;font-weight:700;white-space:nowrap;width:170px}
   .gd .txt{font-size:12.5px;white-space:pre-wrap;line-height:1.55}
+  .gd .cols{display:flex;gap:12px;align-items:flex-start} .gd .cols table{flex:1} .gd .cols td.v{width:auto}
+  .gd{break-inside:avoid;page-break-inside:avoid}
   .gd .ft{margin-top:20px;border-top:1px solid #cbd5e0;padding-top:8px;color:#718096;font-size:10.5px;text-align:center}`; }
+// La ficha va siempre en UNA hoja: se mide al ancho de impresión de un A4 y, si no entra, se achica lo justo.
+function garAjusteJs(){ return `<script>(function(){ var W=700, H=990;
+  function ajustar(){ document.querySelectorAll('.gd').forEach(function(d){ d.style.zoom=''; var w=d.style.width; d.style.width=W+'px'; var h=d.offsetHeight; d.style.width=w; if(h>H) d.style.zoom=(H/h).toFixed(3); }); }
+  if(document.readyState==='complete') ajustar(); else window.addEventListener('load',ajustar);
+  window.addEventListener('beforeprint',ajustar); })();<\/script>`; }
 function garDocInner(g,p){ const base=`${location.origin}${location.pathname.replace(/[^/]*$/,'')}logo.jpg`;
   const comp=(g.composicion||[]).filter(x=>x.nut);
-  const filas=comp.length? comp.map(x=>{ const tip=(x.tipo&&x.tipo!=='—')?(x.tipo+'. '):''; return `<tr><td>${esc(x.nut)}</td><td class="v">${tip}${esc(x.valor)} ${esc(x.unidad||'')}</td></tr>`; }).join('') : '<tr><td colspan="2" style="color:#a0aec0">—</td></tr>';
+  const fila=x=>{ const tip=(x.tipo&&x.tipo!=='—')?(x.tipo+'. '):''; return `<tr><td>${esc(x.nut)}</td><td class="v">${tip}${esc(x.valor)} ${esc(x.unidad||'')}</td></tr>`; };
+  const thead='<thead><tr><th>Nutriente</th><th style="text-align:right">Garantía</th></tr></thead>';
+  // Más de 12 renglones: dos columnas (se lee hacia abajo la primera y después la segunda).
+  const mitad=Math.ceil(comp.length/2);
+  const tabla=!comp.length ? `<table>${thead}<tbody><tr><td colspan="2" style="color:#a0aec0">—</td></tr></tbody></table>`
+    : comp.length>12 ? `<div class="cols"><table>${thead}<tbody>${comp.slice(0,mitad).map(fila).join('')}</tbody></table><table>${thead}<tbody>${comp.slice(mitad).map(fila).join('')}</tbody></table></div>`
+    : `<table>${thead}<tbody>${comp.map(fila).join('')}</tbody></table>`;
   const sec=(t,b)=>b?`<div class="sec">${t}</div><div class="txt">${esc(b)}</div>`:'';
   return `<div class="gd">
     <div class="hd"><img src="${base}" onerror="this.style.display='none'"><div class="co"><div class="t1">BIOINNOVA S.A.</div><div class="t2">Análisis garantizado</div></div></div>
     <h1>${esc(p?p.n:(g.prod_nom||''))}</h1>
     <div class="meta">${g.especie?('Destino: '+esc(g.especie)):''}${(g.especie&&g.registro)?' · ':''}${g.registro?('Reg. SENACSA N° '+esc(g.registro)):''}${(p&&p.kg)?' · Presentación: '+p.kg+' kg':''}</div>
     <div class="sec">Composición / niveles de garantía</div>
-    <table><thead><tr><th>Nutriente</th><th style="text-align:right">Garantía</th></tr></thead><tbody>${filas}</tbody></table>
+    ${tabla}
     ${sec('Ingredientes',g.ingredientes)}
     ${sec('Indicaciones de uso',g.indicaciones)}
     ${sec('Dosis / modo de empleo',g.dosis)}
@@ -4036,7 +4049,7 @@ function garBorrar(keyEnc){ if(!esGerente()) return; if(!confirm('¿Quitar la ga
 function garPrint(keyEnc){ const key=decodeURIComponent(keyEnc); const p=precioList().find(x=>precioKey(x)===key); const g=garantiaDe(key); if(!garTieneDatos(g)){ showToast('Sin garantía'); return; }
   if((GAR_REVISAR[key]||GAR_REVISAR[garKeyBase(key)]) && !confirm('⚠️ Esta garantía está pendiente de revisión.\n\n'+(GAR_REVISAR[key]||GAR_REVISAR[garKeyBase(key)])+'\n\n¿Imprimir igual?')) return;
   const w=window.open('','_blank'); if(!w){ showToast('Permití las ventanas emergentes'); return; }
-  w.document.write(`<html><head><meta charset="utf-8"><title>Garantía — ${esc(p?p.n:'')}</title><style>body{margin:0;padding:24px;background:#fff}${garDocCss()}@media print{body{padding:0}.noprint{display:none}}</style></head><body>${garDocInner(g,p)}<div class="noprint" style="text-align:center;margin-top:16px"><button onclick="window.print()" style="background:#2f7d3b;color:#fff;border:none;padding:10px 22px;border-radius:8px;cursor:pointer">🖨️ Imprimir / Guardar PDF</button> <button onclick="window.close()" style="background:#e2e8f0;color:#334155;border:none;padding:10px 22px;border-radius:8px;cursor:pointer;margin-left:8px">← Volver</button></div></body></html>`);
+  w.document.write(`<html><head><meta charset="utf-8"><title>Garantía — ${esc(p?p.n:'')}</title><style>body{margin:0;padding:24px;background:#fff}${garDocCss()}@page{size:A4;margin:12mm}@media print{body{padding:0}.noprint{display:none}}</style></head><body>${garDocInner(g,p)}${garAjusteJs()}<div class="noprint" style="text-align:center;margin-top:16px"><button onclick="window.print()" style="background:#2f7d3b;color:#fff;border:none;padding:10px 22px;border-radius:8px;cursor:pointer">🖨️ Imprimir / Guardar PDF</button> <button onclick="window.close()" style="background:#e2e8f0;color:#334155;border:none;padding:10px 22px;border-radius:8px;cursor:pointer;margin-left:8px">← Volver</button></div></body></html>`);
   w.document.close();
 }
 function garExcel(keyEnc){ const key=decodeURIComponent(keyEnc); const p=precioList().find(x=>precioKey(x)===key); const g=garantiaDe(key); if(!garTieneDatos(g)){ showToast('Sin garantía'); return; }
