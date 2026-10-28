@@ -963,7 +963,7 @@ const visitasDe   =cid=>getVisitas().filter(v=>v.cliente_id===cid);
 // Versión de la app. SUBIR JUNTO CON `CACHE` en sw.js en cada publicación.
 // Es sólo informativa (se muestra en la cabecera) y sirve para saber de un vistazo
 // si un equipo ya tomó el último cambio o quedó con una copia vieja en caché.
-const APP_VERSION = 152;
+const APP_VERSION = 153;
 try{ document.addEventListener('DOMContentLoaded', ()=>{ const v=document.getElementById('verChip'); if(v) v.textContent='v'+APP_VERSION; document.querySelectorAll('[data-ver]').forEach(e=>e.textContent=APP_VERSION); }); }catch(e){}
 const SUPABASE_URL = 'https://mnuldrgynighabwtulkf.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_uAH-nT2MczSB8m9F4THmdw_T6u77exI';
@@ -3709,6 +3709,11 @@ const CAT_GAR = [
   // Valores de la fórmula comercial en materia seca (planilla comparativa, 28-10-2026).
   comp:[['Materia seca','89,85','%'],['NDT','72,04','%'],['Extracto etéreo','9,15','%'],['Almidón','20,86','%'],['PB','22,27','%'],['PDR','14,89','%'],['NNP (equiv. proteína)','59,47','g'],['NNP','39,95','% PDR'],['Calcio','0,70','%'],['Fósforo','0,57','%'],['Magnesio','0,64','%'],['Potasio','0,74','%'],['Sodio','0,53','%'],['Cloro','0,55','%'],['Azufre','0,32','%'],['Cenizas','7,69','%'],['Cobalto','9,72','mg/kg'],['Cobre','33,73','mg/kg'],['Cromo','0,28','mg/kg'],['Hierro','60,13','mg/kg'],['Manganeso','103,62','mg/kg'],['Selenio','1,26','mg/kg'],['Iodo','9,71','mg/kg'],['Zinc','172,38','mg/kg'],['Vit A','6460','UI/kg'],['Vit D','1030','UI/kg'],['Vit E','9,04','UI/kg'],['Monensina sódica','43,07','mg/kg']]},
 
+ // Producto creado en la app (sin código fijo): se vincula por nombre.
+ // Planilla "HiperPrecoz 24 – Formulación MS/MN" del 28-10-2026, sin DCAD ni FDN.
+ {re:/hiper\s*precoz/i, nom:'DESTETE HIPER PRECOZ 24% PB', linea:'Balanceados',
+  comp:[['Materia seca','89,07','%'],['NDT','82,87','%'],['Extracto etéreo','4,55','%'],['Almidón','29,70','%'],['PB','24,50','%'],['PDR','13,08','%'],['PDR','53,39','% PB'],['NNP (equiv. proteína)','15,11','g'],['NNP','11,55','% PDR'],['Calcio','0,90','%'],['Fósforo','0,54','%'],['Magnesio','0,31','%'],['Potasio','1,15','%'],['Sodio','0,22','%'],['Cloro','0,34','%'],['Azufre','0,42','%'],['Cenizas','6,23','%'],['Cobalto','1,08','mg/kg'],['Cobre','37,80','mg/kg'],['Cromo','0,38','mg/kg'],['Hierro','145,25','mg/kg'],['Manganeso','117,37','mg/kg'],['Selenio','1,39','mg/kg'],['Iodo','1,03','mg/kg'],['Zinc','194,47','mg/kg'],['Vit A','6790','UI/kg'],['Vit D','1360','UI/kg'],['Vit E','9,45','UI/kg'],['Monensina sódica','44,91','mg/kg'],['Saccharomyces cerevisiae','0,09','10⁹ UFC/kg']]},
+
  // La ficha "CONFIPESO 4" del catálogo es la del Confi 4 y vale para las dos
  // versiones: SL sin levadura y CL con levadura (Martín, 21-10-2026).
  {k:'NCL001', nom:'CONFI 4 SL', linea:'Núcleo', peso:'25 kg',
@@ -3783,7 +3788,7 @@ function garImportarCatalogo(){
   saveGarantias([...nuevos, ...quedan]);
   if(typeof cloudPush==='function') nuevos.forEach(r=>{ try{ cloudPush('garantia', r); }catch(e){} });
   renderProductosGar();
-  const sinVincular = CAT_GAR.filter(c=>!c.k).map(c=>c.nom);
+  const sinVincular = CAT_GAR.filter(c=>!c.k && !c.re).map(c=>c.nom);
   let msg = '✓ ' + nuevos.length + ' garantías importadas del catálogo';
   if(saltados.length) msg += '\n\n' + saltados.length + ' ya tenían datos y no se tocaron:\n· ' + saltados.join('\n· ');
   if(sinProducto.length) msg += '\n\nNo encontré el producto de:\n· ' + sinProducto.join('\n· ');
@@ -3818,7 +3823,7 @@ function garAsegurarCatalogo(){ if(!esGerente()) return; if(typeof AUTH_ON!=='un
   const nuevos=[];
   // Las variantes (BAL003-Z, BAL003-M…) llevan la ficha de su producto base:
   // la "Z" es la base con 0,3% de zeolita y no se menciona (Martín, 21-10-2026).
-  const pares=[]; CAT_GAR.filter(c=>c.k).forEach(c=>Object.keys(keys).forEach(k=>{ if(k===c.k || garKeyBase(k)===c.k) pares.push([c,k]); }));
+  const pares=[]; CAT_GAR.filter(c=>c.k||c.re).forEach(c=>Object.keys(keys).forEach(k=>{ if(c.k ? (k===c.k || garKeyBase(k)===c.k) : c.re.test(keys[k].n||'')) pares.push([c,k]); }));
   pares.filter(([c,k])=>!borradas.has(k)).forEach(([c,k])=>{ const p=keys[k]; const g=a.find(x=>x.prod_key===k);
     const cat={ composicion:catGarComp(c.comp), ingredientes:c.ing||'', indicaciones:[c.ben,c.des].filter(Boolean).join('\n\n'), dosis:c.uso||'' };
     if(!g){ nuevos.push({ id:'GA-'+k, prod_key:k, prod_nom:p.n, registro:'', especie:'Bovinos — consumo bovino, uso veterinario', ...cat, ts:new Date().toISOString(), pending:true }); return; }
