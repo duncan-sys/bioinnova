@@ -963,7 +963,7 @@ const visitasDe   =cid=>getVisitas().filter(v=>v.cliente_id===cid);
 // Versión de la app. SUBIR JUNTO CON `CACHE` en sw.js en cada publicación.
 // Es sólo informativa (se muestra en la cabecera) y sirve para saber de un vistazo
 // si un equipo ya tomó el último cambio o quedó con una copia vieja en caché.
-const APP_VERSION = 163;
+const APP_VERSION = 164;
 try{ document.addEventListener('DOMContentLoaded', ()=>{ const v=document.getElementById('verChip'); if(v) v.textContent='v'+APP_VERSION; document.querySelectorAll('[data-ver]').forEach(e=>e.textContent=APP_VERSION); }); }catch(e){}
 const SUPABASE_URL = 'https://mnuldrgynighabwtulkf.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_uAH-nT2MczSB8m9F4THmdw_T6u77exI';
@@ -3729,9 +3729,10 @@ const CAT_GAR = [
   ben:'Dietas ricas nutricionalmente para el aporte productivo de animales con alto potencial genético.',
   des:'Ración de bovinos de carne. Recomendado para animales en reproducción de alto valor genético. Usar entre 1-2% de peso vivo según instrucciones del nutricionista.',
   uso:'Para animales con alto valor genético, con fuentes de voluminoso. Utilizado en fase reproductiva, crecimiento y desarrollo. Para desmamantes destetados a campo con régimen en pastura.',
-  // Fórmula nueva (27-10-2026) en MS, como pidió Martín: columna "Nueva fórmula · MS" del informe
-  // comparativo de la nutricionista. Sin urea: sin NNP; sin DCAD ni FDN. La MS del producto va tal cual.
-  comp:[['Materia seca','89,75','%'],['NDT','76,55','%'],['Extracto etéreo','6,69','%'],['Almidón','17,52','%'],['PB','24,51','%'],['PDR','14,94','%'],['PDR','60,96','% PB'],['Calcio','0,89','%'],['Fósforo','0,48','%'],['Magnesio','0,30','%'],['Potasio','1,17','%'],['Sodio','0,22','%'],['Cloro','0,34','%'],['Azufre','0,35','%'],['Cenizas','5,87','%'],['Cobalto','1,34','mg/kg'],['Cobre','45,55','mg/kg'],['Cromo','0,42','mg/kg'],['Hierro','141,73','mg/kg'],['Manganeso','145,13','mg/kg'],['Selenio','1,62','mg/kg'],['Iodo','1,29','mg/kg'],['Zinc','225,54','mg/kg'],['Vit A','8430','UI/kg'],['Vit D','1690','UI/kg'],['Vit E','11,73','UI/kg'],['Monensina sódica','55,71','mg/kg'],['Saccharomyces cerevisiae','0,11','10⁹ UFC/kg']]},
+  // Fórmula nueva (27-10-2026), base tal cual (MN): planilla "Destete Precoz 22%" de la
+  // nutricionista, PB 22,00 (Martín, 02-11-2026; antes estaba en MS con PB 24,51).
+  // Sin urea: sin NNP; sin DCAD ni FDN. Vitaminas A y D de kUI a UI/kg.
+  comp:[['Materia seca','89,75','%'],['NDT','68,71','%'],['Extracto etéreo','5,60','%'],['Almidón','15,72','%'],['PB','22,00','%'],['PDR','13,41','%'],['PDR','60,96','% PB'],['Calcio','0,80','%'],['Fósforo','0,44','%'],['Magnesio','0,27','%'],['Potasio','1,05','%'],['Sodio','0,20','%'],['Cloro','0,31','%'],['Azufre','0,32','%'],['Cenizas','5,27','%'],['Cobalto','1,20','mg/kg'],['Cobre','40,88','mg/kg'],['Cromo','0,38','mg/kg'],['Hierro','127,21','mg/kg'],['Manganeso','130,26','mg/kg'],['Selenio','1,45','mg/kg'],['Iodo','1,15','mg/kg'],['Zinc','202,43','mg/kg'],['Vit A','7570','UI/kg'],['Vit D','1510','UI/kg'],['Vit E','10,53','UI/kg'],['Monensina sódica','50','mg/kg'],['Saccharomyces cerevisiae','0,10','10⁹ UFC/kg']]},
 
  // BAL024 Desmamante Precoz 24% CL (antes "Destete Hiper Precoz 24% PB"; creado en la app). BAL024-Z lleva la misma ficha.
  // Planilla "HiperPrecoz 24 – Formulación MS/MN" del 28-10-2026, sin DCAD, FDN ni NNP.
@@ -3930,11 +3931,11 @@ function garAsegurarCatalogo(){ if(!esGerente()) return; if(typeof AUTH_ON!=='un
     if(!g.especie) g.especie='Bovinos — consumo bovino, uso veterinario';
     g.ts=new Date().toISOString(); g.pending=true; nuevos.push(g); });
   if(nuevos.length){ a=[...nuevos, ...a.filter(x=>!nuevos.some(n=>n.prod_key===x.prod_key))]; saveGarantias(a); if(typeof cloudPush==='function') nuevos.forEach(n=>cloudPush('garantia',n)); }
-  // Desmamante Precoz 22%: la ficha pasa a la fórmula nueva en MS (28-10-2026). Se reescribe
-  // sólo si tiene una tabla anterior (NDT 69,04 del catálogo, 72,04 de la comercial MS o 68,71
-  // de la nueva en MN); lo editado a mano no se toca. Ya no se agrega el NNP 55 del 27-10: la fórmula no lleva urea.
+  // Desmamante Precoz 22%: la ficha pasa a la fórmula nueva en base tal cual (02-11-2026). Se reescribe
+  // sólo si tiene una tabla anterior (NDT 69,04 del catálogo, 72,04 de la comercial MS o 76,55
+  // de la nueva en MS); lo editado a mano no se toca. Ya no se agrega el NNP 55 del 27-10: la fórmula no lleva urea.
   const bal=CAT_GAR.find(c=>c.k==='BAL002');
-  a.filter(x=>(x.prod_key==='BAL002'||garKeyBase(x.prod_key||'')==='BAL002') && Array.isArray(x.composicion) && x.composicion.some(r=>/^NDT/i.test(r.nut||'') && ['69,04','72,04','68,71'].includes(String(r.valor).trim()))).forEach(x=>{
+  a.filter(x=>(x.prod_key==='BAL002'||garKeyBase(x.prod_key||'')==='BAL002') && Array.isArray(x.composicion) && x.composicion.some(r=>/^NDT/i.test(r.nut||'') && ['69,04','72,04','76,55'].includes(String(r.valor).trim()))).forEach(x=>{
     x.composicion=catGarComp(bal.comp);
     x.ts=new Date().toISOString(); x.pending=true; saveGarantias(a); if(typeof cloudPush==='function') cloudPush('garantia',x); });
   // 28-10-2026: Martín sacó DCAD y FDN. Sólo en la tabla de 30 renglones que dejó la v150.
