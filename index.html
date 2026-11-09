@@ -969,7 +969,7 @@ const visitasDe   =cid=>getVisitas().filter(v=>v.cliente_id===cid);
 // Versión de la app. SUBIR JUNTO CON `CACHE` en sw.js en cada publicación.
 // Es sólo informativa (se muestra en la cabecera) y sirve para saber de un vistazo
 // si un equipo ya tomó el último cambio o quedó con una copia vieja en caché.
-const APP_VERSION = 165;
+const APP_VERSION = 166;
 try{ document.addEventListener('DOMContentLoaded', ()=>{ const v=document.getElementById('verChip'); if(v) v.textContent='v'+APP_VERSION; document.querySelectorAll('[data-ver]').forEach(e=>e.textContent=APP_VERSION); }); }catch(e){}
 const SUPABASE_URL = 'https://mnuldrgynighabwtulkf.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_uAH-nT2MczSB8m9F4THmdw_T6u77exI';
@@ -3744,10 +3744,9 @@ const CAT_GAR = [
   ben:'Dietas ricas nutricionalmente para el aporte productivo de animales con alto potencial genético.',
   des:'Ración de bovinos de carne. Recomendado para animales en reproducción de alto valor genético. Usar entre 1-2% de peso vivo según instrucciones del nutricionista.',
   uso:'Para animales con alto valor genético, con fuentes de voluminoso. Utilizado en fase reproductiva, crecimiento y desarrollo. Para desmamantes destetados a campo con régimen en pastura.',
-  // Fórmula nueva (27-10-2026), base tal cual (MN): planilla "Destete Precoz 22%" de la
-  // nutricionista, PB 22,00 (Martín, 02-11-2026; antes estaba en MS con PB 24,51).
-  // Sin urea: sin NNP; sin DCAD ni FDN. Vitaminas A y D de kUI a UI/kg.
-  comp:[['Materia seca','89,75','%'],['NDT','68,71','%'],['Extracto etéreo','5,60','%'],['Almidón','15,72','%'],['PB','22,00','%'],['PDR','13,41','%'],['PDR','60,96','% PB'],['Calcio','0,80','%'],['Fósforo','0,44','%'],['Magnesio','0,27','%'],['Potasio','1,05','%'],['Sodio','0,20','%'],['Cloro','0,31','%'],['Azufre','0,32','%'],['Cenizas','5,27','%'],['Cobalto','1,20','mg/kg'],['Cobre','40,88','mg/kg'],['Cromo','0,38','mg/kg'],['Hierro','127,21','mg/kg'],['Manganeso','130,26','mg/kg'],['Selenio','1,45','mg/kg'],['Iodo','1,15','mg/kg'],['Zinc','202,43','mg/kg'],['Vit A','7570','UI/kg'],['Vit D','1510','UI/kg'],['Vit E','10,53','UI/kg'],['Monensina sódica','50','mg/kg'],['Saccharomyces cerevisiae','0,10','10⁹ UFC/kg']]},
+  // Fórmula nueva (informe RLM 04-11-2026), base tal cual (MN), PB 22,00 (Martín, 02-11-2026: en MN).
+  // Sin urea: sin NNP; sin DCAD ni FDN. PDR % PB calculado (12,20 / 22,00). Vitaminas A y D de kUI a UI/kg.
+  comp:[['Materia seca','89,74','%'],['NDT','69,52','%'],['Extracto etéreo','5,00','%'],['Almidón','18,90','%'],['PB','22,00','%'],['PDR','12,20','%'],['PDR','55,45','% PB'],['Calcio','1,60','%'],['Fósforo','0,70','%'],['Magnesio','0,29','%'],['Potasio','1,03','%'],['Sodio','0,20','%'],['Cloro','0,30','%'],['Azufre','0,36','%'],['Cenizas','8,24','%'],['Cobalto','1,20','mg/kg'],['Cobre','40,45','mg/kg'],['Cromo','0,39','mg/kg'],['Hierro','305,35','mg/kg'],['Manganeso','128,10','mg/kg'],['Selenio','1,49','mg/kg'],['Iodo','1,15','mg/kg'],['Zinc','205,06','mg/kg'],['Vit A','7570','UI/kg'],['Vit D','1510','UI/kg'],['Vit E','10,53','UI/kg'],['Monensina sódica','50','mg/kg'],['Saccharomyces cerevisiae','0,10','10⁹ UFC/kg']]},
 
  // BAL024 Desmamante Precoz 24% CL (antes "Destete Hiper Precoz 24% PB"; creado en la app). BAL024-Z lleva la misma ficha.
  // Planilla "HiperPrecoz 24 – Formulación MS/MN" del 28-10-2026, sin DCAD, FDN ni NNP.
@@ -3852,11 +3851,12 @@ function rowGar(r){ let d=r.data; if(typeof d==='string'){ try{ d=JSON.parse(d);
 // y corrige los nombres de una copia vieja (selenito de sodio, fosfato bicálcico).
 // Sólo después de haber bajado las garantías de la nube, para no pisar una versión editada.
 let _garSincronizadas=false;
-// Fórmula nueva del Destete Precoz 22% (planilla del 27-10-2026). Se carga una sola vez como
+// Fórmula nueva del Destete Precoz 22% (informe RLM del 04-11-2026). Se carga una sola vez como
 // versión propia, así la receta anterior queda en el historial; si después se edita a mano,
 // la marca "motivo" en el historial evita que se vuelva a pisar.
-const FORM_DP22_MOTIVO='Planilla Destete Precoz 22% (27-10-2026)';
-const FORM_DP22=[{c:'INS008',n:'Harina de Soja',p:28.743,t:'p'},{c:'INS003',n:'Afrecho de Arroz',p:25.208,t:'p'},{c:'INS001',n:'Maiz',p:23.577,t:'p'},{c:'INS058',n:'Cascarilla de Soja',p:10,t:'p'},{c:'INS002',n:'Burlanda kilos',p:10,t:'p'},{c:'INS040',n:'Calcareo',p:1.735,t:'p'},{c:'INS007',n:'Sal entrefina yodada animal',p:0.4,t:'p'},{c:'INS039',n:'Prymix confipeso Levadura',p:0.337,t:'p'}];
+// La planilla dice "Prumix Confi Peso SL", pero va CON levadura (Martín, 28-10-2026; la garantía trae Saccharomyces).
+const FORM_DP22_MOTIVO='Planilla Destete Precoz 22% (04-11-2026)';
+const FORM_DP22=[{c:'INS001',n:'Maiz',p:28.108,t:'p'},{c:'INS008',n:'Harina de Soja',p:24.407,t:'p'},{c:'INS002',n:'Burlanda kilos',p:20.252,t:'p'},{c:'INS003',n:'Afrecho de Arroz',p:12,t:'p'},{c:'INS058',n:'Cascarilla de Soja',p:10,t:'p'},{c:'INS040',n:'Calcareo',p:3.266,t:'p'},{c:'INS056',n:'Fosfato Dicalcico 18%',p:1.254,t:'p'},{c:'INS007',n:'Sal entrefina yodada animal',p:0.374,t:'p'},{c:'INS039',n:'Prymix confipeso Levadura',p:0.337,t:'p'}];
 function formulasAsegurar(){ if(!puedeEditarFormula()) return;
   [['BAL002',FORM_DP22],['BAL002-Z',[...FORM_DP22,{c:'INS070',n:'Zeolita',p:0.3,t:'p'}]]].forEach(([k,ins])=>{
     const cur=PL_FORMULAS.find(f=>precioKey(f)===k); if(!cur) return;
@@ -3946,11 +3946,11 @@ function garAsegurarCatalogo(){ if(!esGerente()) return; if(typeof AUTH_ON!=='un
     if(!g.especie) g.especie='Bovinos — consumo bovino, uso veterinario';
     g.ts=new Date().toISOString(); g.pending=true; nuevos.push(g); });
   if(nuevos.length){ a=[...nuevos, ...a.filter(x=>!nuevos.some(n=>n.prod_key===x.prod_key))]; saveGarantias(a); if(typeof cloudPush==='function') nuevos.forEach(n=>cloudPush('garantia',n)); }
-  // Desmamante Precoz 22%: la ficha pasa a la fórmula nueva en base tal cual (02-11-2026). Se reescribe
-  // sólo si tiene una tabla anterior (NDT 69,04 del catálogo, 72,04 de la comercial MS o 76,55
-  // de la nueva en MS); lo editado a mano no se toca. Ya no se agrega el NNP 55 del 27-10: la fórmula no lleva urea.
+  // Desmamante Precoz 22%: la ficha pasa a la fórmula del 04-11-2026, en base tal cual. Se reescribe
+  // sólo si tiene una tabla anterior (NDT 69,04 del catálogo, 72,04 de la comercial MS, 76,55 de la
+  // del 27-10 en MS o 68,71 de la del 27-10 en MN); lo editado a mano no se toca. Ya no se agrega el NNP 55 del 27-10: la fórmula no lleva urea.
   const bal=CAT_GAR.find(c=>c.k==='BAL002');
-  a.filter(x=>(x.prod_key==='BAL002'||garKeyBase(x.prod_key||'')==='BAL002') && Array.isArray(x.composicion) && x.composicion.some(r=>/^NDT/i.test(r.nut||'') && ['69,04','72,04','76,55'].includes(String(r.valor).trim()))).forEach(x=>{
+  a.filter(x=>(x.prod_key==='BAL002'||garKeyBase(x.prod_key||'')==='BAL002') && Array.isArray(x.composicion) && x.composicion.some(r=>/^NDT/i.test(r.nut||'') && ['69,04','72,04','76,55','68,71'].includes(String(r.valor).trim()))).forEach(x=>{
     x.composicion=catGarComp(bal.comp);
     x.ts=new Date().toISOString(); x.pending=true; saveGarantias(a); if(typeof cloudPush==='function') cloudPush('garantia',x); });
   // 28-10-2026: Martín sacó DCAD y FDN. Sólo en la tabla de 30 renglones que dejó la v150.
