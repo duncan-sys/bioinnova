@@ -158,6 +158,7 @@ textarea{resize:vertical;min-height:66px}
       <div class="tile" id="tileCrm" onclick="openCrm()" style="display:none"><div class="ico">🤝</div><div class="tlab">CRM</div><div class="tsub">seguimiento de clientes</div></div>
       <div class="tile" id="tileAgenda" onclick="openAgenda()" style="display:none"><div class="ico">📅</div><div class="tlab">Agenda</div><div class="tsub">plan semanal</div></div>
       <div class="tile" id="tileCotiz" onclick="openCotiz()" style="display:none"><div class="ico">🧮</div><div class="tlab">Cotizaciones</div><div class="tsub">precios y pedidos</div></div>
+      <div class="tile" id="tileSemanal" onclick="openSemanal()" style="display:none"><div class="ico">🗓️</div><div class="tlab">Informe semanal</div><div class="tsub">tu semana, día por día</div></div>
       <div class="tile" id="tileMetas" onclick="openMetas()" style="display:none"><div class="ico">🎯</div><div class="tlab">Metas de venta</div><div class="tsub">avance del equipo</div></div>
       <div class="tile" id="tileViat" onclick="openViaticos()" style="display:none"><div class="ico">🧾</div><div class="tlab">Viáticos</div><div class="tsub">rendición de comerciales</div></div>
     </div>
@@ -346,6 +347,15 @@ textarea{resize:vertical;min-height:66px}
   </div>
 
   <!-- METAS DE VENTA -->
+  <!-- INFORME SEMANAL -->
+  <div class="screen" id="sSemanal">
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px" id="semNav"></div>
+    <div id="semTabs" style="display:none;gap:4px;margin-bottom:10px">
+      <button class="mtTab" id="semTabEquipo" onclick="semSetVista('equipo')">Equipo</button>
+      <button class="mtTab" id="semTabMio" onclick="semSetVista('mio')">Un comercial</button>
+    </div>
+    <div id="semBox"></div>
+  </div>
   <div class="screen" id="sMetas">
     <div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap;align-items:center">
       <select class="finmes" id="mtMes" onchange="mtSetMes(this.value)" aria-label="Mes"></select>
@@ -969,7 +979,7 @@ const visitasDe   =cid=>getVisitas().filter(v=>v.cliente_id===cid);
 // Versión de la app. SUBIR JUNTO CON `CACHE` en sw.js en cada publicación.
 // Es sólo informativa (se muestra en la cabecera) y sirve para saber de un vistazo
 // si un equipo ya tomó el último cambio o quedó con una copia vieja en caché.
-const APP_VERSION = 166;
+const APP_VERSION = 167;
 try{ document.addEventListener('DOMContentLoaded', ()=>{ const v=document.getElementById('verChip'); if(v) v.textContent='v'+APP_VERSION; document.querySelectorAll('[data-ver]').forEach(e=>e.textContent=APP_VERSION); }); }catch(e){}
 const SUPABASE_URL = 'https://mnuldrgynighabwtulkf.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_uAH-nT2MczSB8m9F4THmdw_T6u77exI';
@@ -1021,9 +1031,9 @@ const sb = {
 const ROLES = { gerente:{label:'Gerente',editar:true}, tecnico:{label:'Comercial',editar:true}, supervisor:{label:'Supervisor de planta',editar:true}, planta:{label:'Planta',editar:false}, asesor:{label:'Asesor Técnico Externo',editar:false}, lectura:{label:'Solo lectura',editar:false} };
 // Qué módulos ve cada rol. Editar acá para ajustar accesos.
 const ROL_MODULOS = {
-  gerente:    ['visita','clientes','historial','crm','viaticos','cotizaciones','metas','tablerocom','ot','formulas','inventario','caja','usuarios','agenda','finanzas'],
+  gerente:    ['visita','clientes','historial','crm','viaticos','cotizaciones','metas','semanal','ot','formulas','inventario','caja','usuarios','agenda','finanzas'],
   // Los comerciales NO cotizan: piden la cotización a gerencia desde la visita rápida.
-  tecnico:    ['visita','clientes','historial','crm','viaticos','metas','agenda'],
+  tecnico:    ['visita','clientes','historial','crm','viaticos','metas','agenda','semanal'],
   supervisor: ['ot','formulas','inventario','caja'],
   planta:     ['inventario','caja'],
   asesor:     ['formulas'],
@@ -1032,7 +1042,7 @@ const ROL_MODULOS = {
 function puedeVer(mod){ if(!currentRol) return true; if(currentAccesos&&Object.prototype.hasOwnProperty.call(currentAccesos,mod)) return !!currentAccesos[mod]; return (ROL_MODULOS[currentRol]||[]).includes(mod); }
 // Acceso efectivo de un usuario dado (rol + overrides) — para el cuadro de Usuarios
 function accesoEfectivo(rol, accesos, mod){ if(accesos&&Object.prototype.hasOwnProperty.call(accesos,mod)) return !!accesos[mod]; return (ROL_MODULOS[rol]||[]).includes(mod); }
-const MODULOS_LBL=[['visita','Visitas'],['clientes','Clientes'],['historial','Historial'],['crm','CRM'],['viaticos','Viáticos'],['cotizaciones','Cotizaciones'],['metas','Metas de venta'],['tablerocom','Tablero comercial'],['agenda','Agenda'],['ot','OT'],['formulas','Formulaciones'],['inventario','Inventario'],['caja','Caja chica'],['finanzas','Finanzas'],['usuarios','Usuarios']];
+const MODULOS_LBL=[['visita','Visitas'],['clientes','Clientes'],['historial','Historial'],['crm','CRM'],['viaticos','Viáticos'],['cotizaciones','Cotizaciones'],['metas','Metas de venta'],['semanal','Informe semanal'],['agenda','Agenda'],['ot','OT'],['formulas','Formulaciones'],['inventario','Inventario'],['caja','Caja chica'],['finanzas','Finanzas'],['usuarios','Usuarios']];
 function esPlanta(){ return puedeVer('ot'); }   // compat (usado por funciones de OT)
 let currentUser=null, currentRol=null, currentAccesos=null;   // accesos = overrides por-usuario {mod:true|false}
 function rolLabel(r){ return (ROLES[r]&&ROLES[r].label)||r; }
@@ -1119,6 +1129,7 @@ function applyRoleUI(){
   showEl('tileViat', puedeVer('viaticos'));
   showEl('tileCotiz', puedeVer('cotizaciones'));
   showEl('tileMetas', puedeVer('metas'));
+  showEl('tileSemanal', puedeVer('semanal'));
   showEl('tileOT', puedeVer('ot'));
   showEl('tileProductos', puedeVer('formulas')||puedeVer('inventario'));
   showEl('tileFormulas', false);   // integrado en Productos → Catálogo
@@ -1164,6 +1175,7 @@ const SYNC_DEFS = {
   cheque:{ get:getCheques, save:saveCheques, table:'bio_cheques', toRow:chequeRow, fromRow:rowCheque },
   prestamo:{ get:getPrestamos, save:savePrestamos, table:'bio_prestamos', toRow:prestamoRow, fromRow:rowPrestamo, criticos:['proveedor'], toRowSafe:(p)=>{ const r=prestamoRow(p); delete r.proveedor; return r; } },
   meta:{ get:getMetas, save:saveMetas, table:'bio_metas', toRow:metaRow, fromRow:rowMeta, criticos:['meses'] },
+  semanal:{ get:getSemanales, save:saveSemanales, table:'bio_semanales', toRow:semRow, fromRow:rowSem, criticos:['dias'] },
 };
 
 // ══ METAS DE VENTA POR COMERCIAL ═══════════════════════════════════════════
@@ -1171,6 +1183,207 @@ const SYNC_DEFS = {
 // Se mide FACTURACIÓN del mes (bio_ventas.monto, con IVA) porque es lo que el
 // comercial controla y puede seguir día a día. El equivalente en venta neta se
 // muestra al lado para poder atarlo al punto de equilibrio del Directorio.
+// ══ INFORME SEMANAL DEL COMERCIAL ═══════════════════════════════════════════
+// Idea de Martín: que el comercial entregue un informe semanal de lo hecho,
+// día por día, sin que sea extenso ni rígido.
+//
+// Por eso el informe NO se escribe: se arma solo con lo que la app ya registró
+// (visitas, seguimientos del CRM, clientes nuevos, cotizaciones, ventas) y al
+// comercial sólo se le pide lo que el sistema no puede saber — una línea por
+// día si quiere, y tres campos al cerrar. Se puede cerrar sin escribir nada:
+// el valor ya está en lo que quedó registrado durante la semana.
+function getSemanales(){ return getArr('bio:semanales'); }
+function saveSemanales(a){ setArr('bio:semanales',a); }
+function semRow(s){ return { id:s.id, semana:s.semana||'', comercial:s.comercial||'', comercial_id:s.comercial_id||'', dias:s.dias||{}, destacado:s.destacado||'', trabas:s.trabas||'', plan:s.plan||'', cerrado:s.cerrado||null, ts:s.ts||null }; }
+function rowSem(r){ let d=r.dias; if(typeof d==='string'){ try{ d=JSON.parse(d); }catch{ d={}; } }
+  return { id:r.id, semana:r.semana||'', comercial:r.comercial||'', comercial_id:r.comercial_id||'', dias:d||{}, destacado:r.destacado||'', trabas:r.trabas||'', plan:r.plan||'', cerrado:r.cerrado||'', ts:r.ts, pending:false }; }
+
+// Los nombres de comercial son texto libre en varias tablas ("Juan Pérez",
+// "Juan Perez", "JUAN PEREZ"). Hasta que se aten a la cuenta de usuario,
+// comparamos normalizado para no partir la actividad de una misma persona.
+function comNorm(s){ return String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/\s+/g,' ').trim().toLowerCase(); }
+function semYo(){ const s=getSession()||{}; return { id:(s.user&&s.user.id)||'', nombre:(s.nombre||(s.user&&s.user.email)||localStorage.getItem('bio:tecnico')||'').trim() }; }
+
+// ── Semanas (lunes a domingo). La clave es el lunes en ISO. ──
+function semLunes(f){ const d=new Date(String(f).slice(0,10)+'T12:00:00'); const n=(d.getDay()+6)%7; d.setDate(d.getDate()-n);
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function semMas(f,n){ const d=new Date(String(f).slice(0,10)+'T12:00:00'); d.setDate(d.getDate()+n);
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function semDias(lunes){ return [0,1,2,3,4,5,6].map(i=>semMas(lunes,i)); }
+const SEM_DIAS_LBL=['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'];
+function semLbl(lunes){ const d=semDias(lunes), a=d[0], b=d[6];
+  const f=x=>x.slice(8)+'/'+x.slice(5,7);
+  return 'Semana del '+f(a)+' al '+f(b)+' de '+a.slice(0,4); }
+function semEsActual(lunes){ return lunes===semLunes(hoy()); }
+
+// ── Lo que la app ya sabe de esa semana para ese comercial ──
+// Cada entrada: {tipo, icono, texto, detalle}. Agrupadas por día.
+function semActividad(lunes, comercial){
+  const cn=comNorm(comercial), dias=semDias(lunes), en={}; dias.forEach(d=>en[d]=[]);
+  const push=(f,e)=>{ const k=String(f||'').slice(0,10); if(en[k]) en[k].push(e); };
+  const cliNom=id=>{ const c=getClientes().find(x=>x.id===id); return c?c.nombre:''; };
+  const mio=n=>!cn || comNorm(n)===cn;
+
+  try{ getVisitas().forEach(v=>{ if(!mio(v.tecnico)) return;
+    const com=v.tipo==='comercial';
+    const nom=cliNom(v.cliente_id)||((v.comercial&&v.comercial.prospecto)||'')||'cliente sin nombre';
+    push(v.fecha,{tipo:'visita', ico:com?'🤝':'📋', texto:(com?'Visita comercial':'Visita técnica')+' · '+nom,
+      det:com?((v.comercial&&v.comercial.interes)?'Interés '+v.comercial.interes:''):(((v.evaluaciones||[]).length===1)?'1 evaluación':(v.evaluaciones||[]).length+' evaluaciones')}); }); }catch(e){}
+
+  try{ getClientes().forEach(c=>{
+    (c.seguimientos||[]).forEach(s=>{ if(!mio(s.por)) return;
+      push(s.fecha,{tipo:'crm', ico:'📞', texto:(s.tipo||'Contacto')+' · '+(c.nombre||''), det:s.nota||''}); });
+    if(mio(c.comercial)) push(String(c.ts||'').slice(0,10),{tipo:'cliente', ico:'🏡', texto:'Cliente nuevo · '+(c.nombre||''), det:c.estado||''});
+  }); }catch(e){}
+
+  try{ getCotiz().forEach(c=>{ if(!mio(c.vendedor)) return;
+    push(c.fecha,{tipo:'cotiz', ico:'🧮', texto:'Cotización'+(c.num?' N° '+c.num:'')+' · '+(c.cliente||''), det:(c.items||[]).length+' ítem'+((c.items||[]).length!==1?'s':'')}); }); }catch(e){}
+
+  try{ getVentas().forEach(v=>{ if(!mio(v.comercial)) return;
+    push(v.fecha,{tipo:'venta', ico:'💰', texto:'Facturado'+(v.factura?' N° '+v.factura:'')+' · '+(v.cliente||''), det:finFmt?finFmt(v.monto,v.moneda):String(v.monto)}); }); }catch(e){}
+
+  try{ getAgenda().forEach(a=>{ if(!mio(a.comercial)) return; if(a.estado!=='hecha'&&a.estado!=='hecho') return;
+    push(a.fecha,{tipo:'agenda', ico:'📅', texto:(a.titulo||a.tipo||'Actividad')+(a.lugar?' · '+a.lugar:''), det:a.nota||''}); }); }catch(e){}
+
+  return en;
+}
+function semPlural(n,sing,plur){ return n+' '+(n===1?sing:(plur||sing+'s')); }
+function semResumen(en){
+  const all=Object.values(en).flat();
+  const cu=n=>all.filter(e=>e.tipo===n).length;
+  return { visitas:cu('visita'), contactos:cu('crm'), nuevos:cu('cliente'), cotiz:cu('cotiz'), ventas:cu('venta'),
+    dias:Object.keys(en).filter(d=>en[d].length).length, total:all.length };
+}
+
+// ── Pantalla ──
+let _semLunes='', _semCom='', _semVista='mio';
+function openSemanal(){ if(!puedeVer('semanal')){ showToast('Sin permiso'); return; }
+  _semLunes=semLunes(hoy()); _semCom=semYo().nombre; _semVista=esGerente()?'equipo':'mio';
+  showScreen('sSemanal','Informe semanal', esGerente()?'Lo que hizo el equipo':'Tu semana, día por día', true);
+  renderSemanal(); }
+
+function semInforme(lunes, comercial, crear){
+  const cn=comNorm(comercial);
+  let r=getSemanales().find(x=>x.semana===lunes && comNorm(x.comercial)===cn);
+  if(!r && crear){ const yo=semYo();
+    r={ id:'SE-'+lunes+'-'+(cn.replace(/[^a-z0-9]/g,'').slice(0,12)||'x'), semana:lunes, comercial:comercial,
+        comercial_id:(comNorm(yo.nombre)===cn?yo.id:''), dias:{}, destacado:'', trabas:'', plan:'', cerrado:'', ts:new Date().toISOString(), pending:true }; }
+  return r;
+}
+function semGuardar(r){ r.ts=new Date().toISOString(); r.pending=true;
+  const a=getSemanales().filter(x=>x.id!==r.id); a.unshift(r); saveSemanales(a);
+  if(typeof cloudPush==='function'){ try{ cloudPush('semanal',r); }catch(e){} } }
+
+function renderSemanal(){
+  const esG=esGerente();
+  gs('semNav').innerHTML=`<button class="btn btn-sec" onclick="semIr(-7)" style="flex:0 0 auto;padding:8px 12px">‹</button>
+    <div style="flex:1;text-align:center;min-width:0"><div style="font-size:13px;font-weight:700;color:var(--gray-800)">${esc(semLbl(_semLunes))}</div>
+    <div style="font-size:10px;color:var(--gray-400)">${semEsActual(_semLunes)?'semana en curso':''}</div></div>
+    <button class="btn btn-sec" onclick="semIr(7)" style="flex:0 0 auto;padding:8px 12px"${semEsActual(_semLunes)?' disabled':''}>›</button>`;
+  gs('semTabs').style.display=esG?'flex':'none';
+  if(esG){ ['mio','equipo'].forEach(v=>{ const b=gs('semTab'+(v==='mio'?'Mio':'Equipo')); if(b) b.className='mtTab'+(_semVista===v?' on':''); }); }
+  if(esG && _semVista==='equipo') semRenderEquipo(); else semRenderMio();
+}
+function semIr(n){ const nuevo=semMas(_semLunes,n); if(n>0 && nuevo>semLunes(hoy())) return; _semLunes=nuevo; renderSemanal(); }
+function semSetVista(v){ _semVista=v; renderSemanal(); }
+
+// Vista del comercial: su semana, día por día.
+function semRenderMio(){
+  const com=_semCom||semYo().nombre;
+  if(!com){ gs('semBox').innerHTML='<div class="empty">No sé quién sos: iniciá sesión para armar tu informe.</div>'; return; }
+  const en=semActividad(_semLunes,com), R=semResumen(en);
+  const r=semInforme(_semLunes,com,false) || { dias:{}, destacado:'', trabas:'', plan:'', cerrado:'' };
+  const ed=canEdit() && !r.cerrado;
+  const ta=(id,val,ph,rows)=>`<textarea id="${id}" rows="${rows||2}" placeholder="${ph}" ${ed?'':'disabled'} style="width:100%;font-size:13px;padding:8px 10px;border:1.5px solid var(--gray-200);border-radius:8px;background:${ed?'var(--gray-50)':'var(--gray-100)'};color:var(--gray-900);font-family:inherit;outline:none;resize:vertical">${esc(val||'')}</textarea>`;
+
+  const chip=(n,lbl,ico)=>n?`<div style="background:var(--gray-100);border-radius:8px;padding:7px 9px;text-align:center;min-width:0"><div style="font-size:16px;font-weight:700;color:var(--gray-800)">${n}</div><div style="font-size:9px;color:var(--gray-500);line-height:1.2">${ico} ${lbl}</div></div>`:'';
+  const chips=[chip(R.visitas,'visitas','📋'),chip(R.contactos,'contactos','📞'),chip(R.nuevos,'nuevos','🏡'),chip(R.cotiz,'cotizaciones','🧮'),chip(R.ventas,'facturas','💰')].filter(Boolean).join('');
+
+  const dias=semDias(_semLunes).map((f,i)=>{
+    const es=en[f]||[], nota=(r.dias&&r.dias[f])||'';
+    const futuro=f>hoy();
+    if(!es.length && !nota && !ed) return '';
+    const cab=`<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px"><b style="font-size:12px;color:var(--gray-800)">${SEM_DIAS_LBL[i]} ${f.slice(8)}/${f.slice(5,7)}</b>${es.length?`<span style="font-size:10px;color:var(--gray-400)">${es.length} registro${es.length!==1?'s':''}</span>`:''}</div>`;
+    if(!es.length && !nota && futuro) return '';
+    if(!es.length && !nota) return `<div style="padding:8px 12px;border-bottom:1px solid var(--gray-200);opacity:.55">${cab}<div style="font-size:11px;color:var(--gray-400);margin-top:2px">Sin actividad registrada. ${ed?'Si hiciste algo que no quedó cargado, escribilo abajo.':''}</div>${ed?ta('semD_'+f,'','¿algo de este día que no esté arriba?',1):''}</div>`;
+    const lista=es.map(e=>`<div style="display:flex;gap:7px;margin-top:5px"><span style="flex:0 0 auto">${e.ico}</span><div style="min-width:0"><div style="font-size:12px;color:var(--gray-800)">${esc(e.texto)}</div>${e.det?`<div style="font-size:10px;color:var(--gray-400)">${esc(e.det)}</div>`:''}</div></div>`).join('');
+    return `<div style="padding:9px 12px;border-bottom:1px solid var(--gray-200)">${cab}${lista}${ed||nota?`<div style="margin-top:6px">${ed?ta('semD_'+f,nota,'¿algo más de este día?',1):`<div style="font-size:11px;color:var(--gray-700);background:var(--gray-100);border-radius:6px;padding:6px 8px">${esc(nota)}</div>`}</div>`:''}</div>`;
+  }).join('');
+
+  gs('semBox').innerHTML=`
+    <div class="card" style="margin-bottom:10px"><div class="card-b">
+      <div style="font-size:12px;color:var(--gray-600);margin-bottom:${chips?'8':'0'}px">${esc(com)}${R.total?' · '+R.total+' registro'+(R.total!==1?'s':'')+' en '+R.dias+' día'+(R.dias!==1?'s':''):' · sin actividad registrada esta semana'}</div>
+      ${chips?`<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(58px,1fr));gap:6px">${chips}</div>`:''}
+    </div></div>
+    <div class="card" style="margin-bottom:10px"><div class="card-h"><span>Día por día</span><span style="font-weight:500;color:var(--gray-400);font-size:11px">lo arma la app</span></div>
+      ${dias||'<div class="empty">Todavía no hay nada cargado en esta semana.</div>'}</div>
+    ${ed
+      ? `<div class="card" style="margin-bottom:10px"><div class="card-h">Para cerrar la semana</div><div class="card-b">
+      <label class="fl">Lo más importante de la semana</label>${ta('semDest',r.destacado,'una o dos líneas, lo que valga la pena contar')}
+      <label class="fl" style="margin-top:8px">Trabas o lo que necesito</label>${ta('semTrab',r.trabas,'qué te frenó, en qué necesitás una mano')}
+      <label class="fl" style="margin-top:8px">Plan de la semana que viene</label>${ta('semPlan',r.plan,'a dónde vas, a quién ves')}
+      <div style="font-size:10px;color:var(--gray-400);margin-top:7px">Los tres son opcionales. Podés cerrar la semana sin escribir nada: lo que hiciste ya quedó registrado arriba.</div>
+    </div></div>`
+      : semCierreLeido(r)}
+    ${r.cerrado
+      ? `<div style="background:var(--green-lt);border-radius:10px;padding:11px 13px;font-size:12px;color:var(--green-d);text-align:center">✓ Semana cerrada el ${fmtFecha(String(r.cerrado).slice(0,10))}${esGerente()?` · <span onclick="semReabrir()" style="cursor:pointer;text-decoration:underline">reabrir</span>`:''}</div>`
+      : (canEdit()?`<div class="row2"><button class="btn btn-sec" onclick="semGuardarBorrador()">Guardar borrador</button><button class="btn btn-primary" onclick="semCerrar()">✓ Cerrar la semana</button></div>
+         <div style="font-size:10px;color:var(--gray-400);text-align:center;margin-top:6px">Cerrada, gerencia la ve. Si falta algo, la podés seguir editando hasta que la cierres.</div>`:'')}`;
+}
+
+// Cerrada o en modo lectura: se lee como informe, no como formulario gris.
+// Lo que quedó vacío no se muestra — un título sin texto debajo es ruido.
+function semCierreLeido(r){
+  const bloques=[['Lo más importante',r.destacado],['Trabas / necesita',r.trabas],['Plan de la semana que viene',r.plan]]
+    .filter(([,v])=>String(v||'').trim())
+    .map(([t,v])=>`<div style="margin-bottom:9px"><div style="font-size:10px;font-weight:700;color:var(--gray-500);text-transform:uppercase;letter-spacing:.3px">${t}</div><div style="font-size:13px;color:var(--gray-800);line-height:1.45;white-space:pre-wrap;margin-top:2px">${esc(v)}</div></div>`).join('');
+  if(!bloques) return '';
+  return `<div class="card" style="margin-bottom:10px"><div class="card-h">En palabras del comercial</div><div class="card-b">${bloques}</div></div>`;
+}
+function semLeer(){ const com=_semCom||semYo().nombre;
+  const r=semInforme(_semLunes,com,true);
+  r.dias=r.dias||{};
+  semDias(_semLunes).forEach(f=>{ const el=gs('semD_'+f); if(el){ const v=(el.value||'').trim(); if(v) r.dias[f]=v; else delete r.dias[f]; } });
+  ['destacado','trabas','plan'].forEach((k,i)=>{ const el=gs(['semDest','semTrab','semPlan'][i]); if(el) r[k]=(el.value||'').trim(); });
+  return r; }
+function semGuardarBorrador(){ if(!canEdit()){ showToast('Sin permiso'); return; } semGuardar(semLeer()); showToast('✓ Borrador guardado'); renderSemanal(); }
+function semCerrar(){ if(!canEdit()){ showToast('Sin permiso'); return; }
+  const r=semLeer();
+  if(!confirm('¿Cerrar la semana?\n\nGerencia va a ver el informe y no vas a poder seguir editándolo.')) return;
+  r.cerrado=new Date().toISOString(); semGuardar(r); showToast('✓ Semana cerrada'); renderSemanal(); }
+function semReabrir(){ if(!esGerente()) return; const com=_semCom||semYo().nombre;
+  const r=semInforme(_semLunes,com,false); if(!r) return;
+  if(!confirm('¿Reabrir esta semana para que el comercial la siga editando?')) return;
+  r.cerrado=''; semGuardar(r); showToast('Semana reabierta'); renderSemanal(); }
+
+// Vista de gerencia: quién cerró y quién no, y entrar a cada uno.
+function semComerciales(){
+  const s=new Set();
+  try{ (window._semPerfiles||[]).forEach(p=>{ if(p.rol==='tecnico'&&p.nombre) s.add(p.nombre.trim()); }); }catch(e){}
+  try{ getVisitas().forEach(v=>{ if(v.tecnico) s.add(String(v.tecnico).trim()); }); }catch(e){}
+  try{ getVentas().forEach(v=>{ if(v.comercial) s.add(String(v.comercial).trim()); }); }catch(e){}
+  try{ getSemanales().forEach(r=>{ if(r.comercial) s.add(String(r.comercial).trim()); }); }catch(e){}
+  // Un mismo comercial escrito de varias formas: nos quedamos con la primera.
+  const vis=new Map(); [...s].sort().forEach(n=>{ const k=comNorm(n); if(!vis.has(k)) vis.set(k,n); });
+  return [...vis.values()]; }
+
+function semRenderEquipo(){
+  const coms=semComerciales();
+  if(!coms.length){ gs('semBox').innerHTML='<div class="empty">Todavía no hay comerciales con actividad.</div>'; return; }
+  const filas=coms.map(c=>{
+    const en=semActividad(_semLunes,c), R=semResumen(en);
+    const r=semInforme(_semLunes,c,false);
+    const est=r&&r.cerrado ? {t:'✓ cerrado',col:'var(--green)'} : (r?{t:'borrador',col:'var(--amber)'}:{t:'sin informe',col:'var(--gray-400)'});
+    return `<div class="li" onclick="semVer('${esc(c).replace(/'/g,"\\'")}')"><div style="min-width:0">
+      <div class="li-t">${esc(c)}</div>
+      <div class="li-s">${R.total?semPlural(R.visitas,'visita')+' · '+semPlural(R.contactos,'contacto')+' · '+semPlural(R.cotiz,'cotización','cotizaciones')+' · '+semPlural(R.ventas,'factura'):'sin actividad registrada'}</div>
+      ${r&&r.destacado?`<div style="font-size:11px;color:var(--gray-600);margin-top:3px">“${esc(r.destacado.slice(0,110))}${r.destacado.length>110?'…':''}”</div>`:''}
+      </div><div style="flex-shrink:0;text-align:right"><span style="font-size:10px;font-weight:700;color:${est.col}">${est.t}</span></div></div>`;
+  }).join('');
+  const cerr=coms.filter(c=>{ const r=semInforme(_semLunes,c,false); return r&&r.cerrado; }).length;
+  gs('semBox').innerHTML=`<div class="card"><div class="card-h"><span>Equipo comercial</span><span style="font-weight:500;color:var(--gray-400);font-size:11px">${cerr} de ${coms.length} cerrados</span></div>${filas}</div>`;
+}
+function semVer(com){ _semCom=com; _semVista='mio'; renderSemanal(); }
 function getMetas(){ return getArr('bio:metas'); }
 function saveMetas(a){ setArr('bio:metas',a); }
 function metaRow(m){ return { id:m.id, comercial:m.comercial||'', anio:Number(m.anio)||0, meses:(m.meses||[]), ts:m.ts||null }; }
