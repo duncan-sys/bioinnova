@@ -391,7 +391,7 @@ textarea{resize:vertical;min-height:66px}
       <label class="fl">Estancia / lugar de entrega <span style="color:var(--gray-400)">(opcional)</span></label><input id="czLugar" placeholder="Ej: Estancia Ita Pora / Retirado" autocomplete="off">
       <div class="row2"><div><label class="fl">Forma de pago</label><select id="czCond" onchange="cotizCondChange()"></select></div><div><label class="fl">Fecha</label><input type="date" id="czFecha"></div></div>
       <div class="row2"><div><label class="fl">Validez (días)</label><input type="number" id="czValidez" value="7" inputmode="numeric"></div><div><label class="fl">Vendedor</label><input id="czVendedor"></div></div>
-      <div class="row2"><div><label class="fl">Flete ₲/kg (según destino)</label><input type="number" id="czFlete" inputmode="numeric" placeholder="0" oninput="cotizRecalc()"></div>
+      <div class="row2"><div><label class="fl">Flete ₲/kg (según destino · 0 = retira de fábrica)</label><input type="number" id="czFlete" inputmode="numeric" placeholder="0" oninput="cotizRecalc()"></div>
         <div><label class="fl">Comisión</label><div style="display:flex;gap:4px"><input type="number" step="0.1" id="czCom" inputmode="decimal" placeholder="general" oninput="cotizComChange()" style="flex:1"><select id="czComTipo" onchange="cotizComChange()" style="width:64px"><option value="pct">%</option><option value="monto">₲</option></select></div></div></div>
       <div id="czComHint" style="font-size:10px;color:var(--gray-400);margin-top:2px"></div>
       <div style="font-size:11px;color:var(--gray-400);margin-top:2px">El margen se define en cada producto al agregarlo (podés poner uno distinto por línea).</div>
@@ -979,7 +979,7 @@ const visitasDe   =cid=>getVisitas().filter(v=>v.cliente_id===cid);
 // Versión de la app. SUBIR JUNTO CON `CACHE` en sw.js en cada publicación.
 // Es sólo informativa (se muestra en la cabecera) y sirve para saber de un vistazo
 // si un equipo ya tomó el último cambio o quedó con una copia vieja en caché.
-const APP_VERSION = 167;
+const APP_VERSION = 168;
 try{ document.addEventListener('DOMContentLoaded', ()=>{ const v=document.getElementById('verChip'); if(v) v.textContent='v'+APP_VERSION; document.querySelectorAll('[data-ver]').forEach(e=>e.textContent=APP_VERSION); }); }catch(e){}
 const SUPABASE_URL = 'https://mnuldrgynighabwtulkf.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_uAH-nT2MczSB8m9F4THmdw_T6u77exI';
@@ -3116,8 +3116,11 @@ function cotizPrint(id, incluirGar){ const c=getCotiz().find(x=>x.id===id); if(!
    <div class="intro">Por la presente me dirijo a Ud., a efecto de remitir el siguiente presupuesto:</div>
    <table class="g"><thead><tr><th>Cantidad<br>${items.every(i=>i.unidad!=='kg')?'Bolsas':''}</th><th>Descripción</th><th>Kg/bolsa</th><th>Total Kilos</th><th>Precio kilos ${monLbl}</th><th>Precio bolsa ${monLbl}</th><th>Total${solo?' US$':''}</th></tr></thead><tbody>${filas}${totalRow}</tbody></table>
    ${usd&&!sinTotal?`<div style="text-align:right;font-size:11.5px;color:#555;margin-top:5px">Equivalente: US$ ${((c.total||totGs)/dol).toLocaleString('es-PY',{maximumFractionDigits:2})} (₲ ${dol.toLocaleString('es-PY')}/US$)</div>`:''}
-   <div class="obs"><b>Obs:</b> Precio incluye entrega en puerta y asistencia técnica permanente de nuestros asesores<br>
-   <b>Plazo de entrega:</b> 3 días luego de la aprobación del presupuesto<br>
+   ${(Number(c.flete_kg)||0)>0
+     ? `<div class="obs"><b>Obs:</b> Precio incluye entrega en puerta y asistencia técnica permanente de nuestros asesores<br>
+   <b>Plazo de entrega:</b> 3 días luego de la aprobación del presupuesto<br>`
+     : `<div class="obs"><b>Obs:</b> Precio puesto en fábrica (retira el cliente). Incluye asistencia técnica permanente de nuestros asesores<br>
+   <b>Disponible para retiro:</b> 3 días luego de la aprobación del presupuesto<br>`}
    <b>Formas de Pago:</b> ${esc(COND_LBL[c.condicion]||'')}${c.obs?`<br><b>Observaciones:</b> ${esc(c.obs)}`:''}</div>
    <div class="close">En espera de una respuesta favorable me despido,<br>Atte</div>
    <div class="firma"><b>${esc(c.vendedor||'')}</b><br>Asesor técnico<br><b>Bioinnova S.A.</b></div>
