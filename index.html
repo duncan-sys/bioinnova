@@ -984,7 +984,7 @@ const visitasDe   =cid=>getVisitas().filter(v=>v.cliente_id===cid);
 // Versión de la app. SUBIR JUNTO CON `CACHE` en sw.js en cada publicación.
 // Es sólo informativa (se muestra en la cabecera) y sirve para saber de un vistazo
 // si un equipo ya tomó el último cambio o quedó con una copia vieja en caché.
-const APP_VERSION = 170;
+const APP_VERSION = 171;
 try{ document.addEventListener('DOMContentLoaded', ()=>{ const v=document.getElementById('verChip'); if(v) v.textContent='v'+APP_VERSION; document.querySelectorAll('[data-ver]').forEach(e=>e.textContent=APP_VERSION); }); }catch(e){}
 const SUPABASE_URL = 'https://mnuldrgynighabwtulkf.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_uAH-nT2MczSB8m9F4THmdw_T6u77exI';
@@ -4890,15 +4890,17 @@ function estadoCuentaCliente(cli,soloVenc){
   if(!rows.length){ showToast('Sin saldos por cobrar'+(soloVenc?' vencidos':'')+' para este cliente'); return; }
   rows.sort((a,b)=>String(a.venc||'').localeCompare(String(b.venc||'')));
   const cliRec=(typeof getClientes==='function'?getClientes():[]).find(c=>(c.nombre||'')===cli)||{};
-  let tot=0,venc=0,aVenc=0,nV=0;
+  let tot=0,venc=0,aVenc=0,nV=0,totOrig=0;
   const filas=rows.map((r,i)=>{
     const g=finGs(r.rec,r.saldo); tot+=g;
+    // Monto con el que se emitió: el de la cuota (en contado, la única cuota = el total de la factura).
+    const orig=finGs(r.rec,(r.cu&&r.cu.monto!=null)?r.cu.monto:r.rec.monto); totOrig+=orig;
     const vd=String(r.venc)<hoyS; if(vd){venc+=g;nV++;}else{aVenc+=g;}
     const nc=(r.rec.cuotas||[]).length;
     const dias=(vd&&r.venc)?Math.max(0,Math.round((Date.parse(hoyS)-Date.parse(r.venc))/86400000)):0;
     const fact=(r.rec.factura||'—')+(nc>1?` · cuota ${(r.cu&&r.cu.n)||r.ci+1}/${nc}`:'');
     const est=vd?('VENCIDO'+(dias?` · ${dias} d`:'')):'A VENCER';
-    return `<tr class="${i%2?'alt':''}"><td>${esc(fact)}</td><td class="c">${fmtFecha(r.rec.fecha)}</td><td class="r b">${finGsFmt(g)}</td><td class="c" style="${vd?'color:#b91c1c;font-weight:700':''}">${r.venc?fmtFecha(r.venc):'—'}</td><td class="c"><span class="bg ${vd?'vc':'pd'}">${esc(est)}</span></td></tr>`;
+    return `<tr class="${i%2?'alt':''}"><td>${esc(fact)}</td><td class="c">${fmtFecha(r.rec.fecha)}</td><td class="r">${finGsFmt(orig)}</td><td class="r b">${finGsFmt(g)}</td><td class="c" style="${vd?'color:#b91c1c;font-weight:700':''}">${r.venc?fmtFecha(r.venc):'—'}</td><td class="c"><span class="bg ${vd?'vc':'pd'}">${esc(est)}</span></td></tr>`;
   }).join('');
   const base=`${location.origin}${location.pathname.replace(/[^/]*$/,'')}logo.jpg`;
   const subCli=esc(cli)+(cliRec.ruc?` <span style="font-weight:400;color:#64748b">· RUC ${esc(cliRec.ruc)}</span>`:'')+(cliRec.codigo?` <span style="font-weight:400;color:#64748b">· Cód. ${esc(cliRec.codigo)}</span>`:'');
@@ -4937,8 +4939,8 @@ function estadoCuentaCliente(cli,soloVenc){
    <div class="greet">Estimado Cliente,</div>
    <div class="intro">Adjuntamos el estado de cuenta actualizado a la fecha para su revisión, control y confirmación de estado, agradeciendo desde ya su colaboración y confianza.</div>
    <div class="cards">${card('Saldo total',finGsFmt(tot),'#1a202c')}${card('Vencido'+(nV?' ('+nV+')':''),finGsFmt(venc),venc?'#b91c1c':'#166534')}${card('A vencer',finGsFmt(aVenc),'#b45309')}</div>
-   <table><thead><tr><th>Número de factura</th><th class="c">Fecha de factura</th><th class="r">Saldo Gs</th><th class="c">Vto. de factura</th><th class="c">Estado</th></tr></thead><tbody>${filas}</tbody>
-   <tfoot><tr><td>TOTALES</td><td></td><td class="r">${finGsFmt(tot)}</td><td></td><td></td></tr></tfoot></table>
+   <table><thead><tr><th>Número de factura</th><th class="c">Fecha de factura</th><th class="r">Monto original Gs</th><th class="r">Saldo pendiente Gs</th><th class="c">Vto. de factura</th><th class="c">Estado</th></tr></thead><tbody>${filas}</tbody>
+   <tfoot><tr><td>TOTALES</td><td></td><td class="r">${finGsFmt(totOrig)}</td><td class="r">${finGsFmt(tot)}</td><td></td><td></td></tr></tfoot></table>
    <div class="foot">BioInnova S.A. · Documento generado el ${fmtFecha(hoyS)} · Sistema de gestión BioInnova</div>
    <div id="ecbar" class="noprint" style="display:flex;gap:8px;justify-content:center;margin-top:16px"><button onclick="var b=document.getElementById('ecbar');b.style.display='none';window.onafterprint=function(){b.style.display='';};window.print();" style="background:#1e3f63;color:#fff;border:none;padding:11px 22px;border-radius:8px;font-weight:700;cursor:pointer">🖨️ Imprimir / Guardar PDF</button><button onclick="window.close()" style="background:#e2e8f0;color:#334155;border:none;padding:11px 22px;border-radius:8px;font-weight:700;cursor:pointer">← Volver</button></div>
   </div></body></html>`);
