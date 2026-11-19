@@ -979,7 +979,7 @@ const visitasDe   =cid=>getVisitas().filter(v=>v.cliente_id===cid);
 // Versión de la app. SUBIR JUNTO CON `CACHE` en sw.js en cada publicación.
 // Es sólo informativa (se muestra en la cabecera) y sirve para saber de un vistazo
 // si un equipo ya tomó el último cambio o quedó con una copia vieja en caché.
-const APP_VERSION = 168;
+const APP_VERSION = 169;
 try{ document.addEventListener('DOMContentLoaded', ()=>{ const v=document.getElementById('verChip'); if(v) v.textContent='v'+APP_VERSION; document.querySelectorAll('[data-ver]').forEach(e=>e.textContent=APP_VERSION); }); }catch(e){}
 const SUPABASE_URL = 'https://mnuldrgynighabwtulkf.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_uAH-nT2MczSB8m9F4THmdw_T6u77exI';
@@ -4554,7 +4554,7 @@ function finRenderVentas(){ const q=(gs('finVBuscar').value||'').trim().toLowerC
   // Margen: solo sobre las que tienen costo congelado. Las sin cotización se
   // cuentan aparte para que el incumplimiento se vea, en vez de diluirse.
   const conCosto=ls.filter(v=>v.costo!=null);
-  const vNeto=conCosto.reduce((a,v)=>a+finGs(v,v.monto),0), vCosto=conCosto.reduce((a,v)=>a+finGs(v,v.costo),0);
+  const vNeto=conCosto.reduce((a,v)=>a+finGs(v,v.monto),0), vCosto=conCosto.reduce((a,v)=>a+Math.round(Number(v.costo)||0),0);   // el costo se congela SIEMPRE en guaraníes: no lleva tipo de cambio
   const sinCot=ls.filter(v=>!v.cotiz_id).length;
   if(gs('finVResumen')) gs('finVResumen').innerHTML='Total: <b>'+finGsFmt(tot)+'</b> · Por cobrar: <b style="color:var(--amber)">'+finGsFmt(pend)+'</b> · '+ls.length+' facturas'+_finMesSuf()+(_finCom?' · <b>'+esc(_finComLbl(_finCom))+'</b>':'')
     + (conCosto.length?'<br>Margen: <b style="color:var(--green)">'+finGsFmt(vNeto-vCosto)+'</b>'+(vNeto?' ('+((vNeto-vCosto)/vNeto*100).toFixed(1)+'%)':'')+' <span style="color:var(--gray-400)">sobre '+conCosto.length+' con costo</span>':'')

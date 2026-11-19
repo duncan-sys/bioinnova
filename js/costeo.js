@@ -348,6 +348,7 @@ function totalesCotiz(lineas){
 // ¿Esta cotización ya se facturó? Se deduce de las ventas, no se guarda: así
 // nunca queda un estado colgado si después se borra la factura.
 function cotizFacturada(id,exceptoVenta){ return getVentas().some(v=>v.cotiz_id===id && v.id!==exceptoVenta); }
+// El costo está en guaraníes; la venta puede estar en dólares: se pasa a ₲ con su tipo de cambio.
 function ventaMargen(v){ if(!v || v.costo==null) return null;
-  const neto=Number(v.monto)||0, costo=Number(v.costo)||0;
+  const neto=Math.round((Number(v.monto)||0)*(v.moneda==='USD'?(Number(v.tc)||0):1)), costo=Number(v.costo)||0;
   return { costo, margen:neto-costo, pct: neto?(neto-costo)/neto*100:0 }; }
