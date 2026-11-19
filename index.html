@@ -265,9 +265,13 @@ textarea{resize:vertical;min-height:66px}
   <!-- INVENTARIO -->
   <div class="screen" id="sInv">
     <button class="btn btn-primary btn-block" id="btnNuevoInsumo" style="margin-bottom:10px;display:none" onclick="invInsumoModal()">＋ Nuevo insumo</button>
+    <button class="btn btn-sec btn-block" style="margin-bottom:10px" onclick="openConteo()">🧮 Conteo físico (toma de inventario)</button>
     <div style="margin-bottom:10px"><input type="search" id="invBuscar" placeholder="🔎 Buscar insumo…" oninput="renderInv()"></div>
     <div class="card"><div class="card-h"><span>Inventario</span><span id="invCount" style="font-weight:500;color:var(--gray-400)"></span></div><div id="invList"></div></div>
   </div>
+
+  <!-- CONTEO FÍSICO (toma de inventario mensual) -->
+  <div class="screen" id="sConteo"><div id="cnBody"></div></div>
 
   <!-- PRODUCTOS TERMINADOS -->
   <div class="screen" id="sProductos">
@@ -284,6 +288,7 @@ textarea{resize:vertical;min-height:66px}
       <div class="card"><div class="card-h"><span>Productos terminados</span><span id="prodCount" style="font-weight:500;color:var(--gray-400)"></span></div><div id="prodList"></div></div>
     </div>
     <div id="prodInvWrap" style="display:none">
+      <button class="btn btn-sec btn-block" style="margin-bottom:10px" onclick="openConteo()">🧮 Conteo físico (toma de inventario)</button>
       <div style="margin-bottom:10px"><input type="search" id="prodInvBuscar" placeholder="🔎 Buscar producto…" oninput="renderProductosInv()"></div>
       <div class="card"><div class="card-h"><span>Stock de productos terminados</span><span id="prodInvCount" style="font-weight:500;color:var(--gray-400)"></span></div><div id="prodInvList"></div></div>
     </div>
@@ -979,7 +984,7 @@ const visitasDe   =cid=>getVisitas().filter(v=>v.cliente_id===cid);
 // Versión de la app. SUBIR JUNTO CON `CACHE` en sw.js en cada publicación.
 // Es sólo informativa (se muestra en la cabecera) y sirve para saber de un vistazo
 // si un equipo ya tomó el último cambio o quedó con una copia vieja en caché.
-const APP_VERSION = 169;
+const APP_VERSION = 170;
 try{ document.addEventListener('DOMContentLoaded', ()=>{ const v=document.getElementById('verChip'); if(v) v.textContent='v'+APP_VERSION; document.querySelectorAll('[data-ver]').forEach(e=>e.textContent=APP_VERSION); }); }catch(e){}
 const SUPABASE_URL = 'https://mnuldrgynighabwtulkf.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_uAH-nT2MczSB8m9F4THmdw_T6u77exI';
@@ -5692,6 +5697,7 @@ if(!navigator.onLine) pintarConexion();
 <script src="js/comercial.js"></script>
 <script src="js/gestion.js"></script>
 <script src="js/directorio.js"></script>
+<script src="js/conteo.js"></script>
 <script>try{ applyRoleUI(); if(document.querySelector('.screen.active')&&document.querySelector('.screen.active').id==='sHome') goHome(); }catch(e){}</script>
 </body>
 </html>
