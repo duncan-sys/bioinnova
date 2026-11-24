@@ -100,3 +100,24 @@ function mtbHtml(nombre, propio){
       <div>${x.dormidos.slice(0,8).map(r=>fila(r.id,r.nombre,'compró '+finGsFmt(r.total)+' en el año · última compra '+fmtFecha(r.ultVenta)+' · '+(r.ult?'último contacto '+fmtFecha(r.ult):'sin contactos'),'#b54708')).join('')}</div></div>`:''}
     ${!x.repetidos.length&&!x.dormidos.length?`<div class="card"><div class="card-b" style="font-size:12px;color:var(--green)">✔ Sin alertas: ningún cliente repetido sin resultado ni clientes que compran sin visitar.</div></div>`:''}`;
 }
+
+// ── El tablero es lo primero que ve el comercial ──
+// Al entrar a la app (o al iniciar sesión) va directo a su tablero. Si tiene un
+// bloqueo (vencidos, cierre, agenda), arriba de esa pantalla ve el resumen: así
+// sabe qué se espera de él aunque primero tenga que resolver lo pendiente.
+function mtbAlEntrar(){ try{ if(!cmEsComercial()) return; const a=document.querySelector('.screen.active'); if(a && a.id==='sHome') openGestion('tablero'); }catch(e){} }
+function mtbResumenHtml(nombre){
+  let x; try{ x=mtbDatos({ visitas:getVisitas(), clientes:getClientes(), ventas:getVentas() },nombre,hoy(),getComCfg()); }catch(e){ return ''; }
+  const m=x.min; let meta='';
+  try{ const f=rankingMes(getVentas(),getMetas(),x.ym,_finComDe,finGs).find(r=>cmMismo(r.comercial,nombre)); if(f&&f.meta>0) meta=`<div style="flex:1;min-width:70px"><div style="font-size:9.5px;color:var(--gray-500);font-weight:700">META MES</div><div style="font-size:16px;font-weight:800;color:${_mtColor(f.pct)}">${Math.round((f.pct||0)*100)}%</div></div>`; }catch(e){}
+  const k=(l,v,mn)=>`<div style="flex:1;min-width:70px"><div style="font-size:9.5px;color:var(--gray-500);font-weight:700">${l}</div><div style="font-size:16px;font-weight:800;color:${v>=mn?'var(--green)':'var(--gray-800)'}">${v}<span style="font-size:11px;color:var(--gray-400)">/${mn}</span></div></div>`;
+  return `<div class="card" style="border-left:4px solid var(--green)"><div class="card-b" style="padding:10px 12px">
+    <div style="font-size:11px;font-weight:700;color:var(--green-d);margin-bottom:6px">🏁 TU SEMANA ${x.racha?'· 🔥 racha '+x.racha+' sem.':''}</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap">${k('VISITAS',x.s.vis,m.vis)}${k('LLAMADAS',x.s.llam,m.llam)}${k('COTIZ. MES',x.embudo.cotSol,m.cot)}${meta}</div>
+    <div style="font-size:11px;color:var(--gray-500);margin-top:6px">Resolvé esto primero y después ves tu tablero completo.</div></div></div>`;
+}
+(function(){
+  const _aa=applyAuth; applyAuth=function(){ const r=_aa.apply(this,arguments); mtbAlEntrar(); return r; };
+  const pre=(fn,bodyId)=>{ const o=window[fn]; if(typeof o!=='function') return; window[fn]=function(){ const r=o.apply(this,arguments); try{ if(cmEsComercial()){ const b=gs(bodyId); if(b && !b.querySelector('[data-mtbres]')) b.insertAdjacentHTML('afterbegin', mtbResumenHtml(cmYo()).replace('<div class="card"','<div data-mtbres="1" class="card"')); } }catch(e){} return r; }; };
+  pre('cmRenderPlan','psBody'); pre('cmRenderPendientes','pdBody'); pre('cmRenderCierre','ciBody');
+})();
