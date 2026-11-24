@@ -29,7 +29,10 @@ function mtbDatos(d, nombre, hoyIso, cfg){
   // Mes: cotizaciones pedidas y presentadas, contactados y ventas.
   const ym=String(hoyIso).slice(0,7), ini=ym+'-01', fin=cmAddDias(cmAddDias(ini,32).slice(0,7)+'-01',-1);
   const cm=cont(ini,fin);
-  const cotSol=cm.filter(x=>x.cotiz).length, cotPres=cm.filter(x=>x.cotiz && (CM_COT_PRES||[]).includes(x.cotiz.estado)).length;
+  // Las del módulo Cotizaciones con Vendedor = él ya están hechas: cuentan como pedidas y presentadas
+  // (las que repiten un pedido de visita no se cuentan dos veces; ver jgCotizModulo).
+  const cotMod=(typeof jgCotizModulo==='function')?jgCotizModulo(d,nombre,ini,fin):0;
+  const cotSol=cm.filter(x=>x.cotiz).length+cotMod, cotPres=cm.filter(x=>x.cotiz && (CM_COT_PRES||[]).includes(x.cotiz.estado)).length+cotMod;
   const vMes=(d.ventas||[]).filter(v=>cmMismo(v.comercial,nombre) && String(v.fecha||'').slice(0,7)===ym);
   const monto=v=>(typeof finGs==='function'?finGs(v,v.monto):Math.round(Number(v.monto)||0));
   const embudo={ contactados:new Set(cm.map(x=>x.cliente_id).filter(Boolean)).size, cotSol, cotPres,
@@ -39,9 +42,11 @@ function mtbDatos(d, nombre, hoyIso, cfg){
   for(let k=1;k<=52;k++){ const l=cmAddDias(sem.desde,-7*k); if(cuenta(cont(l,cmAddDias(l,6))).vis>=min.vis) racha++; else break; }
   // Repetidos sin resultado: muchos contactos con el mismo cliente y ni una cotización ni una venta.
   const desdeR=cmAddDias(hoyIso,-MTB_REP_DIAS), cr=cont(desdeR,hoyIso);
+  const cli0={}; (d.clientes||[]).forEach(c=>cli0[c.id]=c);
   const porCli={}; cr.forEach(x=>{ if(!x.cliente_id) return; const g=porCli[x.cliente_id]=porCli[x.cliente_id]||{n:0,cot:false,ult:''}; g.n++; if(x.cotiz||x.resultado==='pedido') g.cot=true; if(x.fecha>g.ult) g.ult=x.fecha; });
   const cli={}; (d.clientes||[]).forEach(c=>cli[c.id]=c);
-  const repetidos=Object.entries(porCli).filter(([id,g])=>g.n>=MTB_REP_N && !g.cot && !(d.ventas||[]).some(v=>v.cliente_id===id && v.fecha>=desdeR))
+  const cotCli=id=>(d.cotiz||[]).some(c=>c.fecha>=desdeR && cmMismo(c.vendedor,nombre) && (c.cliente_id===id || (cli0[id] && cmMismo(c.cliente,cli0[id].nombre))));
+  const repetidos=Object.entries(porCli).filter(([id,g])=>g.n>=MTB_REP_N && !g.cot && !cotCli(id) && !(d.ventas||[]).some(v=>v.cliente_id===id && v.fecha>=desdeR))
     .map(([id,g])=>({ id, nombre:(cli[id]&&cli[id].nombre)||'—', n:g.n, ult:g.ult })).sort((a,b)=>b.n-a.n);
   // Dormidos: clientes suyos que compraron en el último año y hace rato no contacta.
   const hace1=cmAddDias(hoyIso,-365), limD=cmAddDias(hoyIso,-MTB_DORM_DIAS);
@@ -66,7 +71,7 @@ function mtbBarra(l, v, min, ant, esperado, ico, sufijo){
     <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--gray-500)"><span style="color:${col};font-weight:600">${txt}</span><span>${ant==null?(sufijo||''):'vs. semana pasada '+fl}</span></div></div>`;
 }
 function mtbHtml(nombre, propio){
-  const d={ visitas:getVisitas(), clientes:getClientes(), ventas:getVentas() }; const h=hoy();
+  const d={ visitas:getVisitas(), clientes:getClientes(), ventas:getVentas(), cotiz:(typeof getCotiz==="function"?getCotiz():[]) }; const h=hoy();
   const x=mtbDatos(d,nombre,h,getComCfg()); const m=x.min;
   // Mensaje: qué le falta para cumplir la semana, o el reconocimiento si ya está.
   const fV=Math.max(0,m.vis-x.s.vis), fL=Math.max(0,m.llam-x.s.llam);
@@ -85,12 +90,12 @@ function mtbHtml(nombre, propio){
     <div class="card"><div class="card-h"><span>📊 ${propio?'Tu':'Su'} semana</span><span style="font-weight:500;color:var(--gray-400);font-size:12px">${x.racha?'🔥 racha '+x.racha+' sem.':''}</span></div><div class="card-b">
       ${mtbBarra('Visitas presenciales',x.s.vis,m.vis,x.sa.vis,m.vis*x.frac,'🚜')}
       ${mtbBarra('Llamadas y WhatsApp',x.s.llam,m.llam,x.sa.llam,m.llam*x.frac,'📞')}
-      ${mtbBarra('Cotizaciones pedidas (mes)',e.cotSol,m.cot,null,m.cot*(Number(h.slice(8,10))/30),'🧾','en el mes')}
+      ${mtbBarra('Cotizaciones (mes)',e.cotSol,m.cot,null,m.cot*(Number(h.slice(8,10))/30),'🧾','en el mes')}
       ${x.pend?`<div style="font-size:12px;color:var(--red);font-weight:600">⏰ ${x.pend} seguimiento${x.pend>1?'s':''} vencido${x.pend>1?'s':''}</div>`:''}
     </div></div>
     ${meta||`<div class="card"><div class="card-b" style="font-size:12px;color:var(--gray-500)">${propio?'Todavía no tenés':'Todavía no tiene'} meta cargada para este mes.</div></div>`}
     <div class="card"><div class="card-h"><span>🎯 El mes, de contacto a venta</span></div><div class="card-b" style="display:flex;gap:4px">
-      ${paso('clientes contactados',e.contactados)}${flecha}${paso('cotizaciones pedidas',e.cotSol)}${flecha}${paso('presentadas',e.cotPres)}${flecha}${paso('clientes con venta',e.conVenta,e.ventas?finGsFmt(e.ventas):'')}
+      ${paso('clientes contactados',e.contactados)}${flecha}${paso('cotizaciones',e.cotSol)}${flecha}${paso('presentadas',e.cotPres)}${flecha}${paso('clientes con venta',e.conVenta,e.ventas?finGsFmt(e.ventas):'')}
     </div></div>
     ${x.repetidos.length?`<div class="card" style="border-left:4px solid var(--red)"><div class="card-h"><span>🔁 Visitas que no rinden</span><span style="color:var(--red);font-weight:700">${x.repetidos.length}</span></div>
       <div style="padding:2px 12px 6px;font-size:11.5px;color:var(--gray-600)">${MTB_REP_N} o más contactos en ${MTB_REP_DIAS} días y ni una cotización ni una venta. ¿Hace falta otra propuesta, otro interlocutor, o soltar el cliente?</div>
@@ -107,7 +112,7 @@ function mtbHtml(nombre, propio){
 // sabe qué se espera de él aunque primero tenga que resolver lo pendiente.
 function mtbAlEntrar(){ try{ if(!cmEsComercial()) return; const a=document.querySelector('.screen.active'); if(a && a.id==='sHome') openGestion('tablero'); }catch(e){} }
 function mtbResumenHtml(nombre){
-  let x; try{ x=mtbDatos({ visitas:getVisitas(), clientes:getClientes(), ventas:getVentas() },nombre,hoy(),getComCfg()); }catch(e){ return ''; }
+  let x; try{ x=mtbDatos({ visitas:getVisitas(), clientes:getClientes(), ventas:getVentas(), cotiz:(typeof getCotiz==="function"?getCotiz():[]) },nombre,hoy(),getComCfg()); }catch(e){ return ''; }
   const m=x.min; let meta='';
   try{ const f=rankingMes(getVentas(),getMetas(),x.ym,_finComDe,finGs).find(r=>cmMismo(r.comercial,nombre)); if(f&&f.meta>0) meta=`<div style="flex:1;min-width:70px"><div style="font-size:9.5px;color:var(--gray-500);font-weight:700">META MES</div><div style="font-size:16px;font-weight:800;color:${_mtColor(f.pct)}">${Math.round((f.pct||0)*100)}%</div></div>`; }catch(e){}
   const k=(l,v,mn)=>`<div style="flex:1;min-width:70px"><div style="font-size:9.5px;color:var(--gray-500);font-weight:700">${l}</div><div style="font-size:16px;font-weight:800;color:${v>=mn?'var(--green)':'var(--gray-800)'}">${v}<span style="font-size:11px;color:var(--gray-400)">/${mn}</span></div></div>`;
