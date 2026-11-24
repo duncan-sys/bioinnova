@@ -51,7 +51,7 @@ function gsGrandesSinContacto(d, hoyIso, dias){
 
 // ── datos y estado ──
 function gsDatos(){ return { clientes:getClientes(), visitas:getVisitas(), ventas:getVentas(), agenda:getAgenda(), cotiz:(typeof getCotiz==='function'?getCotiz():[]) }; }
-let _gst={ tab:'semana', q:'', filtro:'todos', nombre:'', gtab:'bandeja', ctab:'semana', cq:'', cfiltro:'todos', ccom:'' };
+let _gst={ tab:'tablero', q:'', filtro:'todos', nombre:'', gtab:'bandeja', ctab:'tablero', cq:'', cfiltro:'todos', ccom:'' };
 
 function gsInyectar(){
   const home=gs('sHome'); if(!home || gs('sGestion')) return; const cont=home.parentNode;
@@ -106,11 +106,13 @@ function gsRenderGestion(){
   } else if(_gst.tab==='desempeno'){
     let meta=''; try{ const ym=hoy().slice(0,7); const f=rankingMes(getVentas(),getMetas(),ym,_finComDe,finGs).find(x=>cmMismo(x.comercial,yo)); if(f){ const pv=_mtVista; _mtVista='mes'; meta=_mtMiCardHtml(f,ym,ymParse(ym),''); _mtVista=pv; } }catch(e){}
     cuerpo=(meta||'<div class="card"><div class="card-b" style="font-size:12px;color:var(--gray-500)">Todavía no tenés meta cargada para este mes.</div></div>')+'<div id="gsPerf"></div>';
+  } else if(_gst.tab==='tablero'){
+    cuerpo=mtbHtml(yo,true);
   } else {
     cuerpo=gsSemanaHtml(yo,true);
   }
   el.innerHTML=`<button class="btn btn-primary btn-block" style="font-size:16px;padding:13px;margin-bottom:10px" onclick="openVisitaRapida()">⚡ Registrar visita o contacto</button>
-    ${gsKpis(yo)}${gsTabs(_gst.tab,[['semana','📅 Mi semana'],['clientes','🏡 Mis clientes'],['desempeno','📈 Mi desempeño']],'gsSetTab')}${cuerpo}`;
+    ${_gst.tab==='tablero'?'':gsKpis(yo)}${gsTabs(_gst.tab,[['tablero','🏁 Mi tablero'],['semana','📅 Mi semana'],['clientes','🏡 Mis clientes'],['desempeno','📈 Mi desempeño']],'gsSetTab')}${cuerpo}`;
   if(_gst.tab==='desempeno'){ _cmPf={ nombre:yo, desde:cmSemana(hoy()).desde, dest:'gsPerf' }; cmPerfPintar(); }
 }
 // Semana de un comercial: vencidos + agenda (con lo hecho) + pedidos de cotización.
@@ -249,8 +251,9 @@ function gsRenderGestComDet(){
   let cuerpo='';
   if(_gst.ctab==='clientes') cuerpo=gsCliLista(n,_gst.dq||'',_gst.dfiltro||'todos','gsDetFiltro','gsDetBuscar',false);
   else if(_gst.ctab==='desempeno') cuerpo='<div id="gsDetPerf"></div>';
+  else if(_gst.ctab==='tablero') cuerpo=mtbHtml(n,false);
   else cuerpo=gsSemanaHtml(n,false);
-  el.innerHTML=gsKpis(n)+gsTabs(_gst.ctab,[['semana','📅 Su semana'],['clientes','🏡 Sus clientes'],['desempeno','📈 Desempeño']],'gsSetCTab')+cuerpo;
+  el.innerHTML=(_gst.ctab==='tablero'?'':gsKpis(n))+gsTabs(_gst.ctab,[['tablero','🏁 Tablero'],['semana','📅 Su semana'],['clientes','🏡 Sus clientes'],['desempeno','📈 Desempeño']],'gsSetCTab')+cuerpo;
   if(_gst.ctab==='desempeno'){ _cmPf={ nombre:n, desde:cmSemana(hoy()).desde, dest:'gsDetPerf' }; cmPerfPintar(); }
 }
 

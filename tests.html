@@ -57,6 +57,7 @@ function pushPricingCfg(){}
 <script src="js/metas.js"></script>
 <script src="js/comercial.js"></script>
 <script src="js/gestion.js"></script>
+<script src="js/mitablero.js"></script>
 <script src="js/directorio.js"></script>
 
 <script>
@@ -764,6 +765,24 @@ test('gsUrgencia: vencido primero; cotización esperando; sin contacto 30 días;
   eq(gsUrgencia(GD.clientes[0],GD,'2026-10-15'),0); eq(gsUrgencia(GD.clientes[1],GD,'2026-10-15'),2); eq(gsUrgencia(GD.clientes[2],GD,'2026-10-15'),3); eq(gsUrgencia(GD.clientes[3],GD,'2026-10-15'),1);
 });
 test('gsGrandesSinContacto: el que compró y no tiene contacto hace 30 días aparece', ()=>{ const r=gsGrandesSinContacto(GD,'2026-10-15',180).map(x=>x.c.id); eq(r.join(','),'G2'); });
+
+// ── Mi tablero del comercial (js/mitablero.js) ─────────────────────────────
+grupo('Mi tablero del comercial');
+const MD={
+  clientes:[{id:'M1',nombre:'Repetido',comercial:'Ana',estado:'Activo',seguimientos:[{fecha:'2026-11-03',tipo:'Llamada',por:'Ana'},{fecha:'2026-11-10',tipo:'WhatsApp',por:'Ana'}]},
+            {id:'M2',nombre:'Con cotiz',comercial:'Ana',estado:'Activo',seguimientos:[{fecha:'2026-11-04',tipo:'Llamada',por:'Ana'},{fecha:'2026-11-11',tipo:'Llamada',por:'Ana'}]},
+            {id:'M3',nombre:'Dormido',comercial:'Ana',estado:'Activo',seguimientos:[{fecha:'2026-08-01',tipo:'Visita',por:'Ana'}]}],
+  visitas:[{id:'v1',tipo:'rapida',tecnico:'Ana',fecha:'2026-11-24',cliente_id:'M1',comercial:{medio:'Visita',resultado:'seguimiento'}},
+           {id:'v2',tipo:'rapida',tecnico:'Ana',fecha:'2026-11-25',cliente_id:'M2',comercial:{medio:'Visita',resultado:'pide_cotiz',cotiz:{estado:'enviada',items:[]}}},
+           {id:'v3',tipo:'rapida',tecnico:'Ana',fecha:'2026-11-25',cliente_id:'M2',comercial:{medio:'Llamada',resultado:'seguimiento'}}],
+  ventas:[{id:'x1',fecha:'2026-06-10',cliente_id:'M3',monto:2000000,comercial:'Ana'}]
+};
+test('mtbDatos: cuenta visitas y llamadas de la semana, y cotizaciones del mes', ()=>{ const x=mtbDatos(MD,'Ana','2026-11-26',{});
+  eq(x.s.vis,2); eq(x.s.llam,1); eq(x.embudo.cotSol,1); eq(x.embudo.cotPres,1); eq(x.min.llam,10); eq(x.min.cot,8); });
+test('mtbDatos: 3 contactos en 60 días sin cotización ni venta → repetido; con cotización no', ()=>{ const x=mtbDatos(MD,'Ana','2026-11-26',{});
+  eq(x.repetidos.map(r=>r.id).join(','),'M1'); eq(x.repetidos[0].n,3); });
+test('mtbDatos: compró en el año y hace 45+ días sin contacto → dormido', ()=>{ const x=mtbDatos(MD,'Ana','2026-11-26',{}); eq(x.dormidos.map(r=>r.id).join(','),'M3'); });
+test('mtbMinimos: toma los mínimos configurados por el gerente', ()=>{ const m=mtbMinimos({min_semana:6,min_llamadas:12,min_cotiz_mes:5},'Ana'); eq(m.vis,6); eq(m.llam,12); eq(m.cot,5); });
 
 // ── Salida ──────────────────────────────────────────────────────────────────
 document.getElementById('res').innerHTML = OUT.join('') +

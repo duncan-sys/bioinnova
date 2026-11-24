@@ -713,11 +713,12 @@ function cmSolEstado(id, est){
 }
 function cmMinModal(){
   const cfg=getComCfg(); const coms=cmComerciales();
-  gs('modalBox').innerHTML=`<h3>Mínimo de visitas por semana</h3>
+  gs('modalBox').innerHTML=`<h3>Mínimos de cada comercial</h3>
     <div style="font-size:12px;color:var(--gray-500)">Cuentan sólo las presenciales (no llamadas ni WhatsApp).</div>
     <label class="fl">Exigir agenda y seguimientos desde</label><input type="date" id="mnDesde" value="${cfg.exigir_desde||CM_EXIGIR_DESDE}">
     <div style="font-size:11px;color:var(--gray-500)">Desde esa fecha, un comercial con seguimientos vencidos o sin la agenda de la semana cargada no puede usar el resto de la app.</div>
     <label class="fl">Para todos</label><input type="number" id="mnDef" inputmode="numeric" value="${Number(cfg.min_semana)||CM_MIN_DEFAULT}">
+    <div class="row2"><div><label class="fl">Llamadas / WhatsApp por semana</label><input type="number" id="mnLlam" inputmode="numeric" value="${Number(cfg.min_llamadas)||(typeof MTB_LLAM_DEFAULT!=='undefined'?MTB_LLAM_DEFAULT:10)}"></div><div><label class="fl">Cotizaciones pedidas por mes</label><input type="number" id="mnCot" inputmode="numeric" value="${Number(cfg.min_cotiz_mes)||(typeof MTB_COT_DEFAULT!=='undefined'?MTB_COT_DEFAULT:8)}"></div></div>
     <div style="font-size:12px;font-weight:700;margin-top:8px">Distinto para alguno <span style="font-weight:400;color:var(--gray-400)">(vacío = el de todos)</span></div>
     ${coms.map((n,i)=>{ let v=''; Object.keys(cfg.por||{}).forEach(k=>{ if(cmMismo(k,n)) v=cfg.por[k]; }); return `<div style="display:flex;gap:8px;align-items:center;margin-top:5px"><span style="flex:1;font-size:13px">${esc(n)}</span><input type="number" inputmode="numeric" id="mn_${i}" value="${v}" style="width:80px"></div>`; }).join('')}
     <div class="row2" style="margin-top:12px"><button class="btn btn-sec" onclick="cerrarModal()">Cancelar</button><button class="btn btn-primary" onclick="cmMinGuardar()">Guardar</button></div>`;
@@ -726,7 +727,7 @@ function cmMinModal(){
 function cmMinGuardar(){
   const coms=cmComerciales(); const por={};
   coms.forEach((n,i)=>{ const v=Number(gs('mn_'+i).value); if(v>0) por[n]=v; });
-  setComCfg({ min_semana:Number(gs('mnDef').value)||CM_MIN_DEFAULT, por, exigir_desde:gs('mnDesde').value||CM_EXIGIR_DESDE, ts:new Date().toISOString() });
+  setComCfg({ ...getComCfg(), min_semana:Number(gs('mnDef').value)||CM_MIN_DEFAULT, min_llamadas:Number(gs('mnLlam').value)||10, min_cotiz_mes:Number(gs('mnCot').value)||8, por, exigir_desde:gs('mnDesde').value||CM_EXIGIR_DESDE, ts:new Date().toISOString() });
   pushComCfg(); cerrarModal(); showToast('✓ Mínimos guardados'); cmRenderTabCom();
 }
 
