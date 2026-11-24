@@ -6,7 +6,11 @@
 //  · Confeti para festejar: semana cumplida, medalla nueva, hitos de la meta,
 //    desafío logrado, subir en el ranking y cada contacto registrado.
 // ══════════════════════════════════════════════════════════════════════════
-const JG_PTS={ visita:10, llamada:3, cotiz:15, venta:25 };
+const JG_PTS={ visita:10, llamada:3, cotiz:15 };
+// Ventas: suman por monto, 1 punto por cada ₲1.000.000 vendido (las en USD se pasan a ₲ con su tipo de cambio).
+const JG_GS_X_PUNTO=1000000;
+function jgMontoGs(v){ return (typeof finGs==='function')?finGs(v,v.monto):Math.round(Number(v.monto)||0); }
+function jgMillones(gs){ const m=gs/1e6; return '₲'+(m>=10?Math.round(m):Math.round(m*10)/10).toLocaleString('es-PY')+' M'; }
 
 function jgDatos(){ return { visitas:getVisitas(), clientes:getClientes(), ventas:getVentas(), cotiz:(typeof getCotiz==='function'?getCotiz():[]) }; }
 // Cotizaciones del módulo con Vendedor = el comercial. Si esa misma cotización la pidió él
@@ -24,8 +28,9 @@ function jgCotizModulo(d, nombre, desde, hasta){
 function jgSemanaPts(d, nombre, desde, hasta){
   const cs=cmContactos(d.visitas,d.clientes,nombre,desde,hasta);
   const vis=cs.filter(x=>x.presencial).length, llam=cs.filter(x=>!x.presencial).length, cot=cs.filter(x=>x.cotiz).length + jgCotizModulo(d,nombre,desde,hasta);
-  const ven=(d.ventas||[]).filter(v=>cmMismo(v.comercial,nombre) && v.fecha>=desde && v.fecha<=hasta).length;
-  return { vis, llam, cot, ven, pts: vis*JG_PTS.visita + llam*JG_PTS.llamada + cot*JG_PTS.cotiz + ven*JG_PTS.venta };
+  const vs=(d.ventas||[]).filter(v=>cmMismo(v.comercial,nombre) && v.fecha>=desde && v.fecha<=hasta);
+  const ven=vs.length, monto=vs.reduce((a,v)=>a+jgMontoGs(v),0), ptsVen=Math.max(0,Math.round(monto/JG_GS_X_PUNTO));
+  return { vis, llam, cot, ven, monto, ptsVen, pts: vis*JG_PTS.visita + llam*JG_PTS.llamada + cot*JG_PTS.cotiz + ptsVen };
 }
 function jgRanking(d, desde){ const hasta=cmAddDias(desde,6);
   return cmComerciales().map(n=>({ nombre:n, ...jgSemanaPts(d,n,desde,hasta) })).sort((a,b)=>b.pts-a.pts||a.nombre.localeCompare(b.nombre)); }
@@ -124,9 +129,9 @@ function jgComoPuntos(){
       ${fila('🚜','Visita presencial',JG_PTS.visita,'Visita técnica o comercial, visita rápida con medio “Visita”, o seguimiento tipo Visita o Reunión.')}
       ${fila('📞','Llamada o WhatsApp',JG_PTS.llamada,'Visita rápida o seguimiento por Llamada o WhatsApp. Las notas no suman.')}
       ${fila('📨','Cotización',JG_PTS.cotiz,'Pedida desde una visita, o hecha en el módulo Cotizaciones con vos como Vendedor. Si la pediste en una visita, no se cuenta dos veces.')}
-      ${fila('🤝','Venta',JG_PTS.venta,'Venta de la semana que figura a tu nombre como comercial.')}
+      ${fila('🤝','Ventas, por monto','1 por cada ₲1 M','Ventas de la semana a tu nombre como comercial. Por ejemplo, una venta de ₲35.000.000 da 35 puntos. Las ventas en dólares se pasan a guaraníes.')}
     </table>
-    <div style="font-size:12px;color:var(--gray-600);margin-top:8px;background:#f0fdf4;border-radius:8px;padding:8px 10px">Ejemplo: 4 visitas + 6 llamadas + 1 cotización = ${4*JG_PTS.visita} + ${6*JG_PTS.llamada} + ${JG_PTS.cotiz} = <b>${4*JG_PTS.visita+6*JG_PTS.llamada+JG_PTS.cotiz} puntos</b>.<br>Si hay empate, se ordena por nombre. ▲ / ▼ muestra cuántos puestos subiste o bajaste contra la semana pasada.</div>
+    <div style="font-size:12px;color:var(--gray-600);margin-top:8px;background:#f0fdf4;border-radius:8px;padding:8px 10px">Ejemplo: 4 visitas + 6 llamadas + 1 cotización + una venta de ₲20 M = ${4*JG_PTS.visita} + ${6*JG_PTS.llamada} + ${JG_PTS.cotiz} + 20 = <b>${4*JG_PTS.visita+6*JG_PTS.llamada+JG_PTS.cotiz+20} puntos</b>.<br>Si hay empate, se ordena por nombre. ▲ / ▼ muestra cuántos puestos subiste o bajaste contra la semana pasada.</div>
     <button class="btn btn-primary" style="margin-top:12px;width:100%" onclick="cerrarModal()">Entendido</button>`;
   gs('modal').classList.add('show');
 }
@@ -139,7 +144,7 @@ function jgRankingHtml(nombre, propio){
   return `<div class="card"><div class="card-h"><span>🏁 Ranking de la semana</span><button onclick="jgComoPuntos()" style="background:var(--gray-100,#f1f5f9);color:var(--green-d);border:1px solid var(--gray-200,#e2e8f0);border-radius:14px;padding:4px 10px;font-size:11.5px;font-weight:700;cursor:pointer">ℹ️ ¿Cómo se calculan los puntos?</button></div><div>
     ${rk.map((r,i)=>{ const yo=nombre&&cmMismo(r.nombre,nombre); const pa=posAnt[cmNorm(r.nombre)]; const mov=pa?pa-(i+1):0;
       return `<div class="li" style="cursor:default;${yo?'background:#ecfdf3;':''}"><div style="display:flex;align-items:center;gap:10px;min-width:0"><span style="font-size:${i<3?20:14}px;width:26px;text-align:center;font-weight:800;color:var(--gray-500)">${pod[i]||(i+1)}</span>
-        <div style="min-width:0"><div class="li-t" style="font-size:13.5px">${esc(r.nombre)}${yo?(propio?' <span style="font-size:11px;color:var(--green)">(vos)</span>':''):''}</div><div class="li-s">${r.vis} visitas · ${r.llam} llamadas · ${r.cot} cotiz. · ${r.ven} ventas${mov>0?` · <span style="color:var(--green);font-weight:700">▲${mov}</span>`:mov<0?` · <span style="color:var(--red)">▼${-mov}</span>`:''}</div></div></div>
+        <div style="min-width:0"><div class="li-t" style="font-size:13.5px">${esc(r.nombre)}${yo?(propio?' <span style="font-size:11px;color:var(--green)">(vos)</span>':''):''}</div><div class="li-s">${r.vis} visitas · ${r.llam} llamadas · ${r.cot} cotiz. · ${r.ven} ventas${r.ven?` (${jgMillones(r.monto)})`:""}${mov>0?` · <span style="color:var(--green);font-weight:700">▲${mov}</span>`:mov<0?` · <span style="color:var(--red)">▼${-mov}</span>`:''}</div></div></div>
         <div style="font-size:17px;font-weight:800;color:var(--green-d)">${r.pts}</div></div>`; }).join('')}
   </div></div>`;
 }
