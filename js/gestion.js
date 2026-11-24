@@ -201,7 +201,7 @@ function gsRenderGestCom(){
     const d=gsDatos(), h=hoy(), lun=cmSemana(h).desde, cfg=getComCfg(); const coms=cmComerciales();
     let fm=[]; try{ fm=rankingMes(d.ventas,getMetas(),h.slice(0,7),_finComDe,finGs); }catch(e){}
     const sc=(ok,mid)=>ok?'var(--green)':(mid?'#b54708':'var(--red)');
-    cuerpo=`<div style="text-align:right;margin:-4px 0 6px"><span style="color:var(--green);cursor:pointer;font-size:12px;font-weight:600" onclick="cmMinModal()">⚙ Mínimos y fecha de exigencia</span></div>`+coms.map(n=>{
+    cuerpo=`<div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;margin:-4px 0 6px"><span style="color:#7a2e0e;cursor:pointer;font-size:12px;font-weight:700" onclick="vcElegir()">👁 Ver la app como un comercial</span><span style="color:var(--green);cursor:pointer;font-size:12px;font-weight:600" onclick="cmMinModal()">⚙ Mínimos y fecha de exigencia</span></div>`+coms.map(n=>{
       const min=cmMinimo(cfg,n), sem=cmVisitasSemana(d.visitas,n,h), pend=cmPendientes(d.clientes,n,h).length;
       const pa=cmDesempeno(d,n,cmAddDias(lun,-7)).t, ps=cmDesempeno(d,n,lun).t, p8=cmDesempeno(d,n,cmAddDias(lun,-49),cmAddDias(lun,6)).t;
       const f=fm.find(x=>cmMismo(x.comercial,n)); const k=(l,v,col)=>`<div style="flex:1;min-width:64px"><div style="font-size:9.5px;color:var(--gray-500);font-weight:700">${l}</div><div style="font-size:15px;font-weight:800;color:${col||'var(--gray-800)'}">${v}</div></div>`;
