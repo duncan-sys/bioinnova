@@ -8,10 +8,22 @@
 // ══════════════════════════════════════════════════════════════════════════
 const JG_PTS={ visita:10, llamada:3, cotiz:15, venta:25 };
 
-function jgDatos(){ return { visitas:getVisitas(), clientes:getClientes(), ventas:getVentas() }; }
+function jgDatos(){ return { visitas:getVisitas(), clientes:getClientes(), ventas:getVentas(), cotiz:(typeof getCotiz==='function'?getCotiz():[]) }; }
+// Cotizaciones del módulo con Vendedor = el comercial. Si esa misma cotización la pidió él
+// desde una visita (mismo cliente, en los 30 días previos), ya sumó por la visita y no se repite.
+function jgCotizModulo(d, nombre, desde, hasta){
+  const cliNomOf=id=>{ const c=(d.clientes||[]).find(x=>x.id===id); return c?c.nombre:''; };
+  const pedidas=(d.visitas||[]).filter(v=>v.tipo==='rapida' && v.comercial && v.comercial.cotiz && cmDeComercial(v,nombre));
+  return (d.cotiz||[]).filter(c=>{
+    if(!cmMismo(c.vendedor,nombre) || !(c.fecha>=desde && c.fecha<=hasta)) return false;
+    const ini=cmAddDias(c.fecha,-30);
+    return !pedidas.some(v=>v.fecha>=ini && v.fecha<=c.fecha &&
+      ((c.cliente_id && v.cliente_id===c.cliente_id) || cmMismo(c.cliente, cliNomOf(v.cliente_id)||v.comercial.prospecto)));
+  }).length;
+}
 function jgSemanaPts(d, nombre, desde, hasta){
   const cs=cmContactos(d.visitas,d.clientes,nombre,desde,hasta);
-  const vis=cs.filter(x=>x.presencial).length, llam=cs.filter(x=>!x.presencial).length, cot=cs.filter(x=>x.cotiz).length;
+  const vis=cs.filter(x=>x.presencial).length, llam=cs.filter(x=>!x.presencial).length, cot=cs.filter(x=>x.cotiz).length + jgCotizModulo(d,nombre,desde,hasta);
   const ven=(d.ventas||[]).filter(v=>cmMismo(v.comercial,nombre) && v.fecha>=desde && v.fecha<=hasta).length;
   return { vis, llam, cot, ven, pts: vis*JG_PTS.visita + llam*JG_PTS.llamada + cot*JG_PTS.cotiz + ven*JG_PTS.venta };
 }
@@ -103,12 +115,28 @@ function jgCelebrar(nombre){
   cola.slice(0,2).forEach((m,i)=>setTimeout(()=>jgConfeti(m),i*3600));
 }
 
+// ── explicación de los puntos (botón del ranking) ──
+function jgComoPuntos(){
+  const fila=(ico,q,p,de)=>`<tr><td style="padding:7px 6px;font-size:18px">${ico}</td><td style="padding:7px 6px"><b>${q}</b><div style="font-size:11.5px;color:var(--gray-600)">${de}</div></td><td style="padding:7px 6px;text-align:right;font-size:16px;font-weight:800;color:var(--green-d);white-space:nowrap">${p} pts</td></tr>`;
+  gs('modalBox').innerHTML=`<h3>🏁 ¿Cómo se calculan los puntos?</h3>
+    <div style="font-size:12.5px;color:var(--gray-600);margin-bottom:6px">Se cuenta lo que cada comercial carga en la app durante la semana, de <b>lunes a domingo</b>. Cada lunes el ranking arranca de cero.</div>
+    <table style="width:100%;border-collapse:collapse">
+      ${fila('🚜','Visita presencial',JG_PTS.visita,'Visita técnica o comercial, visita rápida con medio “Visita”, o seguimiento tipo Visita o Reunión.')}
+      ${fila('📞','Llamada o WhatsApp',JG_PTS.llamada,'Visita rápida o seguimiento por Llamada o WhatsApp. Las notas no suman.')}
+      ${fila('📨','Cotización',JG_PTS.cotiz,'Pedida desde una visita, o hecha en el módulo Cotizaciones con vos como Vendedor. Si la pediste en una visita, no se cuenta dos veces.')}
+      ${fila('🤝','Venta',JG_PTS.venta,'Venta de la semana que figura a tu nombre como comercial.')}
+    </table>
+    <div style="font-size:12px;color:var(--gray-600);margin-top:8px;background:#f0fdf4;border-radius:8px;padding:8px 10px">Ejemplo: 4 visitas + 6 llamadas + 1 cotización = ${4*JG_PTS.visita} + ${6*JG_PTS.llamada} + ${JG_PTS.cotiz} = <b>${4*JG_PTS.visita+6*JG_PTS.llamada+JG_PTS.cotiz} puntos</b>.<br>Si hay empate, se ordena por nombre. ▲ / ▼ muestra cuántos puestos subiste o bajaste contra la semana pasada.</div>
+    <button class="btn btn-primary" style="margin-top:12px;width:100%" onclick="cerrarModal()">Entendido</button>`;
+  gs('modal').classList.add('show');
+}
+
 // ── bloques del tablero ──
 function jgRankingHtml(nombre, propio){
   const d=jgDatos(), sem=cmSemana(hoy()); const rk=jgRanking(d,sem.desde); if(rk.length<2) return '';
   const ant=jgRanking(d,cmAddDias(sem.desde,-7)); const posAnt={}; ant.forEach((r,i)=>posAnt[cmNorm(r.nombre)]=i+1);
   const pod=['🥇','🥈','🥉'];
-  return `<div class="card"><div class="card-h"><span>🏁 Ranking de la semana</span><span style="font-weight:500;color:var(--gray-400);font-size:11.5px">visita ${JG_PTS.visita} · llamada ${JG_PTS.llamada} · cotiz. ${JG_PTS.cotiz} · venta ${JG_PTS.venta} pts</span></div><div>
+  return `<div class="card"><div class="card-h"><span>🏁 Ranking de la semana</span><button onclick="jgComoPuntos()" style="background:var(--gray-100,#f1f5f9);color:var(--green-d);border:1px solid var(--gray-200,#e2e8f0);border-radius:14px;padding:4px 10px;font-size:11.5px;font-weight:700;cursor:pointer">ℹ️ ¿Cómo se calculan los puntos?</button></div><div>
     ${rk.map((r,i)=>{ const yo=nombre&&cmMismo(r.nombre,nombre); const pa=posAnt[cmNorm(r.nombre)]; const mov=pa?pa-(i+1):0;
       return `<div class="li" style="cursor:default;${yo?'background:#ecfdf3;':''}"><div style="display:flex;align-items:center;gap:10px;min-width:0"><span style="font-size:${i<3?20:14}px;width:26px;text-align:center;font-weight:800;color:var(--gray-500)">${pod[i]||(i+1)}</span>
         <div style="min-width:0"><div class="li-t" style="font-size:13.5px">${esc(r.nombre)}${yo?(propio?' <span style="font-size:11px;color:var(--green)">(vos)</span>':''):''}</div><div class="li-s">${r.vis} visitas · ${r.llam} llamadas · ${r.cot} cotiz. · ${r.ven} ventas${mov>0?` · <span style="color:var(--green);font-weight:700">▲${mov}</span>`:mov<0?` · <span style="color:var(--red)">▼${-mov}</span>`:''}</div></div></div>
