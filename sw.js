@@ -3,8 +3,8 @@
 // versión cuando hay internet; cae al caché solo si está offline. El resto de
 // los assets, stale-while-revalidate. Así la app se actualiza sola online y
 // sigue funcionando sin señal. Los datos viven en localStorage + Supabase.
-const CACHE = 'bioinnova-v176';
-const ASSETS = ['./', './index.html', './js/costeo.js', './js/metas.js', './js/comercial.js', './js/gestion.js', './js/mitablero.js', './js/comentarios.js', './js/directorio.js', './js/conteo.js', './js/vistacom.js', './manifest.webmanifest', './icon.svg', './logo.svg', './logo.jpg', './html2pdf.bundle.min.js', './jspdf.umd.min.js', './jspdf.plugin.autotable.min.js'];
+const CACHE = 'bioinnova-v177';
+const ASSETS = ['./', './index.html', './js/costeo.js', './js/metas.js', './js/comercial.js', './js/gestion.js', './js/mitablero.js', './js/comentarios.js', './js/juego.js', './js/directorio.js', './js/conteo.js', './js/vistacom.js', './manifest.webmanifest', './icon.svg', './logo.svg', './logo.jpg', './html2pdf.bundle.min.js', './jspdf.umd.min.js', './jspdf.plugin.autotable.min.js'];
 
 self.addEventListener('install', e => {
   self.skipWaiting();
