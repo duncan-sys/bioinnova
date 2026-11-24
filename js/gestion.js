@@ -116,6 +116,9 @@ function gsRenderGestion(){
   if(_gst.tab==='desempeno'){ _cmPf={ nombre:yo, desde:cmSemana(hoy()).desde, dest:'gsPerf' }; cmPerfPintar(); }
 }
 // Semana de un comercial: vencidos + agenda (con lo hecho) + pedidos de cotización.
+// Primero lo arrastrado de semanas anteriores (marcado), después esta semana por día y hora.
+function gsAgendaOrden(filas){ const ag=getAgenda(); return filas.map(f=>{ const o=cmOrigen(f.agenda,ag); return Object.assign({},f,{_o:(o&&o<cmSemana(f.agenda.fecha).desde)?o:null}); })
+  .sort((a,b)=>(a._o?0:1)-(b._o?0:1) || String(a._o||'').localeCompare(String(b._o||'')) || (cmEsSinDia(a.agenda)?1:0)-(cmEsSinDia(b.agenda)?1:0) || String(a.agenda.fecha).localeCompare(String(b.agenda.fecha)) || String(a.agenda.hora||'99').localeCompare(String(b.agenda.hora||'99'))); }
 function gsSemanaHtml(nombre, propio){
   const d=gsDatos(), h=hoy(); const pend=cmPendientes(d.clientes,nombre,h);
   const perf=cmDesempeno({agenda:d.agenda,visitas:d.visitas,clientes:d.clientes,ventas:d.ventas},nombre,cmSemana(h).desde);
@@ -126,7 +129,7 @@ function gsSemanaHtml(nombre, propio){
       ${pend.map(c=>fila(c.id,esc(c.nombre),esc(c.prox_nota||'Contactar')+' · desde '+fmtFecha(c.prox_fecha),'var(--red)',propio?`<button class="btn btn-primary" style="flex:0 0 auto;padding:6px 10px;font-size:12px" onclick="event.stopPropagation();openVisitaRapida('${c.id}')">Registrar</button>`:'')).join('')||'<div style="padding:10px 12px;font-size:12px;color:var(--green)">✔ Nada vencido.</div>'}
     </div></div>
     <div class="card"><div class="card-h"><span>📅 Agenda de la semana</span>${propio?'<span style="color:var(--green);cursor:pointer;font-size:12px;font-weight:600" onclick="openPlanSemana()">editar ›</span>':`<span style="font-size:12px;color:var(--gray-500)">${perf.t.agendaContactados}/${perf.t.agendados}</span>`}</div><div>
-      ${perf.filas.map(f=>fila(f.cliente_id,(f.contactado?'✅ ':'')+esc(f.nombre),esc(cmDiaLbl(f.agenda))+(f.contactado?' · '+[f.visitas?f.visitas+' visita'+(f.visitas>1?'s':''):'',f.remotos?f.remotos+' llam./WA':'',f.cotiz?'cotiz. '+f.cotiz:'',f.venta?finGsFmt(f.venta):''].filter(Boolean).join(' · '):' · pendiente'),f.contactado?'var(--green)':'')).join('')||`<div style="padding:10px 12px;font-size:12px;color:var(--gray-400)">Sin agenda cargada.${propio?' <span style="color:var(--green);cursor:pointer;font-weight:600" onclick="openPlanSemana()">Cargar ›</span>':''}</div>`}
+      ${gsAgendaOrden(perf.filas).map(f=>fila(f.cliente_id,(f.contactado?'✅ ':'')+esc(f.nombre),(f._o?`<b style="color:#b54708">↩ desde la semana del ${fmtFecha(f._o)}</b> · `:'')+esc(cmCuandoDonde(f.agenda))+(f.contactado?' · '+[f.visitas?f.visitas+' visita'+(f.visitas>1?'s':''):'',f.remotos?f.remotos+' llam./WA':'',f.cotiz?'cotiz. '+f.cotiz:'',f.venta?finGsFmt(f.venta):''].filter(Boolean).join(' · '):' · pendiente'),f.contactado?'var(--green)':'')).join('')||`<div style="padding:10px 12px;font-size:12px;color:var(--gray-400)">Sin agenda cargada.${propio?' <span style="color:var(--green);cursor:pointer;font-weight:600" onclick="openPlanSemana()">Cargar ›</span>':''}</div>`}
     </div></div>
     ${perf.fueraFilas.length?`<div class="card"><div class="card-h"><span>➕ Contactos fuera de agenda</span><span style="color:var(--gray-500);font-size:12px">${perf.fueraFilas.length}</span></div><div>${perf.fueraFilas.map(f=>fila(f.cliente_id,esc(f.nombre),[f.visitas?f.visitas+' visita'+(f.visitas>1?'s':''):'',f.remotos?f.remotos+' llam./WA':'',f.cotiz?'cotiz. '+f.cotiz:'',f.venta?finGsFmt(f.venta):''].filter(Boolean).join(' · '),'')).join('')}</div></div>`:''}
     <div class="card"><div class="card-h"><span>📨 Pedidos de cotización</span></div><div>

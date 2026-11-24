@@ -456,6 +456,50 @@ let _ps={ dia:'', medio:'Visita', q:'' };
 function openPlanSemana(){ _ps={ dia:'', medio:'Visita', q:'' }; showScreen('sPlanSemana','Mi semana','Planificá a quién vas a ver',!cmBloqueado()); cmRenderPlan(); }
 function cmDiasSemana(){ const s=cmSemana(hoy()); const n=['Lun','Mar','Mié','Jue','Vie','Sáb']; return [['sem','Sin día']].concat(n.map((x,i)=>[cmAddDias(s.desde,i),x])); }
 function cmDiaLbl(a){ if(cmEsSinDia(a)) return 'Sin día'; const n=['Dom','Lun','Mar','Mié','Jue','Vie','Sáb']; const d=new Date(a.fecha+'T00:00:00'); return n[d.getDay()]+' '+fmtFecha(a.fecha).slice(0,5); }
+// ── Agenda: lo que viene arrastrado de semanas anteriores se ve aparte ──
+// Al pasar un pendiente a esta semana la entrada nueva guarda en la nota la
+// semana en que se agendó por primera vez (" · ↩AAAA-MM-DD"). Para los que se
+// pasaron antes de esta marca, se deduce de la entrada "pasada" de la semana previa.
+const CM_ARR=' · ↩';
+const CM_ARR_DESDE='2026-11-24T16:29';   // desde acá cada pase guarda la marca: la deducción es sólo para lo anterior
+function cmNotaLimpia(a){ return String((a&&a.nota)||'Visita').replace(CM_SIN_DIA,'').replace(/ · ↩\d{4}-\d{2}-\d{2}/,'').trim()||'Visita'; }
+function cmOrigen(a, ag, prof){ if(!a) return null; const m=/↩(\d{4}-\d{2}-\d{2})/.exec(String(a.nota||'')); if(m) return m[1]; if((prof||0)>8 || !a.fecha || String(a.ts||'')>=CM_ARR_DESDE) return null;
+  const lun=cmSemana(a.fecha).desde, ini=cmAddDias(lun,-7);
+  const p=(ag||getAgenda()).find(x=>x!==a && x.estado==='pasada' && cmMismo(x.comercial,a.comercial) && x.fecha>=ini && x.fecha<lun && (a.cliente_id? x.cliente_id===a.cliente_id : cmMismo(x.titulo,a.titulo)));
+  return p ? (cmOrigen(p,ag,(prof||0)+1)||cmSemana(p.fecha).desde) : null; }
+function cmSemanasDesde(desde, hoyIso){ return Math.max(1, Math.round(cmDiffDias(desde, cmSemana(hoyIso).desde)/7)); }
+// "Mar 25/11 · 09:30 · Estancia La Paz · Visita"
+function cmCuandoDonde(a){ return [cmDiaLbl(a), a.hora||'', a.lugar||'', cmNotaLimpia(a)].filter(Boolean).join(' · '); }
+// Lista de la agenda en dos bloques. ok(a) dice si ya se hizo; onTap abre la edición.
+function cmAgendaBloquesHtml(plan, ok, editable){
+  const ag=getAgenda(), h=hoy();
+  const arr=[], sem=[]; plan.forEach(a=>{ const o=cmOrigen(a,ag); (o && o<cmSemana(a.fecha).desde ? arr : sem).push({a,o}); });
+  sem.sort((x,y)=>(cmEsSinDia(x.a)?1:0)-(cmEsSinDia(y.a)?1:0) || String(x.a.fecha).localeCompare(String(y.a.fecha)) || String(x.a.hora||'99').localeCompare(String(y.a.hora||'99')));
+  arr.sort((x,y)=>String(x.o).localeCompare(String(y.o)));
+  const item=({a,o})=>{ const hecho=ok(a);
+    return `<div class="li" style="${editable&&!hecho?'':'cursor:default'};${o?'background:#fffaeb;':''}" ${editable&&!hecho?`onclick="cmAgEditar('${a.id}')"`:''}><div style="min-width:0">
+      <div class="li-t" style="font-size:13px">${hecho?'✅ ':''}${esc(a.titulo)}</div>
+      <div class="li-s">${esc(cmCuandoDonde(a))}</div>
+      ${o?`<div style="font-size:11px;color:#b54708;font-weight:700">↩ pendiente desde la semana del ${fmtFecha(o)} · ${cmSemanasDesde(o,h)} semana${cmSemanasDesde(o,h)>1?'s':''} arrastrado</div>`:''}
+      ${editable&&!hecho&&(!a.hora||!a.lugar||cmEsSinDia(a))?'<div style="font-size:10.5px;color:var(--gray-400)">Tocá para poner día, hora y lugar</div>':''}
+    </div>${editable&&!hecho?`<span style="color:var(--red);cursor:pointer;font-size:16px;padding:0 4px" onclick="event.stopPropagation();cmPsQuitar('${a.id}')">✕</span>`:''}</div>`; };
+  return (arr.length?`<div style="padding:8px 12px 4px;font-size:11px;font-weight:800;color:#b54708;text-transform:uppercase">↩ Pendientes de semanas anteriores · ${arr.length}</div>${arr.map(item).join('')}`:'')
+    + `<div style="padding:8px 12px 4px;font-size:11px;font-weight:800;color:var(--green-d);text-transform:uppercase">📅 Esta semana · ${sem.length}</div>`
+    + (sem.map(item).join('')||'<div style="padding:6px 12px 10px;font-size:12px;color:var(--gray-400)">Todavía no cargaste nada nuevo para esta semana.</div>');
+}
+function cmAgEditar(id){ const a=getAgenda().find(x=>x.id===id); if(!a) return; const dias=cmDiasSemana(); const sinDia=cmEsSinDia(a);
+  const c=a.cliente_id?clienteById(a.cliente_id):null; const sug=(c&&(c.ubicacion||''))||'';
+  gs('modalBox').innerHTML=`<h3>${esc(a.titulo)}</h3>
+    <label class="fl">Día</label><select id="agDia">${dias.map(([v,l])=>`<option value="${v}" ${(sinDia&&v==='sem')||(!sinDia&&v===a.fecha)?'selected':''}>${l}${v!=='sem'?' '+fmtFecha(v).slice(0,5):''}</option>`).join('')}</select>
+    <div class="row2"><div><label class="fl">Hora</label><input type="time" id="agHora" value="${esc(a.hora||'')}"></div><div><label class="fl">Tipo</label><select id="agMedio">${['Visita','Llamada'].map(m=>`<option ${cmNotaLimpia(a).startsWith(m)?'selected':''}>${m}</option>`).join('')}</select></div></div>
+    <label class="fl">Dónde</label><input id="agLugar" value="${esc(a.lugar||sug)}" placeholder="Estancia, ciudad, oficina…">
+    <div class="row2" style="margin-top:12px"><button class="btn btn-sec" onclick="cerrarModal()">Cancelar</button><button class="btn btn-primary" onclick="cmAgGuardar('${a.id}')">Guardar</button></div>`;
+  gs('modal').classList.add('show'); }
+function cmAgGuardar(id){ const ag=getAgenda(); const a=ag.find(x=>x.id===id); if(!a) return;
+  const dia=gs('agDia').value, medio=gs('agMedio').value; const orig=cmOrigen(a,ag); const o=(orig&&orig<cmSemana(a.fecha).desde)?['↩'+orig]:null;
+  a.fecha=dia==='sem'?cmSemana(hoy()).desde:dia; a.hora=gs('agHora').value||''; a.lugar=(gs('agLugar').value||'').trim();
+  a.nota=medio+(dia==='sem'?CM_SIN_DIA:'')+(o?' · '+o[0]:''); a.ts=new Date().toISOString(); a.pending=true;
+  saveAgenda(ag); cloudPush('agenda',a); cerrarModal(); showToast('✓ Agenda actualizada'); if(typeof refreshVista==='function') refreshVista(); }
 function cmRenderPlan(){
   const yo=cmYo(), h=hoy(), min=cmMinimo(getComCfg(),yo);
   const plan=cmPlanSemana(getAgenda(),yo,h); const falta=Math.max(0,min-plan.length);
@@ -475,6 +519,7 @@ function cmRenderPlan(){
     <div class="card"><div class="card-b">
       <label class="fl">Día</label>${cmChips('dia',dias,_ps.dia,'cmPsDia')}
       <label class="fl">Tipo</label>${cmChips('medio',['Visita','Llamada'],_ps.medio,'cmPsMedio')}
+      <div class="row2"><div><label class="fl">Hora <span style="color:var(--gray-400)">(opcional)</span></label><input type="time" id="psHora" value="${esc(_ps.hora||'')}" onchange="_ps.hora=this.value"></div><div><label class="fl">Dónde <span style="color:var(--gray-400)">(opcional)</span></label><input id="psLugar" value="${esc(_ps.lugar||'')}" placeholder="Estancia, ciudad…" onchange="_ps.lugar=this.value"></div></div>
       <label class="fl">Cliente o prospecto</label>
       <input type="search" id="psBuscar" placeholder="🔎 Buscar o escribir un nombre…" autocomplete="off" value="${esc(q)}" oninput="_ps.q=this.value;cmPsLista()" onkeydown="if(event.key==='Enter'){event.preventDefault();cmPsEnter();}">
       <div style="text-align:right;margin-top:4px"><span style="color:var(--green);font-weight:700;font-size:12px;cursor:pointer" onclick="cmNuevoCliente(gs('psBuscar').value.trim(),'ps')">➕ Cliente nuevo</span></div>
@@ -482,7 +527,7 @@ function cmRenderPlan(){
     </div></div>
     ${sug.length?`<div class="card"><div class="card-h"><span>Sugeridos · tocá para agregar</span></div><div>${sug.map(x=>`<div class="li" onclick="cmPsAdd('${x.c.id}')"><div style="min-width:0"><div class="li-t" style="font-size:13px">${esc(x.c.nombre)}</div><div class="li-s">${esc(x.por)}</div></div><span style="color:var(--green);font-weight:700">＋</span></div>`).join('')}</div></div>`:''}
     <div class="card"><div class="card-h"><span>Mi semana · ${fmtFecha(sm.desde)} – ${fmtFecha(sm.hasta)}</span><span style="color:var(--gray-400);font-weight:500">${plan.length}</span></div><div>
-      ${plan.map(a=>{ const ok=contTit.has(a.id)||a.estado==='hecha'; return `<div class="li" style="cursor:default"><div style="min-width:0"><div class="li-t" style="font-size:13px">${ok?'✅ ':''}${esc(a.titulo)}</div><div class="li-s">${esc(cmDiaLbl(a))} · ${esc(String(a.nota||'Visita').replace(CM_SIN_DIA,''))}</div></div>${!ok?`<span style="color:var(--red);cursor:pointer;font-size:16px;padding:0 4px" onclick="cmPsQuitar('${a.id}')">✕</span>`:''}</div>`; }).join('')||'<div style="padding:10px 12px;font-size:12px;color:var(--gray-400)">Todavía no cargaste nada.</div>'}
+      ${cmAgendaBloquesHtml(plan, a=>contTit.has(a.id)||a.estado==='hecha', true)}
     </div></div>
     ${falta?'':'<button class="btn btn-primary btn-block" onclick="goHome()">Listo</button>'}`;
 }
@@ -505,9 +550,9 @@ function cmPsMedio(m){ _ps.medio=m; cmRenderPlan(); }
 function cmPsAdd(cid, nombre){
   const yo=cmYo(); const c=cid?clienteById(cid):null; const tit=c?c.nombre:String(nombre||'').trim(); if(!tit){ showToast('Escribí un nombre'); return; }
   const sinDia=(!_ps.dia || _ps.dia==='sem');
-  const a={ id:'AG-'+Date.now()+'-'+Math.random().toString(36).slice(2,6), fecha:sinDia?cmSemana(hoy()).desde:_ps.dia, hora:'', tipo:'comercial', titulo:tit, lugar:'', cliente_id:cid||'', estancia_id:'', comercial:yo, nota:_ps.medio+(sinDia?CM_SIN_DIA:''), estado:'pendiente', ts:new Date().toISOString(), pending:true };
+  const a={ id:'AG-'+Date.now()+'-'+Math.random().toString(36).slice(2,6), fecha:sinDia?cmSemana(hoy()).desde:_ps.dia, hora:_ps.hora||'', tipo:'comercial', titulo:tit, lugar:(_ps.lugar||(c&&c.ubicacion)||''), cliente_id:cid||'', estancia_id:'', comercial:yo, nota:_ps.medio+(sinDia?CM_SIN_DIA:''), estado:'pendiente', ts:new Date().toISOString(), pending:true };
   saveAgenda([a, ...getAgenda()]); cloudPush('agenda',a);
-  _ps.q=''; cmRenderPlan(); showToast('✓ '+tit+' agregado');
+  _ps.q=''; _ps.hora=''; _ps.lugar=''; cmRenderPlan(); showToast('✓ '+tit+' agregado');
 }
 function cmPsQuitar(id){ const ag=getAgenda(); const a=ag.find(x=>x.id===id); if(!a) return; saveAgenda(ag.filter(x=>x.id!==id)); if(typeof cloudDelete==='function') cloudDelete('agenda',id); cmRenderPlan(); }
 
@@ -527,7 +572,7 @@ function cmRenderCierre(){
     </div></div>
     ${lst.map(f=>`<div class="card"><div class="card-b">
       <div style="font-weight:700;font-size:14px">${esc(f.nombre)}</div>
-      <div style="font-size:11px;color:var(--gray-500);margin-bottom:6px">${esc(cmDiaLbl(f.agenda))} · ${esc(String(f.agenda.nota||'Visita').replace(CM_SIN_DIA,''))}</div>
+      <div style="font-size:11px;color:var(--gray-500);margin-bottom:6px">${esc(cmCuandoDonde(f.agenda))}${(()=>{ const o=cmOrigen(f.agenda); return o&&o<cmSemana(f.agenda.fecha).desde?` · <b style="color:#b54708">↩ pendiente desde la semana del ${fmtFecha(o)}</b>`:''; })()}</div>
       <button class="btn btn-primary btn-block" style="padding:9px" onclick="cmCierrePasar('${f.agenda.id}')">→ Pasar a esta semana</button>
       <div style="display:flex;gap:6px;margin-top:6px"><input id="ci_${f.agenda.id}" placeholder="…o el motivo: ej. el cliente viajó, camino cortado" autocomplete="off" style="flex:1;min-width:0"><button class="btn btn-sec" style="flex:0 0 auto;padding:8px 12px" onclick="cmCierreMotivo('${f.agenda.id}')">Guardar</button></div>
     </div></div>`).join('')}
@@ -536,8 +581,8 @@ function cmRenderCierre(){
 function cmCierrePasar(id){
   const ag=getAgenda(); const a=ag.find(x=>x.id===id); if(!a) return; const ahora=new Date().toISOString();
   a.estado='pasada'; a.ts=ahora; a.pending=true;
-  const medio=String(a.nota||'Visita').replace(CM_SIN_DIA,'').split(' · ')[0]||'Visita';
-  const n={ id:'AG-'+Date.now()+'-'+Math.random().toString(36).slice(2,6), fecha:cmSemana(hoy()).desde, hora:'', tipo:'comercial', titulo:a.titulo, lugar:'', cliente_id:a.cliente_id||'', estancia_id:'', comercial:a.comercial, nota:medio+CM_SIN_DIA, estado:'pendiente', ts:ahora, pending:true };
+  const medio=cmNotaLimpia(a).split(' · ')[0]||'Visita'; const origen=cmOrigen(a,ag)||cmSemana(a.fecha).desde;
+  const n={ id:'AG-'+Date.now()+'-'+Math.random().toString(36).slice(2,6), fecha:cmSemana(hoy()).desde, hora:'', tipo:'comercial', titulo:a.titulo, lugar:a.lugar||'', cliente_id:a.cliente_id||'', estancia_id:'', comercial:a.comercial, nota:medio+CM_SIN_DIA+CM_ARR+origen, estado:'pendiente', ts:ahora, pending:true };
   saveAgenda([n, ...ag]); cloudPush('agenda',a); cloudPush('agenda',n);
   showToast('✓ '+a.titulo+' pasa a esta semana'); cmTrasCierre();
 }
